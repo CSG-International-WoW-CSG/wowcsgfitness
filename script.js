@@ -51,18 +51,27 @@ class StepathonApp {
  this.maxAttemptsPerHour = 5; // Maximum 5 attempts per hour
  this.maxAttemptsPerDay = 10; // Maximum 10 attempts per day
  
- // Step Counter Properties
+ // Step Counter + GPS map tracking
  this.stepCounter = {
  isRunning: false,
  stepCount: 0,
  lastAcceleration: { x: 0, y: 0, z: 0 },
- threshold: 1.2, // Increased threshold to filter out small movements
- minVerticalChange: 0.8, // Minimum vertical (Z-axis) change required for a step
+ threshold: 1.2,
+ minVerticalChange: 0.8,
  stepHistory: [],
- accelerationHistory: [], // Track acceleration patterns
+ accelerationHistory: [],
  startTime: null,
- permissionGranted: false
+ permissionGranted: false,
+ distanceKm: 0,
+ path: [],
+ watchId: null,
+ lastPosition: null,
+ gpsReady: false
  };
+
+ this.activityMap = null;
+ this.activityPolyline = null;
+ this.activityMarker = null;
  
  // Timer properties
  this.timerInterval = null;
@@ -2646,6 +2655,8 @@ Please keep this information secure.`;
  this.updateDates(); // This will call checkChallengeStatus
  
  this.updateDashboard();
+ this.switchInputMethod('counter');
+ setTimeout(() => this.initActivityMap(), 250);
  }
 
  updateDashboard() {
@@ -4822,18 +4833,15 @@ Please keep this information secure.`;
  this.stepCounter.lastAcceleration = { x: 0, y: 0, z: 0 };
  this.stepCounter.stepHistory = [];
  this.stepCounter.accelerationHistory = [];
+ this.stepCounter.distanceKm = 0;
+ this.stepCounter.path = [];
+ this.stepCounter.lastPosition = null;
 
- // Check if device supports motion events
- if (typeof DeviceMotionEvent === 'undefined') {
- this.updateCounterStatus('Device motion not supported. Please use manual entry.');
- this.stepCounter.isRunning = false;
- return;
- }
-
- // Store bound function for cleanup
+ // Motion steps are optional backup; GPS distance is primary
+ if (typeof DeviceMotionEvent !== 'undefined') {
  this.boundHandleDeviceMotion = this.handleDeviceMotion.bind(this);
- // Listen for device motion
  window.addEventListener('devicemotion', this.boundHandleDeviceMotion);
+ }
 
  // Update UI
  const startBtn = document.getElementById('startCounterBtn');
@@ -4841,7 +4849,7 @@ Please keep this information secure.`;
  const saveBtn = document.getElementById('saveCounterStepsBtn');
  const timerEl = document.getElementById('counterTimer');
  const pulseEl = document.getElementById('counterPulse');
- const valueEl = document.getElementById('liveStepCount');
+ const valueEl = document.getElementById('liveKmCount');
  
  if (startBtn) startBtn.style.display = 'none';
  if (stopBtn) stopBtn.style.display = 'inline-block';
@@ -4850,14 +4858,13 @@ Please keep this information secure.`;
  if (pulseEl) pulseEl.classList.add('active');
  if (valueEl) valueEl.classList.add('active');
  
- this.updateCounterStatus('Counting steps... Walk naturally!');
- this.updateCounterHint('Keep your phone in your hand or pocket while walking');
-
- // Start timer
+ this.updateCounterStatus('Tracking your route... Keep moving!');
+ this.updateCounterHint('GPS map is recording distance. Allow location if prompted.');
  this.startTimer();
-
- // Show notification
- this.showCounterNotification('Step counter started! Start walking.');
+ this.initActivityMap();
+ this.startGpsTracking();
+ this.updateStepCounterDisplay();
+ this.showCounterNotification('Activity started. GPS route tracking is on.');
  }
 
  handleDeviceMotion(event) {
@@ -4948,24 +4955,22 @@ Please keep this information secure.`;
  if (this.boundHandleDeviceMotion) {
  window.removeEventListener('devicemotion', this.boundHandleDeviceMotion);
  }
-
- // Stop timer
+ this.stopGpsTracking();
  this.stopTimer();
 
- // Update UI
  const startBtn = document.getElementById('startCounterBtn');
  const stopBtn = document.getElementById('stopCounterBtn');
- const useBtn = document.getElementById('useCounterStepsBtn');
  const saveBtn = document.getElementById('saveCounterStepsBtn');
  const pulseEl = document.getElementById('counterPulse');
- const valueEl = document.getElementById('liveStepCount');
+ const valueEl = document.getElementById('liveKmCount');
  
  if (startBtn) startBtn.style.display = 'inline-block';
  if (stopBtn) stopBtn.style.display = 'none';
  if (pulseEl) pulseEl.classList.remove('active');
  if (valueEl) valueEl.classList.remove('active');
  
- if (this.stepCounter.stepCount > 0) {
+ const distance = this.getTrackedDistanceKm();
+ if (distance > 0 || this.stepCounter.stepCount > 0) {
  if (saveBtn) saveBtn.style.display = 'block';
  }
 
@@ -4974,20 +4979,26 @@ Please keep this information secure.`;
  const seconds = duration % 60;
  const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
  
- this.updateCounterStatus(`Stopped. Counted ${this.stepCounter.stepCount.toLocaleString()} steps in ${timeStr}.`);
- this.updateCounterHint('You can save these steps directly or continue counting');
- 
- this.showCounterNotification(`Step counting stopped. Total: ${this.stepCounter.stepCount.toLocaleString()} steps`);
+ this.updateCounterStatus(`Stopped. Covered ${distance.toFixed(2)} KM in ${timeStr}.`);
+ this.updateCounterHint('Save to update your challenge progress and leaderboard.');
+ this.showCounterNotification(`Activity stopped: ${distance.toFixed(2)} KM`);
+ this.updateStepCounterDisplay();
  }
 
  resetStepCounter() {
+ this.stopGpsTracking();
  this.stepCounter.stepCount = 0;
  this.stepCounter.stepHistory = [];
  this.stepCounter.accelerationHistory = [];
  this.stepCounter.startTime = null;
+ this.stepCounter.distanceKm = 0;
+ this.stepCounter.path = [];
+ this.stepCounter.lastPosition = null;
+ this.stepCounter.gpsReady = false;
+ this.clearActivityMapTrack();
  this.updateStepCounterDisplay();
- this.updateCounterStatus('Counter reset. Ready to start.');
- this.updateCounterHint('Click "Start Counting" and hold your phone while walking');
+ this.updateCounterStatus('Reset. Ready to track your next walk/run.');
+ this.updateCounterHint('Start Activity to begin GPS map tracking.');
  
  const saveBtn = document.getElementById('saveCounterStepsBtn');
  const timerEl = document.getElementById('counterTimer');
@@ -4995,25 +5006,196 @@ Please keep this information secure.`;
  if (saveBtn) saveBtn.style.display = 'none';
  if (timerEl) timerEl.style.display = 'none';
  
- // Reset timer display
  const timerValue = document.getElementById('timerValue');
  if (timerValue) timerValue.textContent = '00:00';
  }
 
- updateStepCounterDisplay() {
- const display = document.getElementById('liveStepCount');
- if (display) {
- display.textContent = this.stepCounter.stepCount.toLocaleString();
+ getTrackedDistanceKm() {
+ const gpsKm = this.stepCounter.distanceKm || 0;
+ const stepKm = (this.stepCounter.stepCount || 0) / (this.challengeConfig.stepsPerKm || 1300);
+ // Prefer GPS when we have a real track; otherwise fall back to step estimate
+ if ((this.stepCounter.path || []).length >= 2 && gpsKm > 0) {
+ return gpsKm;
  }
+ return Math.max(gpsKm, stepKm);
+ }
+
+ haversineKm(lat1, lon1, lat2, lon2) {
+ const toRad = (deg) => (deg * Math.PI) / 180;
+ const R = 6371;
+ const dLat = toRad(lat2 - lat1);
+ const dLon = toRad(lon2 - lon1);
+ const a =
+ Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+ Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+ Math.sin(dLon / 2) * Math.sin(dLon / 2);
+ return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+ }
+
+ initActivityMap() {
+ const mapEl = document.getElementById('activityMap');
+ if (!mapEl || typeof L === 'undefined') {
+ return;
+ }
+ if (!this.activityMap) {
+ this.activityMap = L.map(mapEl, {
+ zoomControl: true,
+ attributionControl: true
+ }).setView([20.5937, 78.9629], 5);
+ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+ maxZoom: 19,
+ attribution: '&copy; OpenStreetMap'
+ }).addTo(this.activityMap);
+ this.activityPolyline = L.polyline([], {
+ color: '#0d9488',
+ weight: 5,
+ opacity: 0.9
+ }).addTo(this.activityMap);
+ }
+ setTimeout(() => {
+ if (this.activityMap) this.activityMap.invalidateSize();
+ }, 200);
+ }
+
+ clearActivityMapTrack() {
+ if (this.activityPolyline) {
+ this.activityPolyline.setLatLngs([]);
+ }
+ if (this.activityMarker && this.activityMap) {
+ this.activityMap.removeLayer(this.activityMarker);
+ this.activityMarker = null;
+ }
+ const hint = document.getElementById('mapHint');
+ if (hint) {
+ hint.textContent = 'Allow location access to track your walk/run route on the map.';
+ }
+ }
+
+ startGpsTracking() {
+ if (!navigator.geolocation) {
+ this.updateCounterStatus('GPS not available on this device. Step estimate will be used.');
+ const hint = document.getElementById('mapHint');
+ if (hint) hint.textContent = 'GPS unavailable — distance will use step estimate.';
+ return;
+ }
+
+ const options = {
+ enableHighAccuracy: true,
+ maximumAge: 1000,
+ timeout: 15000
+ };
+
+ this.stepCounter.watchId = navigator.geolocation.watchPosition(
+ (pos) => this.handleGpsPosition(pos),
+ (err) => {
+ console.warn('GPS error:', err);
+ const hint = document.getElementById('mapHint');
+ if (hint) {
+ hint.textContent = 'Location permission needed for map tracking. You can still use step estimate.';
+ }
+ this.updateCounterHint('Enable location for accurate KM tracking on the map.');
+ },
+ options
+ );
+ }
+
+ stopGpsTracking() {
+ if (this.stepCounter.watchId != null && navigator.geolocation) {
+ navigator.geolocation.clearWatch(this.stepCounter.watchId);
+ }
+ this.stepCounter.watchId = null;
+ }
+
+ handleGpsPosition(position) {
+ if (!this.stepCounter.isRunning) return;
+ const { latitude, longitude, accuracy } = position.coords;
+ if (accuracy && accuracy > 80) {
+ // Ignore very inaccurate points
+ return;
+ }
+
+ const point = { lat: latitude, lng: longitude, t: Date.now() };
+ const last = this.stepCounter.lastPosition;
+ if (last) {
+ const segmentKm = this.haversineKm(last.lat, last.lng, point.lat, point.lng);
+ // Filter GPS jitter: ignore tiny jumps and impossible spikes
+ if (segmentKm >= 0.003 && segmentKm < 0.2) {
+ this.stepCounter.distanceKm += segmentKm;
+ }
+ }
+
+ this.stepCounter.lastPosition = point;
+ this.stepCounter.path.push(point);
+ // Keep path size reasonable for Firestore
+ if (this.stepCounter.path.length > 400) {
+ this.stepCounter.path = this.stepCounter.path.filter((_, idx) => idx % 2 === 0);
+ }
+
+ this.stepCounter.gpsReady = true;
+ this.updateActivityMap(point);
+ this.updateStepCounterDisplay();
+
+ const hint = document.getElementById('mapHint');
+ if (hint) {
+ hint.textContent = 'Live route tracking active.';
+ }
+ }
+
+ updateActivityMap(point) {
+ this.initActivityMap();
+ if (!this.activityMap || !point) return;
+
+ const latLng = [point.lat, point.lng];
+ if (this.activityPolyline) {
+ this.activityPolyline.addLatLng(latLng);
+ }
+ if (!this.activityMarker) {
+ this.activityMarker = L.circleMarker(latLng, {
+ radius: 7,
+ color: '#ff6b4a',
+ fillColor: '#ff6b4a',
+ fillOpacity: 0.9
+ }).addTo(this.activityMap);
+ this.activityMap.setView(latLng, 17);
+ } else {
+ this.activityMarker.setLatLng(latLng);
+ }
+ if (this.activityPolyline && this.activityPolyline.getLatLngs().length > 1) {
+ this.activityMap.fitBounds(this.activityPolyline.getBounds(), { padding: [24, 24] });
+ }
+ }
+
+ updateStepCounterDisplay() {
+ const distance = this.getTrackedDistanceKm();
  const kmEl = document.getElementById('liveKmCount');
  if (kmEl) {
- const km = this.stepCounter.stepCount / (this.challengeConfig.stepsPerKm || 1300);
- kmEl.textContent = `${km.toFixed(2)} KM`;
+ kmEl.textContent = distance.toFixed(2);
+ }
+ const stepsEl = document.getElementById('liveStepCount');
+ if (stepsEl) {
+ stepsEl.textContent = `${(this.stepCounter.stepCount || 0).toLocaleString()} steps`;
+ }
+
+ const gpsDistanceLabel = document.getElementById('gpsDistanceLabel');
+ if (gpsDistanceLabel) {
+ gpsDistanceLabel.textContent = `${(this.stepCounter.distanceKm || 0).toFixed(2)} KM`;
+ }
+ const gpsPointsLabel = document.getElementById('gpsPointsLabel');
+ if (gpsPointsLabel) {
+ gpsPointsLabel.textContent = String((this.stepCounter.path || []).length);
+ }
+ const paceLabel = document.getElementById('gpsPaceLabel');
+ if (paceLabel && this.stepCounter.startTime && distance > 0.01) {
+ const minutes = (Date.now() - this.stepCounter.startTime) / 60000;
+ const pace = minutes / distance;
+ paceLabel.textContent = `${pace.toFixed(1)} min/KM`;
+ } else if (paceLabel) {
+ paceLabel.textContent = '--';
  }
  }
 
  animateStepCounter() {
- const display = document.getElementById('liveStepCount');
+ const display = document.getElementById('liveKmCount');
  if (display) {
  display.style.transform = 'scale(1.1)';
  setTimeout(() => {
@@ -5120,31 +5302,43 @@ Please keep this information secure.`;
  return;
  }
 
- // Check if challenge is still active
  if (!this.canLogSteps()) {
  const { endDate } = this.getChallengeBounds();
  alert(`The challenge has ended. New step entries are no longer being accepted.\n\nEnded on ${this.formatDate(endDate)}.`);
  return;
  }
 
- const steps = this.stepCounter.stepCount;
- if (steps <= 0) {
- alert('No steps to save! Please count some steps first.');
+ const distanceKm = this.getTrackedDistanceKm();
+ const motionSteps = this.stepCounter.stepCount || 0;
+ const gpsSteps = Math.round(distanceKm * (this.challengeConfig.stepsPerKm || 1300));
+ const steps = Math.max(motionSteps, gpsSteps);
+
+ if (distanceKm <= 0 && steps <= 0) {
+ alert('No distance recorded yet. Start Activity, move with GPS on, then Stop and Save.');
  return;
  }
 
- // App counter only — no screenshots / manual entry
- await this.saveStepsWithScreenshot(steps, null, true);
+ await this.saveStepsWithScreenshot(steps, null, true, {
+ distanceKm,
+ path: (this.stepCounter.path || []).map((p) => ({ lat: p.lat, lng: p.lng, t: p.t })),
+ durationSec: this.stepCounter.startTime ? Math.round((Date.now() - this.stepCounter.startTime) / 1000) : null
+ });
  }
 
- async saveStepsWithScreenshot(steps, screenshotData, fromStepCounter = false) {
+ async saveStepsWithScreenshot(steps, screenshotData, fromStepCounter = false, trackMeta = null) {
  const today = new Date().toDateString();
  const currentSteps = this.currentUser.dailySteps[today] || 0;
  this.currentUser.dailySteps[today] = currentSteps + steps;
  this.currentUser.totalSteps = (this.currentUser.totalSteps || 0) + steps;
  this.currentUser.lastActivity = new Date().toISOString();
 
- // Create step entry for admin validation
+ const distanceKm = trackMeta && typeof trackMeta.distanceKm === 'number'
+ ? trackMeta.distanceKm
+ : steps / (this.challengeConfig.stepsPerKm || 1300);
+ this.currentUser.totalDistanceKm = (this.currentUser.totalDistanceKm || 0) + distanceKm;
+ if (!this.currentUser.dailyDistanceKm) this.currentUser.dailyDistanceKm = {};
+ this.currentUser.dailyDistanceKm[today] = (this.currentUser.dailyDistanceKm[today] || 0) + distanceKm;
+
  const entryId = `ENTRY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
  const stepEntry = {
  id: entryId,
@@ -5153,15 +5347,18 @@ Please keep this information secure.`;
  userName: this.currentUser.name || 'Unknown User',
  userEmail: this.currentUser.email || this.currentUser.emailId || 'No email',
  steps: steps,
- screenshot: screenshotData, // Optional for step counter
+ distanceKm: Number(distanceKm.toFixed(3)),
+ path: trackMeta && Array.isArray(trackMeta.path) ? trackMeta.path.slice(0, 300) : [],
+ durationSec: trackMeta ? trackMeta.durationSec : null,
+ screenshot: null,
  date: new Date().toISOString(),
  status: fromStepCounter ? 'approved' : 'pending',
- validatedBy: fromStepCounter ? 'App Counter' : null,
+ validatedBy: fromStepCounter ? 'App GPS Counter' : null,
  validatedAt: fromStepCounter ? new Date().toISOString() : null,
  lastModifiedBy: null,
  lastModifiedAt: null,
- notes: fromStepCounter ? 'Recorded by in-app KM / step counter' : null,
- source: fromStepCounter ? 'step-counter' : 'manual',
+ notes: fromStepCounter ? `In-app GPS activity: ${distanceKm.toFixed(2)} KM` : null,
+ source: fromStepCounter ? 'gps-counter' : 'manual',
  season: this.dataSeason
  };
 
@@ -5198,14 +5395,14 @@ Please keep this information secure.`;
  }
  }
 
- // Add activity
- const activityMessage = fromStepCounter 
- ? `Counted ${steps.toLocaleString()} steps using step counter (Pending validation)`
- : `Added ${steps.toLocaleString()} steps (Pending validation)`;
+ const activityMessage = fromStepCounter
+ ? `Covered ${distanceKm.toFixed(2)} KM (${steps.toLocaleString()} steps) via GPS map tracking`
+ : `Added ${steps.toLocaleString()} steps`;
  
  this.currentUser.activities.unshift({
  date: new Date().toISOString(),
  steps: steps,
+ distanceKm: Number(distanceKm.toFixed(3)),
  message: activityMessage,
  entryId: entryId
  });
@@ -5241,7 +5438,7 @@ Please keep this information secure.`;
  if (manualUpload) manualUpload.style.display = 'block';
  
  // Show success
- this.showCounterNotification(` ${steps.toLocaleString()} steps saved! Leaderboard updated.`);
+ this.showCounterNotification(` ${distanceKm.toFixed(2)} KM saved! Leaderboard updated.`);
  
  // Update dashboard and leaderboard immediately
  this.updateDashboard();
@@ -5249,7 +5446,7 @@ Please keep this information secure.`;
  
  // Show success message
  setTimeout(() => {
- alert(`Saved successfully!\n\n${steps.toLocaleString()} steps (~${(steps / (this.challengeConfig.stepsPerKm || 1300)).toFixed(2)} KM) added from the in-app counter.\n\nYour leaderboard has been updated.`);
+ alert(`Saved successfully!\n\n${distanceKm.toFixed(2)} KM covered (~${steps.toLocaleString()} steps) from in-app GPS tracking.\n\nYour leaderboard has been updated.`);
  }, 500);
  }
 

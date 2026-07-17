@@ -16,8 +16,10 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="apple-touch-icon" href="favicon.svg">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="ui-refresh.css?v=20">
+    <link rel="stylesheet" href="ui-refresh.css?v=21">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <!-- Microsoft Teams SDK (optional, only loads if in Teams) -->
     <script src="https://statics.teams.cdn.office.net/sdk/v1.11.0/js/MicrosoftTeams.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
@@ -376,9 +378,9 @@
                             <!-- Main Counter Display -->
                             <div class="step-counter-display-section">
                                 <div class="step-counter-circle">
-                                    <div class="step-counter-value-large" id="liveStepCount">0</div>
-                                    <div class="step-counter-label-large">Steps</div>
-                                    <div class="step-counter-km" id="liveKmCount">0.00 KM</div>
+                                    <div class="step-counter-value-large" id="liveKmCount">0.00</div>
+                                    <div class="step-counter-label-large">KM covered</div>
+                                    <div class="step-counter-km" id="liveStepCount">0 steps</div>
                                     <div class="step-counter-pulse" id="counterPulse"></div>
                                 </div>
                                 
@@ -389,15 +391,26 @@
                                 </div>
                             </div>
 
+                            <div class="gps-stats-row" id="gpsStatsRow">
+                                <div class="gps-stat"><span>GPS distance</span><strong id="gpsDistanceLabel">0.00 KM</strong></div>
+                                <div class="gps-stat"><span>Pace</span><strong id="gpsPaceLabel">--</strong></div>
+                                <div class="gps-stat"><span>GPS points</span><strong id="gpsPointsLabel">0</strong></div>
+                            </div>
+
+                            <div class="activity-map-wrap">
+                                <div id="activityMap" class="activity-map" role="img" aria-label="Live activity map"></div>
+                                <p class="map-hint" id="mapHint">Allow location access to track your walk/run route on the map.</p>
+                            </div>
+
                             <!-- Control Buttons -->
                             <div class="step-counter-controls-section">
                                 <button type="button" class="btn btn-counter-start" id="startCounterBtn">
                                     <span class="btn-icon">&#9654;&#65039;</span>
-                                    <span class="btn-text">Start Counting</span>
+                                    <span class="btn-text">Start Activity</span>
                                 </button>
                                 <button type="button" class="btn btn-counter-stop" id="stopCounterBtn" style="display: none;">
                                     <span class="btn-icon">&#9208;&#65039;</span>
-                                    <span class="btn-text">Stop Counting</span>
+                                    <span class="btn-text">Stop Activity</span>
                                 </button>
                                 <button type="button" class="btn btn-counter-reset" id="resetCounterBtn">
                                     <span class="btn-icon">&#128260;</span>
@@ -410,18 +423,18 @@
                                 <div class="counter-status-card" id="counterStatusCard">
                                     <div class="status-icon">&#8505;&#65039;</div>
                                     <div class="status-content">
-                                        <p class="counter-status" id="counterStatus">Ready to start counting</p>
-                                        <p class="counter-hint" id="counterHint">Click "Start Counting" and hold your phone while walking</p>
+                                        <p class="counter-status" id="counterStatus">Ready to track your walk/run</p>
+                                        <p class="counter-hint" id="counterHint">Start Activity to open GPS map tracking and distance counting</p>
                                     </div>
                                 </div>
                                 
                                 <div class="counter-tips">
-                                    <h4>&#128161; Tips for Accurate Counting:</h4>
+                                    <h4>&#128161; Tips for accurate GPS tracking:</h4>
                                     <ul>
-                                        <li>Hold your phone in your hand or pocket</li>
-                                        <li>Walk naturally - the sensor detects your movement</li>
-                                        <li>Keep your phone unlocked while counting</li>
-                                        <li>Allow motion sensor permissions when prompted</li>
+                                        <li>Allow location permission when prompted</li>
+                                        <li>Keep GPS on and the phone unlocked while moving</li>
+                                        <li>Outdoor routes give the best distance accuracy</li>
+                                        <li>Motion sensors still count steps as a backup</li>
                                     </ul>
                                 </div>
                             </div>
@@ -535,7 +548,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-17-v20 | App counter only</p>
+            <p class="footer-subtext">Site version: 2026-07-17-v21 | GPS map + distance tracking</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#" id="footerHelpLink" class="help-link">&#10067; Need Help? Contact us at wow-csg@csgi.com</a>
@@ -631,10 +644,10 @@
                 });
                 if (window.caches && caches.keys) {
                     caches.keys().then((keys) => {
-                        keys.filter((k) => k !== 'wowcsg-fitness-v20').forEach((k) => caches.delete(k));
+                        keys.filter((k) => k !== 'wowcsg-fitness-v21').forEach((k) => caches.delete(k));
                     });
                 }
-                navigator.serviceWorker.register('./service-worker.js?v=20')
+                navigator.serviceWorker.register('./service-worker.js?v=21')
                     .then((registration) => {
                         console.log('Service Worker registered:', registration);
                         if (registration.waiting) {
