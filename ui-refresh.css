@@ -197,9 +197,10 @@ header::before,
 
 .brand-wow {
   font-family: var(--display);
-  font-size: clamp(1.55rem, 3.2vw, 1.95rem);
+  font-size: clamp(1.35rem, 2.8vw, 1.75rem);
   font-weight: 800;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
   background: linear-gradient(110deg, #0b3d66 0%, #0d9488 40%, #ff6b4a 78%, #ff9f43 100%);
   background-size: 200% 100%;
   -webkit-background-clip: text;
@@ -207,15 +208,6 @@ header::before,
   color: transparent;
   -webkit-text-fill-color: transparent;
   animation: brandShine 5s ease-in-out infinite alternate;
-}
-
-.brand-csg-text {
-  font-family: var(--display);
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: #0b3d66;
 }
 
 .brand-tag {
