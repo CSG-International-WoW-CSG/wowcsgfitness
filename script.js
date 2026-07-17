@@ -1803,7 +1803,7 @@ class StepathonApp {
  ].includes(signInError.code);
  if (badPassword) {
  alert(
- 'This email already has a login from earlier testing.\n\n' +
+ 'This email already has a login from earlier Challenge.\n\n' +
  'Challenge user data was cleared, but Firebase still keeps the email account.\n\n' +
  'Do one of the following:\n' +
  '1) Register again using the SAME password you used before, or\n' +
