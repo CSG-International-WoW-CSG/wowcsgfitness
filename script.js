@@ -4479,7 +4479,8 @@ Please keep this information secure.`;
  if (!this.isEmail(identifier)) {
  participant = await this.lookupFirebaseParticipant(identifier);
  if (!participant || !participant.email) {
- alert('No account found for that username, email, or Employee ID.');
+ // Fall back: allow email login path only when identifier is email
+ alert('No account found for that username, email, or Employee ID.\n\nIf your challenge data was reset, login with your email address.');
  document.getElementById('loginUsername').focus();
  return;
  }
@@ -4487,27 +4488,30 @@ Please keep this information secure.`;
  }
 
  const credential = await this.auth.signInWithEmailAndPassword(email, password);
- const profile = participant && participant.uid === credential.user.uid
+ let profile = participant && participant.uid === credential.user.uid && this.isCurrentSeasonParticipant(participant)
  ? participant
  : await this.loadCurrentUserFromFirebase(credential.user.uid);
 
+ // Auth works but season profile missing/cleared: recreate a fresh challenge profile
+ if (!profile) {
+ profile = await this.createFreshSeasonProfileFromAuth(credential.user, email);
+ }
+
  if (!profile) {
  await this.auth.signOut();
- alert('Your previous challenge data was cleared. Please register again with this email to join the new challenge season.');
+ alert('Unable to create your challenge profile. Please register again.');
  this.switchLoginTab('user');
  return;
  }
 
- if (profile) {
  this.currentUser = profile;
  localStorage.setItem('currentUser', JSON.stringify(profile));
- }
 
  document.getElementById('loginForm').reset();
  this.showDashboard();
  this.updateLeaderboard();
  } catch (error) {
- if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+ if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential' || error.code === 'auth/invalid-login-credentials') {
  alert('Invalid username or password!');
  document.getElementById('loginPassword').focus();
  } else if (error.code === 'auth/user-not-found') {
@@ -4518,6 +4522,69 @@ Please keep this information secure.`;
  alert('Login failed. Please try again.');
  }
  }
+ }
+
+ /**
+ * When Auth login succeeds but challenge data was cleared / old season,
+ * rebuild a zeroed profile for the current season from any prior Firestore doc.
+ */
+ async createFreshSeasonProfileFromAuth(authUser, email) {
+ if (!this.firebaseEnabled || !this.db || !authUser) {
+ return null;
+ }
+
+ const uid = authUser.uid;
+ let prior = null;
+ try {
+ const doc = await this.participantsCol().doc(uid).get();
+ if (doc.exists) {
+ prior = doc.data();
+ }
+ } catch (error) {
+ console.warn('Could not read prior profile:', error);
+ }
+
+ if (!prior) {
+ try {
+ const emailLower = (email || authUser.email || '').toLowerCase();
+ if (emailLower) {
+ const snap = await this.participantsCol().where('emailLower', '==', emailLower).limit(5).get();
+ if (!snap.empty) {
+ prior = snap.docs[0].data();
+ }
+ }
+ } catch (error) {
+ console.warn('Could not look up prior email profile:', error);
+ }
+ }
+
+ const safeId = (prior && (prior.id || prior.employeeId)) || (`USER_${Date.now()}`);
+ const usernameBase = (prior && prior.username) || (email || 'user').split('@')[0];
+ const participant = {
+ uid,
+ id: String(safeId),
+ employeeId: String(safeId),
+ name: (prior && prior.name) || (authUser.displayName) || 'Challenge Participant',
+ email: email || authUser.email || (prior && prior.email) || '',
+ emailLower: (email || authUser.email || (prior && prior.email) || '').toLowerCase(),
+ username: usernameBase,
+ usernameLower: String(usernameBase).toLowerCase(),
+ employeeIdLower: String(safeId).toLowerCase(),
+ totalSteps: 0,
+ dailySteps: {},
+ streak: 0,
+ lastActivity: null,
+ activities: [],
+ registeredAt: new Date().toISOString(),
+ season: this.dataSeason
+ };
+
+ await this.participantsCol().doc(uid).set(participant);
+ this.participants = this.filterCurrentSeasonParticipants(
+ this.participants.filter((p) => p.uid !== uid).concat([participant])
+ );
+ this.saveParticipantsCache();
+ return participant;
  }
 
  async lookupFirebaseParticipant(identifier) {
