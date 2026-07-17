@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -9,15 +9,15 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="description" content="WOW-CSG 7 Days Fitness Challenge - Step Together. Thrive Together. 26 July - 1 August.">
     <title>WOW-CSG 7 Days Fitness Challenge</title>
-    <meta name="theme-color" content="#0d3b66">
+    <meta name="theme-color" content="#003366">
     <!-- PWA Manifest -->
     <link rel="manifest" href="./manifest.json">
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="apple-touch-icon" href="favicon.svg">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="ui-refresh.css?v=8">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="ui-refresh.css?v=9">
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap" rel="stylesheet">
     <!-- Microsoft Teams SDK (optional, only loads if in Teams) -->
     <script src="https://statics.teams.cdn.office.net/sdk/v1.11.0/js/MicrosoftTeams.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
@@ -36,25 +36,32 @@
                 <div class="csg-logo">
                     <img src="CSG_Logo_K_outline.jpg" alt="CSG Logo" class="csg-logo-img">
                 </div>
-                <p class="challenge-eyebrow">Step Together. Thrive Together.</p>
                 <h1 class="animated-title">WOW-CSG 7 Days Fitness Challenge</h1>
-                <p class="subtitle challenge-tagline">7 Days &bull; 7 Challenges &bull; 7 Winners</p>
-                <p class="challenge-dates-banner">26 July - 1 August &middot; Progressive 1 KM to 7 KM Walk/Run</p>
                 <div class="hero-cta-row">
-                    <a class="btn btn-primary" href="#loginCard">Join the Challenge</a>
-                    <a class="btn btn-ghost" href="#dayPlanCard">See 7-Day Plan</a>
-                </div>
-                <div class="hero-progress-rail" aria-label="Daily distance targets">
-                    <div class="rail-day"><span class="rail-km">1K</span><span class="rail-label">Day 1</span></div>
-                    <div class="rail-day"><span class="rail-km">2K</span><span class="rail-label">Day 2</span></div>
-                    <div class="rail-day"><span class="rail-km">3K</span><span class="rail-label">Day 3</span></div>
-                    <div class="rail-day"><span class="rail-km">4K</span><span class="rail-label">Day 4</span></div>
-                    <div class="rail-day"><span class="rail-km">5K</span><span class="rail-label">Day 5</span></div>
-                    <div class="rail-day"><span class="rail-km">6K</span><span class="rail-label">Day 6</span></div>
-                    <div class="rail-day"><span class="rail-km">7K</span><span class="rail-label">Day 7</span></div>
+                    <a class="btn btn-primary" href="#loginCard">Join Challenge</a>
+                    <a class="btn btn-ghost" href="#dayPlanCard">7-Day Plan</a>
                 </div>
             </div>
         </header>
+
+        <section class="challenge-band" aria-label="Challenge overview">
+            <div class="challenge-band-copy">
+                <h2>Step Together. Thrive Together.</h2>
+                <p>
+                    A progressive walk/run challenge for all CSG employees â€” start at 1 KM and build to 7 KM.
+                    One winner every day. Move more, connect more, finish stronger.
+                </p>
+                <span class="band-dates">26 July â€“ 1 August 2026 &middot; 7 Days &middot; 7 Winners</span>
+            </div>
+            <div class="challenge-band-meta">
+                <div class="meta-row">
+                    <div class="meta-cell"><span>Duration</span><strong id="challengeDurationTop">7 Days</strong></div>
+                    <div class="meta-cell"><span>Start</span><strong id="startDateTop">Jul 26, 2026</strong></div>
+                    <div class="meta-cell"><span>End</span><strong id="endDateTop">Aug 1, 2026</strong></div>
+                    <div class="meta-cell"><span>Daily Goal</span><strong id="infoDailyGoalTop">1â€“7 KM</strong></div>
+                </div>
+            </div>
+        </section>
 
         <!-- Challenge Over / Coming Soon Message (shown on main page) -->
         <div id="mainPageChallengeOverMessage" class="main-challenge-over-message" style="display: none;"></div>
@@ -578,7 +585,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-17-v8 | Compact consistent UI</p>
+            <p class="footer-subtext">Site version: 2026-07-17-v9 | Clean corporate UI</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#" id="footerHelpLink" class="help-link">&#10067; Need Help? Contact us at wow-csg@csgi.com</a>
@@ -674,10 +681,10 @@
                 });
                 if (window.caches && caches.keys) {
                     caches.keys().then((keys) => {
-                        keys.filter((k) => k !== 'wowcsg-fitness-v8').forEach((k) => caches.delete(k));
+                        keys.filter((k) => k !== 'wowcsg-fitness-v9').forEach((k) => caches.delete(k));
                     });
                 }
-                navigator.serviceWorker.register('./service-worker.js?v=8')
+                navigator.serviceWorker.register('./service-worker.js?v=9')
                     .then((registration) => {
                         console.log('Service Worker registered:', registration);
                         if (registration.waiting) {

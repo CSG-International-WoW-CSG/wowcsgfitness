@@ -1236,26 +1236,38 @@ class StepathonApp {
  const durationEl = document.getElementById('challengeDuration');
  const infoDailyGoal = document.getElementById('infoDailyGoal');
  
- if (startDateElement) {
- startDateElement.textContent = this.formatDate(startDate);
- }
- if (endDateElement) {
- endDateElement.textContent = this.formatDate(endDate);
- }
- if (durationEl) {
- durationEl.textContent = '7 Days';
- }
- if (infoDailyGoal) {
- const day = this.getChallengeDayNumber();
- if (day >= 1 && day <= 7) {
- infoDailyGoal.textContent = `Day ${day}: ${day} KM`;
- } else {
- infoDailyGoal.textContent = '1-7 KM (progressive)';
- }
- }
+        if (startDateElement) {
+            startDateElement.textContent = this.formatDate(startDate);
+        }
+        if (endDateElement) {
+            endDateElement.textContent = this.formatDate(endDate);
+        }
+        if (durationEl) {
+            durationEl.textContent = '7 Days';
+        }
+        if (infoDailyGoal) {
+            const day = this.getChallengeDayNumber();
+            if (day >= 1 && day <= 7) {
+                infoDailyGoal.textContent = `Day ${day}: ${day} KM`;
+            } else {
+                infoDailyGoal.textContent = '1-7 KM (progressive)';
+            }
+        }
 
- this.updateDailyPlanHighlight();
- this.checkChallengeStatus(startDate, endDate);
+        // Mirror dates into compact top meta band
+        const map = [
+            ['startDateTop', startDateElement ? startDateElement.textContent : this.formatDate(startDate)],
+            ['endDateTop', endDateElement ? endDateElement.textContent : this.formatDate(endDate)],
+            ['challengeDurationTop', '7 Days'],
+            ['infoDailyGoalTop', infoDailyGoal ? infoDailyGoal.textContent.replace(' (progressive)', '') : '1-7 KM']
+        ];
+        map.forEach(([id, val]) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        });
+
+        this.updateDailyPlanHighlight();
+        this.checkChallengeStatus(startDate, endDate);
  }
 
  updateDailyPlanHighlight() {
