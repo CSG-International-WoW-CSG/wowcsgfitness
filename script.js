@@ -1781,7 +1781,43 @@ class StepathonApp {
  }
 
  try {
- const credential = await this.auth.createUserWithEmailAndPassword(email, password);
+ let credential;
+ let reclaimed = false;
+ try {
+ credential = await this.auth.createUserWithEmailAndPassword(email, password);
+ } catch (createError) {
+ if (createError.code !== 'auth/email-already-in-use') {
+ throw createError;
+ }
+ // Email still exists in Firebase Auth from an earlier signup (challenge data was cleared, Auth was not).
+ // Sign in with the password they entered and create a fresh season profile.
+ try {
+ credential = await this.auth.signInWithEmailAndPassword(email, password);
+ reclaimed = true;
+ } catch (signInError) {
+ const badPassword = [
+ 'auth/wrong-password',
+ 'auth/invalid-credential',
+ 'auth/invalid-login-credentials',
+ 'auth/user-mismatch'
+ ].includes(signInError.code);
+ if (badPassword) {
+ alert(
+ 'This email already has a login from earlier testing.\n\n' +
+ 'Challenge user data was cleared, but Firebase still keeps the email account.\n\n' +
+ 'Do one of the following:\n' +
+ '1) Register again using the SAME password you used before, or\n' +
+ '2) Use "Forgot Password" / Login to reset it, then register again.\n\n' +
+ 'After that you will get a fresh challenge profile.'
+ );
+ this.switchLoginTab('user-login');
+ document.getElementById('emailId').focus();
+ return;
+ }
+ throw signInError;
+ }
+ }
+
  const participant = {
  uid: credential.user.uid,
  id: id,
@@ -1802,8 +1838,11 @@ class StepathonApp {
  };
 
  await this.participantsCol().doc(credential.user.uid).set(participant);
- this.participants.push(participant);
+ this.participants = this.filterCurrentSeasonParticipants(
+ this.participants.filter((p) => p.uid !== participant.uid).concat([participant])
+ );
  this.saveParticipantsCache();
+ this.syncParticipantsFromFirebase().catch(() => {});
 
  this.currentUser = participant;
  localStorage.setItem('currentUser', JSON.stringify(participant));
@@ -1811,57 +1850,22 @@ class StepathonApp {
  this.recordAttempt('registration', true);
  this.generateCaptcha('registration');
 
- alert(`Account created successfully!\n\nYou can now login with your email and password from any device.`);
-
  document.getElementById('registrationForm').reset();
- this.switchLoginTab('user-login');
- } catch (error) {
- if (error.code === 'auth/email-already-in-use') {
- // Old Auth account from previous season: sign in and create a fresh challenge profile
  try {
- const existing = await this.auth.signInWithEmailAndPassword(email, password);
- const participant = {
- uid: existing.user.uid,
- id: id,
- employeeId: id,
- name: name,
- email: email,
- emailLower: email.toLowerCase(),
- username: username,
- usernameLower: usernameLower,
- employeeIdLower: employeeIdLower,
- totalSteps: 0,
- dailySteps: {},
- streak: 0,
- lastActivity: null,
- activities: [],
- registeredAt: new Date().toISOString(),
- season: this.dataSeason
- };
- await this.participantsCol().doc(existing.user.uid).set(participant);
- this.participants = this.participants.filter(p => p.uid !== existing.user.uid);
- this.participants.push(participant);
- this.saveParticipantsCache();
- this.currentUser = participant;
- localStorage.setItem('currentUser', JSON.stringify(participant));
- this.recordAttempt('registration', true);
- this.generateCaptcha('registration');
- alert('Welcome back! Your previous challenge data was cleared. A fresh profile is ready for this challenge.');
- document.getElementById('registrationForm').reset();
  this.showDashboard();
  this.updateLeaderboard();
- } catch (reclaimError) {
- if (reclaimError.code === 'auth/wrong-password' || reclaimError.code === 'auth/invalid-credential') {
- alert('This email is already registered. Please login with your existing password, or use Forgot Password.');
- this.switchLoginTab('user-login');
- } else {
- console.error('Season reclaim failed:', reclaimError);
- alert('This email is already registered! Please login instead.');
+ } catch (uiError) {
+ console.warn('Dashboard open after registration failed:', uiError);
  this.switchLoginTab('user-login');
  }
- document.getElementById('emailId').focus();
- }
- } else if (error.code === 'auth/invalid-email') {
+
+ alert(
+ reclaimed
+ ? 'Welcome back! Your previous challenge data was cleared. A fresh profile is ready.'
+ : 'Account created successfully!\n\nYou can now login with your email and password from any device.'
+ );
+ } catch (error) {
+ if (error.code === 'auth/invalid-email') {
  alert('Please enter a valid email address!');
  document.getElementById('emailId').focus();
  } else if (error.code === 'auth/weak-password') {
@@ -1872,7 +1876,7 @@ class StepathonApp {
  alert('Registration failed due to a permissions issue. Please try again or contact support.');
  } else {
  console.error('Firebase registration error:', error);
- alert('Registration failed. Please try again.\n\n' + (error.message || error.code || ''));
+ alert('Registration failed. Please try again.\n\n' + (error.code || '') + ' ' + (error.message || ''));
  }
  }
  return;
