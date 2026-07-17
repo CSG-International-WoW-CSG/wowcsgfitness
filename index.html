@@ -16,7 +16,7 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="apple-touch-icon" href="favicon.svg">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="ui-refresh.css?v=21">
+    <link rel="stylesheet" href="ui-refresh.css?v=22">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -399,7 +399,8 @@
 
                             <div class="activity-map-wrap">
                                 <div id="activityMap" class="activity-map" role="img" aria-label="Live activity map"></div>
-                                <p class="map-hint" id="mapHint">Allow location access to track your walk/run route on the map.</p>
+                                <div class="wake-lock-badge" id="wakeLockBadge" style="display: none;">Keep screen ON (lock pauses GPS)</div>
+                                <p class="map-hint" id="mapHint">Allow location access to track your walk/run route on the map. Keep the screen on while tracking.</p>
                             </div>
 
                             <!-- Control Buttons -->
@@ -431,10 +432,10 @@
                                 <div class="counter-tips">
                                     <h4>&#128161; Tips for accurate GPS tracking:</h4>
                                     <ul>
+                                        <li>Keep the screen ON — locking the phone pauses GPS in mobile browsers</li>
                                         <li>Allow location permission when prompted</li>
-                                        <li>Keep GPS on and the phone unlocked while moving</li>
                                         <li>Outdoor routes give the best distance accuracy</li>
-                                        <li>Motion sensors still count steps as a backup</li>
+                                        <li>After unlock, tracking resumes and catches up the distance gap</li>
                                     </ul>
                                 </div>
                             </div>
@@ -548,7 +549,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-17-v21 | GPS map + distance tracking</p>
+            <p class="footer-subtext">Site version: 2026-07-17-v22 | Screen wake lock for GPS</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#" id="footerHelpLink" class="help-link">&#10067; Need Help? Contact us at wow-csg@csgi.com</a>
