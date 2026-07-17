@@ -4378,7 +4378,7 @@ Please keep this information secure.`;
  const goalKm = this.challengeConfig.dayGoalsKm[dayNum - 1] || dayNum;
  const dayDate = this.getChallengeDayDate(dayNum);
  const dateLabel = dayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
- el.textContent = `Day ${dayNum} (${dateLabel}) · ${goalKm} KM · shortest finish time wins`;
+ el.textContent = `Day ${dayNum} (${dateLabel}) - ${goalKm} KM - shortest finish time wins`;
  } else {
  el.textContent = '';
  }
@@ -4409,8 +4409,8 @@ Please keep this information secure.`;
  const item = document.createElement('div');
  item.className = 'leaderboard-item' + (participant.completed && index === 0 ? ' is-day-winner' : '');
  const status = participant.completed
- ? `Finished · ${this.formatDurationClock(participant.durationSec)}`
- : `${participant.distanceKm.toFixed(2)} KM · in progress`;
+ ? `Finished - ${this.formatDurationClock(participant.durationSec)}`
+ : `${participant.distanceKm.toFixed(2)} KM - in progress`;
  const detail = participant.completed
  ? `${participant.goalKm} KM goal`
  : `${Math.min(100, Math.round((participant.distanceKm / participant.goalKm) * 100))}% of ${participant.goalKm} KM`;
