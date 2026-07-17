@@ -118,6 +118,7 @@
  <div class="user-management-actions">
  <button class="btn btn-secondary" id="refreshUsersBtn"> Refresh Users</button>
  <button class="btn btn-secondary" id="migrateUsersBtn" title="Move local users into Firebase"> Migrate Local Users</button>
+ <button class="btn btn-danger" id="clearAllUsersBtn" title="Clear all challenge user data for this season"> Clear All User Data</button>
  </div>
  </div>
  <div class="users-list" id="usersList">
@@ -308,6 +309,20 @@
  if (refreshUsersBtn) {
  refreshUsersBtn.addEventListener('click', () => {
  window.app.loadUsersList();
+ });
+ }
+
+ const migrateUsersBtn = document.getElementById('migrateUsersBtn');
+ if (migrateUsersBtn) {
+ migrateUsersBtn.addEventListener('click', () => {
+ window.app.migrateLocalUsersToFirebase();
+ });
+ }
+
+ const clearAllUsersBtn = document.getElementById('clearAllUsersBtn');
+ if (clearAllUsersBtn) {
+ clearAllUsersBtn.addEventListener('click', () => {
+ window.app.clearAllChallengeUserData();
  });
  }
 

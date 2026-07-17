@@ -17,6 +17,12 @@ class StepathonApp {
  dayGoalsKm: [1, 2, 3, 4, 5, 6, 7]
  };
 
+ // Bump this to start a clean data season (new Firebase collections + wipe local caches)
+ this.dataSeason = 'jul2026-v1';
+ this.participantsCollection = 'participants_' + this.dataSeason;
+ this.stepEntriesCollection = 'stepEntries_' + this.dataSeason;
+ this.resetLocalUserDataIfNeeded();
+
  this.currentUser = null;
  this.isAdmin = false;
  this.firebaseEnabled = false;
@@ -123,6 +129,38 @@ class StepathonApp {
  this.auth = null;
  this.db = null;
  }
+ }
+
+ /** Wipe browser caches when data season changes (fresh challenge start). */
+ resetLocalUserDataIfNeeded() {
+ const seasonKey = 'wowcsg_data_season';
+ const stored = localStorage.getItem(seasonKey);
+ if (stored === this.dataSeason) {
+ return;
+ }
+
+ const keysToClear = [
+ 'participants',
+ 'participants_cache',
+ 'stepEntries',
+ 'stepEntries_cache',
+ 'currentUser',
+ 'registrationAttempts',
+ 'passwordResetAttempts',
+ 'sentEmails',
+ 'motivationIndex'
+ ];
+ keysToClear.forEach((key) => localStorage.removeItem(key));
+ localStorage.setItem(seasonKey, this.dataSeason);
+ console.log('Cleared local user data for new season:', this.dataSeason);
+ }
+
+ participantsCol() {
+ return this.db.collection(this.participantsCollection);
+ }
+
+ stepEntriesCol() {
+ return this.db.collection(this.stepEntriesCollection);
  }
 
  isEmail(value) {
@@ -356,6 +394,13 @@ class StepathonApp {
  if (migrateUsersBtn) {
  migrateUsersBtn.addEventListener('click', () => {
  this.migrateLocalUsersToFirebase();
+ });
+ }
+
+ const clearAllUsersBtn = document.getElementById('clearAllUsersBtn');
+ if (clearAllUsersBtn) {
+ clearAllUsersBtn.addEventListener('click', () => {
+ this.clearAllChallengeUserData();
  });
  }
 
@@ -1738,7 +1783,7 @@ class StepathonApp {
  registeredAt: new Date().toISOString()
  };
 
- await this.db.collection('participants').doc(credential.user.uid).set(participant);
+ await this.participantsCol().doc(credential.user.uid).set(participant);
  this.participants.push(participant);
  this.saveParticipantsCache();
 
@@ -1754,9 +1799,50 @@ class StepathonApp {
  this.switchLoginTab('user-login');
  } catch (error) {
  if (error.code === 'auth/email-already-in-use') {
- alert('This email is already registered! Please login instead.');
- document.getElementById('emailId').focus();
+ // Old Auth account from previous season: sign in and create a fresh challenge profile
+ try {
+ const existing = await this.auth.signInWithEmailAndPassword(email, password);
+ const participant = {
+ uid: existing.user.uid,
+ id: id,
+ employeeId: id,
+ name: name,
+ email: email,
+ emailLower: email.toLowerCase(),
+ username: username,
+ usernameLower: usernameLower,
+ employeeIdLower: employeeIdLower,
+ totalSteps: 0,
+ dailySteps: {},
+ streak: 0,
+ lastActivity: null,
+ activities: [],
+ registeredAt: new Date().toISOString(),
+ season: this.dataSeason
+ };
+ await this.participantsCol().doc(existing.user.uid).set(participant);
+ this.participants = this.participants.filter(p => p.uid !== existing.user.uid);
+ this.participants.push(participant);
+ this.saveParticipantsCache();
+ this.currentUser = participant;
+ localStorage.setItem('currentUser', JSON.stringify(participant));
+ this.recordAttempt('registration', true);
+ this.generateCaptcha('registration');
+ alert('Welcome back! Your previous challenge data was cleared. A fresh profile is ready for this challenge.');
+ document.getElementById('registrationForm').reset();
+ this.showDashboard();
+ this.updateLeaderboard();
+ } catch (reclaimError) {
+ if (reclaimError.code === 'auth/wrong-password' || reclaimError.code === 'auth/invalid-credential') {
+ alert('This email is already registered. Please login with your existing password, or use Forgot Password.');
  this.switchLoginTab('user-login');
+ } else {
+ console.error('Season reclaim failed:', reclaimError);
+ alert('This email is already registered! Please login instead.');
+ this.switchLoginTab('user-login');
+ }
+ document.getElementById('emailId').focus();
+ }
  } else if (error.code === 'auth/invalid-email') {
  alert('Please enter a valid email address!');
  document.getElementById('emailId').focus();
@@ -3551,7 +3637,7 @@ Please keep this information secure.`;
  this.participants = this.participants.filter(p => (p.id !== userId) && (p.employeeId !== userId));
  this.saveParticipantsCache();
  if (this.firebaseEnabled && user.uid) {
- this.db.collection('participants').doc(user.uid).delete().catch((error) => {
+ this.participantsCol().doc(user.uid).delete().catch((error) => {
  console.warn('Failed to delete participant from Firebase:', error);
  });
  }
@@ -3573,6 +3659,91 @@ Please keep this information secure.`;
  this.closeUserDetailsModal();
  this.loadUsersList();
  this.updateAdminDashboard();
+ }
+
+ /**
+ * Admin: wipe local caches and empty the current-season Firebase collections
+ * for docs this client can delete. Starts a fresh challenge roster in the UI.
+ */
+ async clearAllChallengeUserData() {
+ if (!this.isAdmin) {
+ alert('Admin login required.');
+ return;
+ }
+
+ const confirmed = confirm(
+ 'Clear ALL challenge user data for this season?\n\n' +
+ 'This removes participants and step entries from the app/local cache.\n' +
+ 'This cannot be undone.'
+ );
+ if (!confirmed) return;
+
+ const confirmedAgain = confirm('Final confirmation: delete all current-season user data now?');
+ if (!confirmedAgain) return;
+
+ try {
+ let deletedParticipants = 0;
+ let deletedEntries = 0;
+
+ if (this.firebaseEnabled && this.db) {
+ await this.syncParticipantsFromFirebase();
+ await this.syncStepEntriesFromFirebase();
+
+ const participantSnap = await this.participantsCol().get();
+ for (const docSnap of participantSnap.docs) {
+ try {
+ await docSnap.ref.delete();
+ deletedParticipants += 1;
+ } catch (err) {
+ console.warn('Could not delete participant', docSnap.id, err);
+ }
+ }
+
+ const entrySnap = await this.stepEntriesCol().get();
+ for (const docSnap of entrySnap.docs) {
+ try {
+ await docSnap.ref.delete();
+ deletedEntries += 1;
+ } catch (err) {
+ console.warn('Could not delete step entry', docSnap.id, err);
+ }
+ }
+ }
+
+ this.participants = [];
+ this.stepEntries = [];
+ this.currentUser = null;
+ this.saveParticipantsCache();
+ this.saveStepEntries();
+ [
+ 'currentUser',
+ 'participants',
+ 'participants_cache',
+ 'stepEntries',
+ 'stepEntries_cache',
+ 'registrationAttempts',
+ 'passwordResetAttempts'
+ ].forEach((key) => localStorage.removeItem(key));
+ localStorage.setItem('wowcsg_data_season', this.dataSeason);
+
+ this.loadUsersList();
+ this.updateAdminDashboard();
+ if (typeof this.updateLeaderboard === 'function') {
+ this.updateLeaderboard();
+ }
+
+ alert(
+ `Challenge user data cleared.\n\n` +
+ `Season collections wiped where permitted:\n` +
+ `- Participants deleted: ${deletedParticipants}\n` +
+ `- Step entries deleted: ${deletedEntries}\n\n` +
+ `Note: Firebase Auth login accounts (email/password) are separate.\n` +
+ `If someone needs a fully new Auth account, delete users in Firebase Console → Authentication.`
+ );
+ } catch (error) {
+ console.error('clearAllChallengeUserData failed:', error);
+ alert('Failed to clear all data: ' + (error.message || error));
+ }
  }
 
  deleteUserActivity(activityId, userId) {
@@ -4294,6 +4465,13 @@ Please keep this information secure.`;
  ? participant
  : await this.loadCurrentUserFromFirebase(credential.user.uid);
 
+ if (!profile) {
+ await this.auth.signOut();
+ alert('Your previous challenge data was cleared. Please register again with this email to join the new challenge season.');
+ this.switchLoginTab('register');
+ return;
+ }
+
  if (profile) {
  this.currentUser = profile;
  localStorage.setItem('currentUser', JSON.stringify(profile));
@@ -4322,7 +4500,7 @@ Please keep this information secure.`;
  }
 
  const normalizedIdentifier = identifier.toLowerCase();
- const collection = this.db.collection('participants');
+ const collection = this.participantsCol();
 
  const usernameSnap = await collection.where('usernameLower', '==', normalizedIdentifier).limit(1).get();
  if (!usernameSnap.empty) {
@@ -4346,7 +4524,7 @@ Please keep this information secure.`;
  if (!this.firebaseEnabled || !this.db) {
  return false;
  }
- const snap = await this.db.collection('participants').where(fieldName, '==', value).limit(1).get();
+ const snap = await this.participantsCol().where(fieldName, '==', value).limit(1).get();
  return !snap.empty;
  }
 
@@ -4355,7 +4533,7 @@ Please keep this information secure.`;
  return null;
  }
  try {
- const doc = await this.db.collection('participants').doc(uid).get();
+ const doc = await this.participantsCol().doc(uid).get();
  if (!doc.exists) {
  return null;
  }
@@ -4374,7 +4552,7 @@ Please keep this information secure.`;
  return;
  }
  try {
- const snapshot = await this.db.collection('participants').get();
+ const snapshot = await this.participantsCol().get();
  this.participants = snapshot.docs.map(doc => doc.data());
  this.saveParticipantsCache();
  if (!window.location.pathname.includes('admin.html')) {
@@ -4390,7 +4568,7 @@ Please keep this information secure.`;
  return;
  }
  try {
- const snapshot = await this.db.collection('stepEntries').get();
+ const snapshot = await this.stepEntriesCol().get();
  this.stepEntries = snapshot.docs.map(doc => doc.data());
  this.saveStepEntries();
  } catch (error) {
@@ -4403,7 +4581,7 @@ Please keep this information secure.`;
  return;
  }
  try {
- await this.db.collection('stepEntries').doc(entry.id).set(entry, { merge: true });
+ await this.stepEntriesCol().doc(entry.id).set(entry, { merge: true });
  } catch (error) {
  console.warn('Failed to upsert step entry in Firebase:', error);
  }
@@ -4414,7 +4592,7 @@ Please keep this information secure.`;
  return;
  }
  try {
- await this.db.collection('stepEntries').doc(entryId).delete();
+ await this.stepEntriesCol().doc(entryId).delete();
  } catch (error) {
  console.warn('Failed to delete step entry from Firebase:', error);
  }
@@ -4425,7 +4603,7 @@ Please keep this information secure.`;
  return;
  }
  try {
- await this.db.collection('participants').doc(participant.uid).set(participant, { merge: true });
+ await this.participantsCol().doc(participant.uid).set(participant, { merge: true });
  } catch (error) {
  console.warn('Failed to sync participant to Firebase:', error);
  }
@@ -4489,7 +4667,7 @@ Please keep this information secure.`;
 
  const emailLower = email.toLowerCase();
  const existingDocSnap = await this.db
- .collection('participants')
+ .collection(this.participantsCollection)
  .where('emailLower', '==', emailLower)
  .limit(1)
  .get();
@@ -4513,7 +4691,7 @@ Please keep this information secure.`;
  const tempPassword = this.generateTempPassword();
  const credential = await this.auth.createUserWithEmailAndPassword(email, tempPassword);
  uid = credential.user.uid;
- docRef = this.db.collection('participants').doc(uid);
+ docRef = this.participantsCol().doc(uid);
  results.createdAuth += 1;
 
  try {
@@ -4535,7 +4713,7 @@ Please keep this information secure.`;
 
  const normalized = this.normalizeLocalParticipant(localUser, uid);
  if (!docRef) {
- docRef = this.db.collection('participants').doc(uid);
+ docRef = this.participantsCol().doc(uid);
  }
 
  await docRef.set(normalized, { merge: true });
@@ -4568,7 +4746,7 @@ Please keep this information secure.`;
  }
 
  const normalizedEntry = this.normalizeStepEntry(entry, userUid);
- await this.db.collection('stepEntries').doc(normalizedEntry.id).set(normalizedEntry, { merge: true });
+ await this.stepEntriesCol().doc(normalizedEntry.id).set(normalizedEntry, { merge: true });
  results.stepEntriesMigrated += 1;
  }
  } finally {
