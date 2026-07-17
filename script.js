@@ -4468,7 +4468,7 @@ Please keep this information secure.`;
  if (!profile) {
  await this.auth.signOut();
  alert('Your previous challenge data was cleared. Please register again with this email to join the new challenge season.');
- this.switchLoginTab('register');
+ this.switchLoginTab('user');
  return;
  }
 
