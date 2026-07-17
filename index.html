@@ -9,14 +9,15 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="description" content="WOW-CSG 7 Days Fitness Challenge - Step Together. Thrive Together. 26 July - 1 August.">
     <title>WOW-CSG 7 Days Fitness Challenge</title>
-    <meta name="theme-color" content="#003366">
+    <meta name="theme-color" content="#0d3b66">
     <!-- PWA Manifest -->
     <link rel="manifest" href="./manifest.json">
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="apple-touch-icon" href="favicon.svg">
     <link rel="stylesheet" href="styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="ui-refresh.css?v=7">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <!-- Microsoft Teams SDK (optional, only loads if in Teams) -->
     <script src="https://statics.teams.cdn.office.net/sdk/v1.11.0/js/MicrosoftTeams.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
@@ -30,23 +31,29 @@
         <div class="email-warning" id="firebaseIssueBanner">
             <p>Note: Firebase issue resolved: please create your account again and reupload your step entries.</p>
         </div>
-        <header>
-            <div class="header-background">
-                <div class="animated-shapes">
-                    <div class="shape shape-1"></div>
-                    <div class="shape shape-2"></div>
-                    <div class="shape shape-3"></div>
-                </div>
-            </div>
+        <header class="hero-shell">
             <div class="logo-section">
                 <div class="csg-logo">
                     <img src="CSG_Logo_K_outline.jpg" alt="CSG Logo" class="csg-logo-img">
                 </div>
                 <p class="challenge-eyebrow">Step Together. Thrive Together.</p>
-                <h1 class="animated-title">WOW-CSG 7 Days Fitness Challenge</h1>
+                <h1 class="animated-title">WOW-CSG<br>7 Days Fitness Challenge</h1>
+                <p class="subtitle challenge-tagline">7 Days &bull; 7 Challenges &bull; 7 Winners</p>
+                <p class="challenge-dates-banner">26 July - 1 August &middot; Progressive 1 KM to 7 KM Walk/Run</p>
+                <div class="hero-cta-row">
+                    <a class="btn btn-primary" href="#loginCard">Join the Challenge</a>
+                    <a class="btn btn-ghost" href="#dayPlanCard">See 7-Day Plan</a>
+                </div>
+                <div class="hero-progress-rail" aria-label="Daily distance targets">
+                    <div class="rail-day"><span class="rail-km">1K</span><span class="rail-label">Day 1</span></div>
+                    <div class="rail-day"><span class="rail-km">2K</span><span class="rail-label">Day 2</span></div>
+                    <div class="rail-day"><span class="rail-km">3K</span><span class="rail-label">Day 3</span></div>
+                    <div class="rail-day"><span class="rail-km">4K</span><span class="rail-label">Day 4</span></div>
+                    <div class="rail-day"><span class="rail-km">5K</span><span class="rail-label">Day 5</span></div>
+                    <div class="rail-day"><span class="rail-km">6K</span><span class="rail-label">Day 6</span></div>
+                    <div class="rail-day"><span class="rail-km">7K</span><span class="rail-label">Day 7</span></div>
+                </div>
             </div>
-            <p class="subtitle challenge-tagline">&#9733; 7 Days &bull; 7 Challenges &bull; 7 Winners &#9733;</p>
-            <p class="challenge-dates-banner">26 July - 1 August | Progressive 1 KM &rarr; 7 KM Walk/Run</p>
         </header>
 
         <!-- Challenge Over / Coming Soon Message (shown on main page) -->
@@ -123,7 +130,7 @@
             </div>
 
             <!-- 7-Day Progressive Plan -->
-            <div class="card day-plan-card animated-card" tabindex="-1">
+            <div class="card day-plan-card animated-card" id="dayPlanCard" tabindex="-1">
                 <div class="challenge-header">
                     <div class="card-header-icon-wrapper">
                         <div class="card-header-icon">&#128197;</div>
@@ -571,7 +578,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-17-v6 | If text looks garbled, hard-refresh (Ctrl+F5) or clear site data for this page.</p>
+            <p class="footer-subtext">Site version: 2026-07-17-v7 | New UI refresh</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#" id="footerHelpLink" class="help-link">&#10067; Need Help? Contact us at wow-csg@csgi.com</a>
@@ -667,10 +674,10 @@
                 });
                 if (window.caches && caches.keys) {
                     caches.keys().then((keys) => {
-                        keys.filter((k) => k !== 'wowcsg-fitness-v6').forEach((k) => caches.delete(k));
+                        keys.filter((k) => k !== 'wowcsg-fitness-v7').forEach((k) => caches.delete(k));
                     });
                 }
-                navigator.serviceWorker.register('./service-worker.js?v=6')
+                navigator.serviceWorker.register('./service-worker.js?v=7')
                     .then((registration) => {
                         console.log('Service Worker registered:', registration);
                         if (registration.waiting) {

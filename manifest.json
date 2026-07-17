@@ -4,8 +4,8 @@
   "description": "Step Together. Thrive Together. Progressive 1 KM to 7 KM challenge — 26 July to 1 August.",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#003366",
-  "theme_color": "#003366",
+  "background_color": "#e8f4fc",
+  "theme_color": "#0d3b66",
   "orientation": "portrait",
   "icons": [
     {
