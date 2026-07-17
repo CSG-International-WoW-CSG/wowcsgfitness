@@ -1,4 +1,4 @@
-// Service Worker for WoW-CSG Stepathon Challenge
+﻿// Service Worker for WOW-CSG 7 Days Fitness Challenge
 const CACHE_NAME = 'stepathon-v4';
 const urlsToCache = [
   './',

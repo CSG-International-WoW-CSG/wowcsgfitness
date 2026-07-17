@@ -1,6 +1,22 @@
-// Stepathon Challenge Application
+// WOW-CSG 7 Days Fitness Challenge Application
 class StepathonApp {
     constructor() {
+        // Challenge config: 26 July - 1 August 2026 | Day N = N KM Walk/Run
+        this.challengeConfig = {
+            name: 'WOW-CSG 7 Days Fitness Challenge',
+            slogan: 'Step Together. Thrive Together.',
+            tagline: '7 Days * 7 Challenges * 7 Winners',
+            startYear: 2026,
+            startMonth: 6, // July (0-indexed)
+            startDay: 26,
+            endYear: 2026,
+            endMonth: 7, // August
+            endDay: 1,
+            durationDays: 7,
+            stepsPerKm: 1300, // approx. walking steps per KM for progress tracking
+            dayGoalsKm: [1, 2, 3, 4, 5, 6, 7]
+        };
+
         this.currentUser = null;
         this.isAdmin = false;
         this.firebaseEnabled = false;
@@ -1179,44 +1195,80 @@ class StepathonApp {
         document.getElementById('previewImage').src = '';
     }
 
+    getChallengeBounds() {
+        const cfg = this.challengeConfig;
+        const startDate = new Date(cfg.startYear, cfg.startMonth, cfg.startDay);
+        startDate.setHours(0, 0, 0, 0);
+        const endDate = new Date(cfg.endYear, cfg.endMonth, cfg.endDay);
+        endDate.setHours(23, 59, 59, 999);
+        return { startDate, endDate };
+    }
+
+    /** Challenge day number 1-7 for a given date, or 0 if outside the challenge window */
+    getChallengeDayNumber(date = new Date()) {
+        const { startDate, endDate } = this.getChallengeBounds();
+        const d = new Date(date);
+        d.setHours(0, 0, 0, 0);
+        if (d < startDate || d > endDate) return 0;
+        const diffMs = d.getTime() - startDate.getTime();
+        const dayIndex = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        return dayIndex + 1; // 1..7
+    }
+
+    getDailyGoalKm(date = new Date()) {
+        const day = this.getChallengeDayNumber(date);
+        if (day < 1 || day > 7) {
+            // Outside window: show Day 1 goal as preview / fallback
+            return this.challengeConfig.dayGoalsKm[0];
+        }
+        return this.challengeConfig.dayGoalsKm[day - 1];
+    }
+
+    getDailyGoalSteps(date = new Date()) {
+        return this.getDailyGoalKm(date) * this.challengeConfig.stepsPerKm;
+    }
+
     updateDates() {
-        // Set start date to February 1, 2026
-        const startDate = new Date(2026, 1, 1); // Month is 0-indexed, so 1 = February
-        startDate.setHours(0, 0, 0, 0); // Normalize time
-        
-        // Set end date to 14 days later (February 15, 2026)
-        const endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + 14);
-        endDate.setHours(23, 59, 59, 999); // Set to end of day
+        const { startDate, endDate } = this.getChallengeBounds();
 
         const startDateElement = document.getElementById('startDate');
         const endDateElement = document.getElementById('endDate');
+        const durationEl = document.getElementById('challengeDuration');
+        const infoDailyGoal = document.getElementById('infoDailyGoal');
         
         if (startDateElement) {
-            const formattedStart = this.formatDate(startDate);
-            startDateElement.textContent = formattedStart;
-            console.log('Start date set to:', formattedStart, startDate);
+            startDateElement.textContent = this.formatDate(startDate);
         }
         if (endDateElement) {
-            const formattedEnd = this.formatDate(endDate);
-            endDateElement.textContent = formattedEnd;
-            console.log('End date set to:', formattedEnd, endDate);
+            endDateElement.textContent = this.formatDate(endDate);
         }
-        
-        // Check if challenge is over and update UI
+        if (durationEl) {
+            durationEl.textContent = '7 Days';
+        }
+        if (infoDailyGoal) {
+            const day = this.getChallengeDayNumber();
+            if (day >= 1 && day <= 7) {
+                infoDailyGoal.textContent = `Day ${day}: ${day} KM`;
+            } else {
+                infoDailyGoal.textContent = '1-7 KM (progressive)';
+            }
+        }
+
+        this.updateDailyPlanHighlight();
         this.checkChallengeStatus(startDate, endDate);
     }
 
+    updateDailyPlanHighlight() {
+        const day = this.getChallengeDayNumber();
+        document.querySelectorAll('.day-plan-item').forEach((el) => {
+            const itemDay = parseInt(el.getAttribute('data-day'), 10);
+            el.classList.toggle('is-today', itemDay === day);
+            el.classList.toggle('is-complete', day > 0 && itemDay < day);
+        });
+    }
+
     isChallengeActive() {
-        // Set start date to February 1, 2026
-        const startDate = new Date(2026, 1, 1);
-        startDate.setHours(0, 0, 0, 0);
-        
-        // Set end date to 14 days later (February 15, 2026)
-        const endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + 14);
-        endDate.setHours(23, 59, 59, 999);
-        
+        const { startDate, endDate } = this.getChallengeBounds();
         const now = new Date();
         return now >= startDate && now <= endDate;
     }
@@ -1224,36 +1276,64 @@ class StepathonApp {
     checkChallengeStatus(startDate, endDate) {
         const now = new Date();
         const isActive = now >= startDate && now <= endDate;
+        const notStarted = now < startDate;
+        const hasEnded = now > endDate;
         
-        // Show/hide challenge over message on main page (before login)
+        // Show/hide challenge status message on main page (before login)
         const mainPageMsg = document.getElementById('mainPageChallengeOverMessage');
         if (mainPageMsg) {
-            mainPageMsg.style.display = isActive ? 'none' : 'block';
+            if (isActive) {
+                mainPageMsg.style.display = 'none';
+            } else if (notStarted) {
+                mainPageMsg.style.display = 'block';
+                mainPageMsg.innerHTML = `
+                    <div style="background: linear-gradient(135deg, #6B2D8B 0%, #003366 100%); color: white; padding: 20px; border-radius: 12px; margin: 20px auto; max-width: 900px; box-shadow: 0 4px 15px rgba(107, 45, 139, 0.35); text-align: center;">
+                        <div style="font-size: 2.5rem; margin-bottom: 10px;">ðŸš€</div>
+                        <h2 style="margin: 0 0 10px 0; font-size: 1.6rem; font-weight: bold;">Challenge Starts Soon!</h2>
+                        <p style="margin: 0 0 10px 0; font-size: 1rem; opacity: 0.95;">
+                            The <strong>WOW-CSG 7 Days Fitness Challenge</strong> runs from <strong>${this.formatDate(startDate)}</strong> to <strong>${this.formatDate(endDate)}</strong>.
+                        </p>
+                        <p style="margin: 0; font-size: 0.95rem; opacity: 0.9;">
+                            Register now | Day 1 = 1 KM | Build up to 7 KM | One winner every day!
+                        </p>
+                    </div>`;
+            } else {
+                mainPageMsg.style.display = 'block';
+                mainPageMsg.innerHTML = `
+                    <div style="background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); color: white; padding: 20px; border-radius: 12px; margin: 20px auto; max-width: 900px; box-shadow: 0 4px 15px rgba(244, 67, 54, 0.3); text-align: center;">
+                        <div style="font-size: 2.5rem; margin-bottom: 10px;">ðŸ</div>
+                        <h2 style="margin: 0 0 10px 0; font-size: 1.6rem; font-weight: bold;">Challenge Has Ended</h2>
+                        <p style="margin: 0 0 10px 0; font-size: 1rem; opacity: 0.95;">
+                            The WOW-CSG 7 Days Fitness Challenge ended on <strong>${this.formatDate(endDate)}</strong>.
+                        </p>
+                        <p style="margin: 0; font-size: 0.95rem; opacity: 0.9;">
+                            Thank you for participating! You can still login to view your progress and the leaderboard.
+                        </p>
+                    </div>`;
+            }
         }
         
         // Show/hide challenge over message in dashboard (after login)
         let challengeOverMsg = document.getElementById('challengeOverMessage');
         if (!challengeOverMsg) {
-            // Create the message element if it doesn't exist
             challengeOverMsg = document.createElement('div');
             challengeOverMsg.id = 'challengeOverMessage';
             challengeOverMsg.className = 'challenge-over-message';
             
-            // Insert at the top of main-content
             const mainContent = document.querySelector('.main-content');
             if (mainContent) {
                 mainContent.insertBefore(challengeOverMsg, mainContent.firstChild);
             }
         }
         
-        if (!isActive) {
+        if (hasEnded) {
             const formattedEnd = this.formatDate(endDate);
             challengeOverMsg.innerHTML = `
                 <div style="background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); color: white; padding: 25px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(244, 67, 54, 0.3); text-align: center;">
-                    <div style="font-size: 2.5rem; margin-bottom: 15px;">🏁</div>
+                    <div style="font-size: 2.5rem; margin-bottom: 15px;">ðŸ</div>
                     <h2 style="margin: 0 0 10px 0; font-size: 1.8rem; font-weight: bold;">Challenge Has Ended</h2>
                     <p style="margin: 0 0 15px 0; font-size: 1.1rem; opacity: 0.95;">
-                        The WoW-CSG Stepathon Challenge 2026 ended on <strong>${formattedEnd}</strong>.
+                        The WOW-CSG 7 Days Fitness Challenge ended on <strong>${formattedEnd}</strong>.
                     </p>
                     <p style="margin: 0; font-size: 1rem; opacity: 0.9;">
                         Thank you for participating! You can still view your progress and the leaderboard below.
@@ -1261,8 +1341,21 @@ class StepathonApp {
                 </div>
             `;
             challengeOverMsg.style.display = 'block';
-            
-            // Disable add steps section
+            this.disableAddStepsSection();
+        } else if (notStarted) {
+            challengeOverMsg.innerHTML = `
+                <div style="background: linear-gradient(135deg, #6B2D8B 0%, #003366 100%); color: white; padding: 25px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(107, 45, 139, 0.35); text-align: center;">
+                    <div style="font-size: 2.5rem; margin-bottom: 15px;">ðŸ“…</div>
+                    <h2 style="margin: 0 0 10px 0; font-size: 1.8rem; font-weight: bold;">Get Ready!</h2>
+                    <p style="margin: 0 0 15px 0; font-size: 1.1rem; opacity: 0.95;">
+                        Challenge opens <strong>${this.formatDate(startDate)}</strong>. Progressive goals: 1 KM -> 7 KM.
+                    </p>
+                    <p style="margin: 0; font-size: 1rem; opacity: 0.9;">
+                        You can explore the dashboard now. Step logging unlocks when the challenge starts.
+                    </p>
+                </div>
+            `;
+            challengeOverMsg.style.display = 'block';
             this.disableAddStepsSection();
         } else {
             challengeOverMsg.style.display = 'none';
@@ -1299,7 +1392,7 @@ class StepathonApp {
                     padding: 20px;
                 `;
                 overlay.innerHTML = `
-                    <div style="font-size: 3rem; margin-bottom: 15px;">🔒</div>
+                    <div style="font-size: 3rem; margin-bottom: 15px;">ðŸ”’</div>
                     <h3 style="margin: 0 0 10px 0; color: #f44336; font-size: 1.5rem;">Challenge Has Ended</h3>
                     <p style="margin: 0; color: #666; text-align: center; max-width: 400px;">
                         New step entries are no longer being accepted. The challenge ended on <strong>${this.formatDate(new Date(2026, 1, 15))}</strong>.
@@ -1808,10 +1901,10 @@ class StepathonApp {
         const emailSent = await this.sendEmailViaEmailJS(email, username, password);
         
         // Create email content for mailto link
-        const subject = encodeURIComponent('Welcome to WoW-CSG Stepathon Challenge - Your Account Details');
+        const subject = encodeURIComponent('Welcome to WOW-CSG 7 Days Fitness Challenge - Your Account Details');
         const body = encodeURIComponent(`Dear Participant,
 
-Welcome to the WoW-CSG Stepathon Challenge 2026!
+Welcome to the WOW-CSG 7 Days Fitness Challenge!
 
 Your account has been created successfully.
 
@@ -1823,15 +1916,15 @@ Please keep this information secure and login to start tracking your steps.
 Note: Each email address and Employee ID can only be registered once.
 
 Best regards,
-WoW-CSG Stepathon Team`);
+WOW-CSG Fitness Team`);
 
         // Store email details for reference
         const emailData = {
             to: email,
-            subject: 'Welcome to WoW-CSG Stepathon Challenge - Your Account Details',
+            subject: 'Welcome to WOW-CSG 7 Days Fitness Challenge - Your Account Details',
             body: `Dear Participant,
 
-Welcome to the WoW-CSG Stepathon Challenge 2026!
+Welcome to the WOW-CSG 7 Days Fitness Challenge!
 
 Your account has been created successfully.
 
@@ -1843,7 +1936,7 @@ Please keep this information secure and login to start tracking your steps.
 Note: Each email address and Employee ID can only be registered once.
 
 Best regards,
-WoW-CSG Stepathon Team`,
+WOW-CSG Fitness Team`,
             sentAt: new Date().toISOString(),
             sentViaEmailJS: emailSent
         };
@@ -1885,10 +1978,10 @@ WoW-CSG Stepathon Team`,
                 to_name: username,
                 username: username,
                 password: password,
-                subject: 'Welcome to WoW-CSG Stepathon Challenge - Your Account Details',
+                subject: 'Welcome to WOW-CSG 7 Days Fitness Challenge - Your Account Details',
                 message: `Dear Participant,
 
-Welcome to the WoW-CSG Stepathon Challenge 2026!
+Welcome to the WOW-CSG 7 Days Fitness Challenge!
 
 Your account has been created successfully.
 
@@ -1900,7 +1993,7 @@ Please keep this information secure and login to start tracking your steps.
 Note: Each email address and Employee ID can only be registered once.
 
 Best regards,
-WoW-CSG Stepathon Team`
+WOW-CSG Fitness Team`
             };
 
             // Send email via EmailJS
@@ -1918,44 +2011,44 @@ WoW-CSG Stepathon Team`
         modal.className = 'email-modal-overlay';
         
         const emailStatus = emailSent 
-            ? '<div class="email-success"><p>✅ Email sent successfully to your registered email address!</p></div>'
-            : '<div class="email-warning"><p>⚠️ Automatic email sending is not configured. Please use the options below to receive your credentials.</p></div>';
+            ? '<div class="email-success"><p>âœ… Email sent successfully to your registered email address!</p></div>'
+            : '<div class="email-warning"><p>âš ï¸ Automatic email sending is not configured. Please use the options below to receive your credentials.</p></div>';
         
         modal.innerHTML = `
             <div class="email-modal">
                 <div class="email-modal-header">
-                    <h3>📧 Account Details ${emailSent ? 'Sent' : 'Ready'}</h3>
-                    <button class="email-modal-close" onclick="this.closest('.email-modal-overlay').remove()">×</button>
+                    <h3>ðŸ“§ Account Details ${emailSent ? 'Sent' : 'Ready'}</h3>
+                    <button class="email-modal-close" onclick="this.closest('.email-modal-overlay').remove()">Ã—</button>
                 </div>
                 <div class="email-modal-content">
                     ${emailStatus}
                     <p class="email-info">Your account credentials:</p>
                     <div class="email-details">
                         <p><strong>To:</strong> ${email}</p>
-                        <p><strong>Subject:</strong> Welcome to WoW-CSG Stepathon Challenge - Your Account Details</p>
+                        <p><strong>Subject:</strong> Welcome to WOW-CSG 7 Days Fitness Challenge - Your Account Details</p>
                     </div>
                     <div class="email-credentials">
                         <div class="credential-item">
                             <label>Username:</label>
                             <div class="credential-value">
                                 <span id="copyUsername">${username}</span>
-                                <button class="btn-copy" onclick="app.copyToClipboard('${username}', 'Username')">📋 Copy</button>
+                                <button class="btn-copy" onclick="app.copyToClipboard('${username}', 'Username')">ðŸ“‹ Copy</button>
                             </div>
                         </div>
                         <div class="credential-item">
                             <label>Password:</label>
                             <div class="credential-value">
                                 <span id="copyPassword">${password}</span>
-                                <button class="btn-copy" onclick="app.copyToClipboard('${password}', 'Password')">📋 Copy</button>
+                                <button class="btn-copy" onclick="app.copyToClipboard('${password}', 'Password')">ðŸ“‹ Copy</button>
                             </div>
                         </div>
                     </div>
                     <div class="email-actions">
                         <a href="mailto:${email}?subject=${subject}&body=${body}" class="btn btn-primary" target="_blank" onclick="this.closest('.email-modal-overlay').remove()">
-                            📧 Open Email Client
+                            ðŸ“§ Open Email Client
                         </a>
                         <button class="btn btn-secondary" onclick="app.copyEmailContent('${email}', '${username}', '${password}')">
-                            📋 Copy All Details
+                            ðŸ“‹ Copy All Details
                         </button>
                     </div>
                     ${!emailSent ? `
@@ -2007,7 +2100,7 @@ WoW-CSG Stepathon Team`
     }
 
     copyEmailContent(email, username, password) {
-        const content = `Account Details for WoW-CSG Stepathon Challenge
+        const content = `Account Details for WOW-CSG 7 Days Fitness Challenge
 
 Email: ${email}
 Username: ${username}
@@ -2095,7 +2188,7 @@ Please keep this information secure.`;
 
         const statusDiv = document.getElementById('emailjsStatus');
         if (statusDiv) {
-            statusDiv.innerHTML = '<div class="email-success"><p>✅ EmailJS configuration saved successfully!</p></div>';
+            statusDiv.innerHTML = '<div class="email-success"><p>âœ… EmailJS configuration saved successfully!</p></div>';
         }
 
         this.showToast('EmailJS configuration saved!');
@@ -2127,22 +2220,22 @@ Please keep this information secure.`;
                 to_name: 'Test User',
                 username: 'testuser',
                 password: 'testpass123',
-                subject: 'Test Email - WoW-CSG Stepathon',
-                message: 'This is a test email from WoW-CSG Stepathon Challenge. If you receive this, EmailJS is configured correctly!'
+                subject: 'Test Email - WOW-CSG Fitness Challenge',
+                message: 'This is a test email from WOW-CSG 7 Days Fitness Challenge. If you receive this, EmailJS is configured correctly!'
             };
 
             await emailjs.send(serviceId, templateId, templateParams);
             
             const statusDiv = document.getElementById('emailjsStatus');
             if (statusDiv) {
-                statusDiv.innerHTML = `<div class="email-success"><p>✅ Test email sent successfully to ${testEmail}!</p></div>`;
+                statusDiv.innerHTML = `<div class="email-success"><p>âœ… Test email sent successfully to ${testEmail}!</p></div>`;
             }
             this.showToast('Test email sent successfully!');
         } catch (error) {
             console.error('EmailJS Test Error:', error);
             const statusDiv = document.getElementById('emailjsStatus');
             if (statusDiv) {
-                statusDiv.innerHTML = `<div class="email-error"><p>❌ Error: ${error.text || error.message || 'Failed to send test email'}</p></div>`;
+                statusDiv.innerHTML = `<div class="email-error"><p>âŒ Error: ${error.text || error.message || 'Failed to send test email'}</p></div>`;
             }
             alert('Failed to send test email. Please check your EmailJS configuration.');
         }
@@ -2164,7 +2257,7 @@ Please keep this information secure.`;
 
             const statusDiv = document.getElementById('emailjsStatus');
             if (statusDiv) {
-                statusDiv.innerHTML = '<div class="email-warning"><p>⚠️ EmailJS configuration cleared.</p></div>';
+                statusDiv.innerHTML = '<div class="email-warning"><p>âš ï¸ EmailJS configuration cleared.</p></div>';
             }
             this.showToast('EmailJS configuration cleared');
         }
@@ -2205,8 +2298,8 @@ Please keep this information secure.`;
         modal.innerHTML = `
             <div class="email-modal">
                 <div class="email-modal-header">
-                    <h3>🔑 Reset Password</h3>
-                    <button class="email-modal-close" onclick="this.closest('.email-modal-overlay').remove()">×</button>
+                    <h3>ðŸ”‘ Reset Password</h3>
+                    <button class="email-modal-close" onclick="this.closest('.email-modal-overlay').remove()">Ã—</button>
                 </div>
                 <div class="email-modal-content">
                     <p class="email-info">${infoText}</p>
@@ -2224,7 +2317,7 @@ Please keep this information secure.`;
                             <div class="captcha-container">
                                 <div class="captcha-question" id="resetCaptchaQuestion">${captcha.question}</div>
                                 <input type="number" id="resetCaptchaAnswer" placeholder="Enter answer" required autocomplete="off" min="0">
-                                <button type="button" class="btn btn-secondary btn-small" onclick="app.refreshResetCaptcha()" title="Refresh CAPTCHA">🔄</button>
+                                <button type="button" class="btn btn-secondary btn-small" onclick="app.refreshResetCaptcha()" title="Refresh CAPTCHA">ðŸ”„</button>
                             </div>
                             <small class="form-hint">Please solve the math problem to verify you're human.</small>
                         </div>
@@ -2442,15 +2535,31 @@ Please keep this information secure.`;
         this.animateNumber('totalSteps', totalSteps);
         this.animateNumber('streak', streak);
 
-        // Update progress bar with animation
-        const goal = 10000;
+        // Update progress bar with animation - progressive daily KM goal
+        const goalKm = this.getDailyGoalKm();
+        const goal = this.getDailyGoalSteps();
+        const dayNum = this.getChallengeDayNumber();
         const progress = Math.min((todaySteps / goal) * 100, 100);
         this.animateProgressBar(progress);
         const progressBadge = document.getElementById('progressBadge');
         if (progressBadge) {
             this.animateNumber('progressBadge', Math.round(progress), '%');
         }
-        document.getElementById('remainingSteps').textContent = Math.max(0, goal - todaySteps).toLocaleString();
+        const remainingEl = document.getElementById('remainingSteps');
+        if (remainingEl) {
+            remainingEl.textContent = Math.max(0, goal - todaySteps).toLocaleString() + ' steps';
+        }
+        const goalLabel = document.getElementById('dailyGoalLabel');
+        if (goalLabel) {
+            const dayPrefix = dayNum >= 1 && dayNum <= 7 ? `Day ${dayNum}: ` : '';
+            goalLabel.textContent = `${dayPrefix}${goalKm} KM (~${goal.toLocaleString()} steps)`;
+        }
+        const progressTitle = document.getElementById('dailyGoalTitle');
+        if (progressTitle) {
+            progressTitle.textContent = dayNum >= 1 && dayNum <= 7
+                ? `Day ${dayNum} Goal - ${goalKm} KM Walk/Run`
+                : 'Daily Goal Progress';
+        }
 
         // Update rank
         const rank = this.getUserRank(this.currentUser);
@@ -2477,23 +2586,23 @@ Please keep this information secure.`;
         
         // Show appropriate motivation based on progress
         let message = '';
-        let icon = '🎯';
+        let icon = 'ðŸŽ¯';
         
         if (progress >= 100) {
-            message = 'Amazing! You crushed your daily goal! 🚀';
-            icon = '🏆';
+            message = 'Amazing! You crushed your daily goal! ðŸš€';
+            icon = 'ðŸ†';
         } else if (progress >= 75) {
-            message = 'Almost there! Keep pushing! 💪';
-            icon = '🔥';
+            message = 'Almost there! Keep pushing! ðŸ’ª';
+            icon = 'ðŸ”¥';
         } else if (progress >= 50) {
-            message = 'Halfway there! You\'re doing great! ⭐';
-            icon = '⭐';
+            message = 'Halfway there! You\'re doing great! â­';
+            icon = 'â­';
         } else if (progress >= 25) {
-            message = 'Great start! Every step counts! 👣';
-            icon = '👣';
+            message = 'Great start! Every step counts! ðŸ‘£';
+            icon = 'ðŸ‘£';
         } else if (todaySteps > 0) {
-            message = 'You\'re on the right track! Keep moving! 🚶‍♂️';
-            icon = '🚶‍♂️';
+            message = 'You\'re on the right track! Keep moving!';
+            icon = 'ðŸš¶-â™‚ï¸';
         }
         
         if (message) {
@@ -2514,7 +2623,7 @@ Please keep this information secure.`;
             "Success is the sum of small efforts repeated day in and day out!",
             "You don't have to be great to start, but you have to start to be great!",
             "The only way to do great work is to love what you do!",
-            "Your limitation—it's only your imagination!",
+            "Your limitation-it's only your imagination!",
             "Push yourself, because no one else is going to do it for you!",
             "Great things never come from comfort zones!",
             "Dream it. Wish it. Do it!",
@@ -3076,7 +3185,7 @@ Please keep this information secure.`;
         if (userActivities.length > 0) {
             activitiesHtml = `
                 <div class="user-activities-section">
-                    <h3>📝 Activity Details</h3>
+                    <h3>ðŸ“ Activity Details</h3>
                     
                     <!-- Activity Statistics Summary -->
                     <div class="activity-stats-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
@@ -3086,15 +3195,15 @@ Please keep this information secure.`;
                         </div>
                         <div class="stat-box">
                             <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #4caf50;">${approvedActivities}</div>
-                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">✅ Approved</div>
+                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">âœ… Approved</div>
                         </div>
                         <div class="stat-box">
                             <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #ff9800;">${pendingActivities}</div>
-                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">⏳ Pending</div>
+                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">â³ Pending</div>
                         </div>
                         <div class="stat-box">
                             <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #f44336;">${rejectedActivities}</div>
-                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">❌ Rejected</div>
+                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">âŒ Rejected</div>
                         </div>
                         <div class="stat-box">
                             <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #2196f3;">${totalActivitySteps.toLocaleString()}</div>
@@ -3102,7 +3211,7 @@ Please keep this information secure.`;
                         </div>
                         <div class="stat-box">
                             <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #9c27b0;">${activitiesWithScreenshots}</div>
-                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">📷 With Screenshots</div>
+                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">ðŸ“| With Screenshots</div>
                         </div>
                     </div>
                     
@@ -3115,7 +3224,7 @@ Please keep this information secure.`;
                 const timeStr = date.toLocaleTimeString();
                 const status = activity.status || 'pending';
                 const statusClass = status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : 'pending';
-                const statusIcon = status === 'approved' ? '✅' : status === 'rejected' ? '❌' : '⏳';
+                const statusIcon = status === 'approved' ? 'âœ…' : status === 'rejected' ? 'âŒ' : 'â³';
                 
                 // Format validation date if available
                 let validatedDateStr = '';
@@ -3146,7 +3255,7 @@ Please keep this information secure.`;
                     <div class="activity-entry ${statusClass}" style="border: 2px solid ${status === 'approved' ? '#4caf50' : status === 'rejected' ? '#f44336' : '#ff9800'}; border-radius: 8px; padding: 15px; margin-bottom: 15px; background: white;">
                         <div class="activity-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #eee;">
                             <div>
-                                <span class="activity-date" style="font-weight: bold; color: #003366; font-size: 1rem;">📅 ${dateStr} ${timeStr}</span>
+                                <span class="activity-date" style="font-weight: bold; color: #003366; font-size: 1rem;">ðŸ“… ${dateStr} ${timeStr}</span>
                                 <div style="font-size: 0.85rem; color: #666; margin-top: 4px;">
                                     Entry ID: <code style="background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 0.8rem;">${activity.id || 'N/A'}</code>
                                 </div>
@@ -3157,22 +3266,22 @@ Please keep this information secure.`;
                         </div>
                         <div class="activity-details" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px;">
                             <div class="detail-item">
-                                <strong style="color: #003366;">👣 Steps:</strong> 
+                                <strong style="color: #003366;">ðŸ‘£ Steps:</strong> 
                                 <span style="font-size: 1.1rem; font-weight: bold; color: #2196f3;">${(activity.steps || 0).toLocaleString()}</span>
                             </div>
                             <div class="detail-item">
-                                <strong style="color: #003366;">📱 Source:</strong> 
+                                <strong style="color: #003366;">ðŸ“± Source:</strong> 
                                 <span>${sourceDisplay}</span>
                             </div>
                             ${activity.userName || activity.name ? `
                                 <div class="detail-item">
-                                    <strong style="color: #003366;">👤 User:</strong> 
+                                    <strong style="color: #003366;">ðŸ‘¤ User:</strong> 
                                     <span>${this.escapeHtml(activity.userName || activity.name)}</span>
                                 </div>
                             ` : ''}
                             ${activity.userEmail || activity.email ? `
                                 <div class="detail-item">
-                                    <strong style="color: #003366;">📧 Email:</strong> 
+                                    <strong style="color: #003366;">ðŸ“§ Email:</strong> 
                                     <span>${this.escapeHtml(activity.userEmail || activity.email)}</span>
                                 </div>
                             ` : ''}
@@ -3180,7 +3289,7 @@ Please keep this information secure.`;
                         
                         ${activity.screenshot ? `
                             <div class="screenshot-section" style="margin: 12px 0; padding: 12px; background: #f8f9fa; border-radius: 6px;">
-                                <strong style="color: #003366; display: block; margin-bottom: 8px;">📷 Screenshot:</strong>
+                                <strong style="color: #003366; display: block; margin-bottom: 8px;">ðŸ“| Screenshot:</strong>
                                 <img src="${activity.screenshot}" 
                                      alt="Activity screenshot" 
                                      class="activity-screenshot" 
@@ -3191,42 +3300,42 @@ Please keep this information secure.`;
                             </div>
                         ` : `
                             <div style="padding: 8px; background: #fff3cd; border-radius: 4px; font-size: 0.9rem; color: #856404;">
-                                ⚠️ No screenshot provided
+                                âš ï¸ No screenshot provided
                             </div>
                         `}
                         
                         ${activity.notes ? `
                             <div class="notes-section" style="margin: 12px 0; padding: 12px; background: #e3f2fd; border-radius: 6px; border-left: 4px solid #2196f3;">
-                                <strong style="color: #003366; display: block; margin-bottom: 6px;">📝 Notes:</strong>
+                                <strong style="color: #003366; display: block; margin-bottom: 6px;">ðŸ“ Notes:</strong>
                                 <div style="color: #555; white-space: pre-wrap;">${this.escapeHtml(activity.notes)}</div>
                             </div>
                         ` : ''}
                         
                         ${activity.validatedBy ? `
                             <div class="validation-info" style="margin: 12px 0; padding: 10px; background: #f5f5f5; border-radius: 6px; font-size: 0.9rem;">
-                                <strong style="color: #003366;">✅ Validated by:</strong> ${this.escapeHtml(activity.validatedBy)}
+                                <strong style="color: #003366;">âœ… Validated by:</strong> ${this.escapeHtml(activity.validatedBy)}
                                 ${validatedDateStr ? ` on ${validatedDateStr}` : ''}
                             </div>
                         ` : ''}
                         
                         ${activity.lastModifiedBy ? `
                             <div class="modification-info" style="margin: 12px 0; padding: 10px; background: #f5f5f5; border-radius: 6px; font-size: 0.9rem;">
-                                <strong style="color: #003366;">✏️ Last modified by:</strong> ${this.escapeHtml(activity.lastModifiedBy)}
+                                <strong style="color: #003366;">âœï¸ Last modified by:</strong> ${this.escapeHtml(activity.lastModifiedBy)}
                                 ${modifiedDateStr ? ` on ${modifiedDateStr}` : ''}
                             </div>
                         ` : ''}
                         
                         <div class="activity-actions" style="display: flex; gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
                             ${status === 'pending' ? `
-                                <button class="btn btn-small btn-success" onclick="app.validateEntry('${activity.id}', 'approved'); app.viewUserDetails('${actualUserId}');" title="Approve this entry">✅ Approve</button>
-                                <button class="btn btn-small btn-danger" onclick="app.validateEntry('${activity.id}', 'rejected'); app.viewUserDetails('${actualUserId}');" title="Reject this entry">❌ Reject</button>
+                                <button class="btn btn-small btn-success" onclick="app.validateEntry('${activity.id}', 'approved'); app.viewUserDetails('${actualUserId}');" title="Approve this entry">âœ… Approve</button>
+                                <button class="btn btn-small btn-danger" onclick="app.validateEntry('${activity.id}', 'rejected'); app.viewUserDetails('${actualUserId}');" title="Reject this entry">âŒ Reject</button>
                             ` : status === 'approved' ? `
-                                <button class="btn btn-small btn-danger" onclick="app.validateEntry('${activity.id}', 'rejected'); app.viewUserDetails('${actualUserId}');" title="Reject this entry">❌ Reject</button>
+                                <button class="btn btn-small btn-danger" onclick="app.validateEntry('${activity.id}', 'rejected'); app.viewUserDetails('${actualUserId}');" title="Reject this entry">âŒ Reject</button>
                             ` : status === 'rejected' ? `
-                                <button class="btn btn-small btn-success" onclick="app.validateEntry('${activity.id}', 'approved'); app.viewUserDetails('${actualUserId}');" title="Approve this entry">✅ Approve</button>
+                                <button class="btn btn-small btn-success" onclick="app.validateEntry('${activity.id}', 'approved'); app.viewUserDetails('${actualUserId}');" title="Approve this entry">âœ… Approve</button>
                             ` : ''}
-                            <button class="btn btn-small btn-secondary" onclick="app.editEntrySteps('${activity.id}'); app.viewUserDetails('${actualUserId}');" title="Edit steps for this entry">✏️ Edit Steps</button>
-                            <button class="btn btn-small btn-danger" onclick="if(confirm('Are you sure you want to delete this activity?')) { app.deleteUserActivity('${activity.id}', '${actualUserId}'); }" title="Delete this activity">🗑️ Delete</button>
+                            <button class="btn btn-small btn-secondary" onclick="app.editEntrySteps('${activity.id}'); app.viewUserDetails('${actualUserId}');" title="Edit steps for this entry">âœï¸ Edit Steps</button>
+                            <button class="btn btn-small btn-danger" onclick="if(confirm('Are you sure you want to delete this activity?')) { app.deleteUserActivity('${activity.id}', '${actualUserId}'); }" title="Delete this activity">ðŸ—‘ï¸ Delete</button>
                         </div>
                     </div>
                 `;
@@ -3239,7 +3348,7 @@ Please keep this information secure.`;
         } else {
             activitiesHtml = `
                 <div class="user-activities-section">
-                    <h3>📝 Activity Details</h3>
+                    <h3>ðŸ“ Activity Details</h3>
                     <div style="padding: 30px; text-align: center; background: #f8f9fa; border-radius: 8px; margin-top: 15px;">
                         <p style="font-size: 1.1rem; color: #666; margin: 0;">No activities recorded yet.</p>
                         <p style="font-size: 0.9rem; color: #999; margin-top: 8px;">This user hasn't submitted any step entries.</p>
@@ -3251,7 +3360,7 @@ Please keep this information secure.`;
         content.innerHTML = `
             <form id="editUserForm" onsubmit="event.preventDefault(); app.saveUserDetails('${actualUserId}');">
                 <div class="form-section">
-                    <h3>👤 Personal Information</h3>
+                    <h3>ðŸ‘¤ Personal Information</h3>
                     <div class="form-group">
                         <label>Full Name <span class="required">*</span></label>
                         <input type="text" id="editUserName" value="${user.name || ''}" required>
@@ -3267,7 +3376,7 @@ Please keep this information secure.`;
                 </div>
 
                 <div class="form-section">
-                    <h3>🔐 Account Credentials</h3>
+                    <h3>ðŸ” Account Credentials</h3>
                     <div class="form-group">
                         <label>Username <span class="required">*</span></label>
                         <input type="text" id="editUserUsername" value="${user.username || ''}" required>
@@ -3283,7 +3392,7 @@ Please keep this information secure.`;
                 </div>
 
                 <div class="form-section">
-                    <h3>📊 Statistics</h3>
+                    <h3>ðŸ“Š Statistics</h3>
                     <div class="user-stats-grid">
                         <div class="stat-item">
                             <strong>Total Steps:</strong> ${totalSteps.toLocaleString()}
@@ -3303,9 +3412,9 @@ Please keep this information secure.`;
                 ${activitiesHtml}
 
                 <div class="form-actions">
-                    <button type="submit" class="btn btn-primary">💾 Save Changes</button>
+                    <button type="submit" class="btn btn-primary">ðŸ’¾ Save Changes</button>
                     <button type="button" class="btn btn-secondary" onclick="app.closeUserDetailsModal()">Cancel</button>
-                    <button type="button" class="btn btn-danger" onclick="app.deleteUser('${actualUserId}')">🗑️ Delete User</button>
+                    <button type="button" class="btn btn-danger" onclick="app.deleteUser('${actualUserId}')">ðŸ—‘ï¸ Delete User</button>
                 </div>
             </form>
         `;
@@ -3514,7 +3623,7 @@ Please keep this information secure.`;
     }
 
     openEmailClient() {
-        const subject = encodeURIComponent('Stepathon Challenge Support');
+        const subject = encodeURIComponent('WOW-CSG Fitness Challenge Support');
         const body = encodeURIComponent('Hello,\n\nI need help with:\n\n');
         window.location.href = `mailto:wow-csg@csgi.com?subject=${subject}&body=${body}`;
     }
@@ -3614,7 +3723,7 @@ Please keep this information secure.`;
         }
         
         const statusClass = entryStatus === 'approved' ? 'approved' : entryStatus === 'rejected' ? 'rejected' : 'pending';
-        const statusIcon = entryStatus === 'approved' ? '✅' : entryStatus === 'rejected' ? '❌' : '⏳';
+        const statusIcon = entryStatus === 'approved' ? 'âœ…' : entryStatus === 'rejected' ? 'âŒ' : 'â³';
         
         // Format date safely
         let formattedDate;
@@ -3691,7 +3800,7 @@ Please keep this information secure.`;
                         <button class="btn btn-success" onclick="app.validateEntry('${entry.id}', 'approved')">Approve</button>
                         <button class="btn btn-danger" onclick="app.validateEntry('${entry.id}', 'rejected')">Reject Again</button>
                     ` : ''}
-                    <button class="btn btn-edit" onclick="app.editEntrySteps('${entry.id}')">✏️ Edit Steps</button>
+                    <button class="btn btn-edit" onclick="app.editEntrySteps('${entry.id}')">âœï¸ Edit Steps</button>
                 </div>
             </div>
         `;
@@ -3839,7 +3948,7 @@ Please keep this information secure.`;
                 // Update activity message
                 const activity = participant.activities.find(a => a.entryId === entryId);
                 if (activity) {
-                    activity.message = `Steps updated: ${previousSteps.toLocaleString()} → ${newSteps.toLocaleString()} (Pending re-approval)`;
+                    activity.message = `Steps updated: ${previousSteps.toLocaleString()} -> ${newSteps.toLocaleString()} (Pending re-approval)`;
                 }
 
                 this.saveParticipantsCache();
@@ -3883,7 +3992,7 @@ Please keep this information secure.`;
             font-weight: 600;
             font-size: 1.1rem;
         `;
-        successMsg.textContent = `✅ ${steps.toLocaleString()} steps added!`;
+        successMsg.textContent = `âœ… ${steps.toLocaleString()} steps added!`;
         document.body.appendChild(successMsg);
 
         // Add CSS animations if not already present
@@ -3949,14 +4058,15 @@ Please keep this information secure.`;
                 }
 
                 const steps = typeof entry.steps === 'number' ? entry.steps : parseInt(entry.steps);
-                if (!steps || steps < 10000) {
-                    return;
-                }
-
                 const entryDate = new Date(entry.date || Date.now());
                 if (isNaN(entryDate.getTime())) {
                     return;
                 }
+                const dayGoal = this.getDailyGoalSteps(entryDate);
+                if (!steps || steps < dayGoal) {
+                    return;
+                }
+
                 entryDate.setHours(0, 0, 0, 0);
                 const dateKey = entryDate.toDateString();
                 qualifyingCountsByDate[dateKey] = (qualifyingCountsByDate[dateKey] || 0) + 1;
@@ -4116,7 +4226,7 @@ Please keep this information secure.`;
         list.innerHTML = '';
 
         if (!this.currentUser.activities || this.currentUser.activities.length === 0) {
-            list.innerHTML = '<p class="no-activity">No activity yet. Start walking! 🚶‍♂️</p>';
+            list.innerHTML = '<p class="no-activity">No activity yet. Start walking! ðŸš¶-â™‚ï¸</p>';
             return;
         }
 
@@ -4966,7 +5076,7 @@ Please keep this information secure.`;
         }
         
         // Show success
-        this.showCounterNotification(`✅ ${steps.toLocaleString()} steps saved! Leaderboard updated.`);
+        this.showCounterNotification(`âœ… ${steps.toLocaleString()} steps saved! Leaderboard updated.`);
         
         // Update dashboard and leaderboard immediately
         this.updateDashboard();
@@ -4974,7 +5084,7 @@ Please keep this information secure.`;
         
         // Show success message
         setTimeout(() => {
-            alert(`Steps saved successfully! 🎉\n\n${steps.toLocaleString()} steps have been added to your account.\n\nYour leaderboard position has been updated.\n\nNote: Entry is pending admin validation. Once approved, it will be confirmed in the system.`);
+            alert(`Steps saved successfully! ðŸŽ‰\n\n${steps.toLocaleString()} steps have been added to your account.\n\nYour leaderboard position has been updated.\n\nNote: Entry is pending admin validation. Once approved, it will be confirmed in the system.`);
         }, 500);
     }
 
@@ -5052,7 +5162,7 @@ Please keep this information secure.`;
                 const n1 = Math.floor(Math.random() * 5) + 1; // 1-5
                 const n2 = Math.floor(Math.random() * 5) + 1; // 1-5
                 answer = n1 * n2;
-                question = `${n1} × ${n2} = ?`;
+                question = `${n1} Ã— ${n2} = ?`;
                 break;
         }
         

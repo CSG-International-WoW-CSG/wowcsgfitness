@@ -6,9 +6,9 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description" content="WOW-CSG 7 Days Fitness Challenge - Step Together. Thrive Together.
+    <title>WOW-CSG 7 Days Fitness Challenge</title>
     <meta name="theme-color" content="#003366">
-    <meta name="description" content="WoW-CSG Stepathon Challenge 2026 - Step Your Way to Victory!">
-    <title>WoW-CSG Stepathon Challenge 2026</title>
     <!-- PWA Manifest -->
     <link rel="manifest" href="./manifest.json">
     <!-- Favicon -->
@@ -27,7 +27,7 @@
 <body>
     <div class="container">
         <div class="email-warning" id="firebaseIssueBanner">
-            <p>⚠️ Firebase issue resolved: please create your account again and reupload your step entries.</p>
+            <p>âš ï¸ Firebase issue resolved: please create your account again and reupload your step entries.</p>
         </div>
         <header>
             <div class="header-background">
@@ -41,87 +41,122 @@
                 <div class="csg-logo">
                     <img src="CSG_Logo_K_outline.jpg" alt="CSG Logo" class="csg-logo-img">
                 </div>
-                <h1 class="animated-title">WoW-CSG Stepathon Challenge 2026</h1>
+                <p class="challenge-eyebrow">Step Together. Thrive Together.</p>
+                <h1 class="animated-title">WOW-CSG 7 Days Fitness Challenge</h1>
             </div>
-            <p class="subtitle">Step Your Way to Victory! 🏆</p>
+            <p class="subtitle challenge-tagline">&#9733; 7 Days &bull; 7 Challenges &bull; 7 Winners &#9733;</p>
+            <p class="challenge-dates-banner">26 July - 1 August | Progressive 1 KM &rarr; 7 KM Walk/Run</p>
         </header>
 
-        <!-- Challenge Over Message (shown on main page) -->
-        <div id="mainPageChallengeOverMessage" class="main-challenge-over-message" style="display: none;">
-            <div style="background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); color: white; padding: 20px; border-radius: 12px; margin: 20px auto; max-width: 900px; box-shadow: 0 4px 15px rgba(244, 67, 54, 0.3); text-align: center;">
-                <div style="font-size: 2.5rem; margin-bottom: 10px;">🏁</div>
-                <h2 style="margin: 0 0 10px 0; font-size: 1.6rem; font-weight: bold;">Challenge Has Ended</h2>
-                <p style="margin: 0 0 10px 0; font-size: 1rem; opacity: 0.95;">
-                    The WoW-CSG Stepathon Challenge 2026 ended on <strong>Feb 15, 2026</strong>.
-                </p>
-                <p style="margin: 0; font-size: 0.95rem; opacity: 0.9;">
-                    Thank you for participating! You can still login to view your progress and the leaderboard.
-                </p>
-            </div>
-        </div>
+        <!-- Challenge Over / Coming Soon Message (shown on main page) -->
+        <div id="mainPageChallengeOverMessage" class="main-challenge-over-message" style="display: none;"></div>
 
         <div class="main-content">
             <!-- Challenge Info Card -->
             <div class="card info-card animated-card" tabindex="-1">
                 <div class="challenge-header">
                     <div class="card-header-icon-wrapper">
-                        <div class="card-header-icon">📋</div>
+                        <div class="card-header-icon">ðŸ“‹</div>
                         <div class="icon-glow"></div>
                     </div>
                     <h2>Challenge Details</h2>
                 </div>
+                <p class="challenge-intro">
+                    Join colleagues across CSG as we step towards <strong class="accent-pink">better health</strong>,
+                    <strong class="accent-blue">stronger connections</strong>, and a more
+                    <strong class="accent-green">active lifestyle</strong>!
+                </p>
                 <div class="info-grid">
                     <div class="info-item pulse-animation info-item-1" tabindex="-1">
                         <div class="info-item-background"></div>
                         <div class="info-icon-wrapper">
-                            <div class="info-icon">⏱️</div>
+                            <div class="info-icon">â±ï¸</div>
                             <div class="icon-ripple"></div>
                         </div>
                         <span class="label">Duration:</span>
-                        <span class="value">2 Weeks</span>
+                        <span class="value" id="challengeDuration">7 Days</span>
                         <div class="info-item-shine"></div>
                     </div>
                     <div class="info-item pulse-animation info-item-2" style="animation-delay: 0.1s;" tabindex="-1">
                         <div class="info-item-background"></div>
                         <div class="info-icon-wrapper">
-                            <div class="info-icon">🚀</div>
+                            <div class="info-icon">ðŸš€</div>
                             <div class="icon-ripple"></div>
                         </div>
                         <span class="label">Start Date:</span>
-                        <span class="value" id="startDate">Feb 1, 2026</span>
+                        <span class="value" id="startDate">Jul 26, 2026</span>
                         <div class="info-item-shine"></div>
                     </div>
                     <div class="info-item pulse-animation info-item-3" style="animation-delay: 0.2s;" tabindex="-1">
                         <div class="info-item-background"></div>
                         <div class="info-icon-wrapper">
-                            <div class="info-icon">🎯</div>
+                            <div class="info-icon">ðŸŽ¯</div>
                             <div class="icon-ripple"></div>
                         </div>
                         <span class="label">End Date:</span>
-                        <span class="value" id="endDate">Feb 15, 2026</span>
+                        <span class="value" id="endDate">Aug 1, 2026</span>
                         <div class="info-item-shine"></div>
                     </div>
                     <div class="info-item pulse-animation info-item-4" style="animation-delay: 0.3s;" tabindex="-1">
                         <div class="info-item-background"></div>
                         <div class="info-icon-wrapper">
-                            <div class="info-icon">🏁</div>
+                            <div class="info-icon">ðŸ</div>
                             <div class="icon-ripple"></div>
                         </div>
                         <span class="label">Daily Goal:</span>
-                        <span class="value">10,000 steps</span>
+                        <span class="value" id="infoDailyGoal">1-7 KM (progressive)</span>
                         <div class="info-item-shine"></div>
                     </div>
                 </div>
+                <div class="challenge-rules-strip">
+                    <span>Start with 1 KM on Day 1</span>
+                    <span>|</span>
+                    <span>Increase by 1 KM daily</span>
+                    <span>|</span>
+                    <span>Complete 7 KM on Day 7</span>
+                    <span>|</span>
+                    <span>Open to All CSG Employees</span>
+                    <span>|</span>
+                    <span>7 Winners - One Winner Every Day!</span>
+                </div>
+            </div>
+
+            <!-- 7-Day Progressive Plan -->
+            <div class="card day-plan-card animated-card" tabindex="-1">
+                <div class="challenge-header">
+                    <div class="card-header-icon-wrapper">
+                        <div class="card-header-icon">ðŸ—“ï¸</div>
+                        <div class="icon-glow"></div>
+                    </div>
+                    <h2>7-Day Progressive Plan</h2>
+                </div>
+                <p class="day-plan-subtitle">From 1 KM to 7 KM - Every Day Stronger Than Yesterday!</p>
+                <div class="day-plan-grid">
+                    <div class="day-plan-item" data-day="1"><span class="day-num">Day 1</span><span class="day-dist">1 KM</span><span class="day-type">Walk/Run</span></div>
+                    <div class="day-plan-item" data-day="2"><span class="day-num">Day 2</span><span class="day-dist">2 KM</span><span class="day-type">Walk/Run</span></div>
+                    <div class="day-plan-item" data-day="3"><span class="day-num">Day 3</span><span class="day-dist">3 KM</span><span class="day-type">Walk/Run</span></div>
+                    <div class="day-plan-item" data-day="4"><span class="day-num">Day 4</span><span class="day-dist">4 KM</span><span class="day-type">Walk/Run</span></div>
+                    <div class="day-plan-item" data-day="5"><span class="day-num">Day 5</span><span class="day-dist">5 KM</span><span class="day-type">Walk/Run</span></div>
+                    <div class="day-plan-item" data-day="6"><span class="day-num">Day 6</span><span class="day-dist">6 KM</span><span class="day-type">Walk/Run</span></div>
+                    <div class="day-plan-item" data-day="7"><span class="day-num">Day 7</span><span class="day-dist">7 KM</span><span class="day-type">Walk/Run</span></div>
+                </div>
+                <div class="value-props">
+                    <div class="value-prop"><span class="vp-icon">ðŸ‘Ÿ</span><strong>Walk More</strong><span>Move more, feel more!</span></div>
+                    <div class="value-prop"><span class="vp-icon">â¤ï¸</span><strong>Stay Healthy</strong><span>Better health, better you!</span></div>
+                    <div class="value-prop"><span class="vp-icon">ðŸ¤</span><strong>Build Connections</strong><span>Stronger together, every step!</span></div>
+                    <div class="value-prop"><span class="vp-icon">ðŸ†</span><strong>Win Together</strong><span>Great prizes, big smiles!</span></div>
+                </div>
+                <p class="challenge-quote">EVERY STEP COUNTS! Whether you're a casual walker or a fitness enthusiast - move more, have fun, and support one another.</p>
             </div>
 
             <!-- Login Section -->
             <div class="card" id="loginCard">
                 <div class="login-header-with-help">
                     <div class="login-tabs">
-                        <button type="button" class="login-tab active" data-tab="user">👤 User Registration</button>
-                        <button type="button" class="login-tab" data-tab="user-login">🔑 User Login</button>
+                        <button type="button" class="login-tab active" data-tab="user">ðŸ‘¤ User Registration</button>
+                        <button type="button" class="login-tab" data-tab="user-login">ðŸ”‘ User Login</button>
                     </div>
-                    <button class="btn btn-secondary btn-small" id="loginHelpBtn" title="Get Help">❓ Help</button>
+                    <button class="btn btn-secondary btn-small" id="loginHelpBtn" title="Get Help">â“ Help</button>
                 </div>
                 <div class="email-warning" id="storageNotice" style="display: none;">
                     <p>Accounts are stored in this browser only. Configure Firebase to enable cross-browser login.</p>
@@ -167,7 +202,7 @@
                             <div class="captcha-container">
                                 <div class="captcha-question" id="captchaQuestion"></div>
                                 <input type="number" id="captchaAnswer" placeholder="Enter answer" required autocomplete="off" min="0">
-                                <button type="button" class="btn btn-secondary btn-small" id="refreshCaptcha" title="Refresh CAPTCHA">🔄</button>
+                                <button type="button" class="btn btn-secondary btn-small" id="refreshCaptcha" title="Refresh CAPTCHA">ðŸ”„</button>
                             </div>
                             <small class="form-hint">Please solve the math problem to verify you're human.</small>
                         </div>
@@ -188,7 +223,7 @@
                             <input type="password" id="loginPassword" placeholder="Enter your password" required autocomplete="current-password">
                         </div>
                         <div class="form-options">
-                            <a href="#" id="forgotPasswordLink" class="forgot-password">🔑 Forgot Password?</a>
+                            <a href="#" id="forgotPasswordLink" class="forgot-password">ðŸ”‘ Forgot Password?</a>
                         </div>
                         <button type="submit" class="btn btn-primary">Login</button>
                         <div class="switch-form">
@@ -202,9 +237,9 @@
             <!-- Dashboard Section -->
             <div class="card dashboard" id="dashboardCard" style="display: none;">
                 <div class="dashboard-header">
-                    <h2>Welcome, <span id="userName"></span>! 👋</h2>
+                    <h2>Welcome, <span id="userName"></span>! ðŸ‘‹</h2>
                     <div class="dashboard-header-actions">
-                        <button class="btn btn-secondary" id="helpBtn" title="Get Help">❓ Help</button>
+                        <button class="btn btn-secondary" id="helpBtn" title="Get Help">â“ Help</button>
                         <button class="btn btn-secondary" id="logoutBtn">Logout</button>
                     </div>
                 </div>
@@ -213,28 +248,28 @@
                 <div class="stats-grid">
                     <div class="stat-card stat-card-animated" data-stat="today">
                         <div class="stat-card-glow"></div>
-                        <div class="stat-icon">👣</div>
+                        <div class="stat-icon">ðŸ‘£</div>
                         <div class="stat-value" id="todaySteps">0</div>
                         <div class="stat-label">Today's Steps</div>
-                        <div class="stat-trend">↑ Real-time tracking</div>
+                        <div class="stat-trend">â†‘ Real-time tracking</div>
                     </div>
                     <div class="stat-card stat-card-animated" data-stat="total" style="animation-delay: 0.1s;">
                         <div class="stat-card-glow"></div>
-                        <div class="stat-icon">📊</div>
+                        <div class="stat-icon">ðŸ“Š</div>
                         <div class="stat-value" id="totalSteps">0</div>
                         <div class="stat-label">Total Steps</div>
-                        <div class="stat-trend">📈 Cumulative</div>
+                        <div class="stat-trend">ðŸ“ˆ Cumulative</div>
                     </div>
                     <div class="stat-card stat-card-animated" data-stat="streak" style="animation-delay: 0.2s;">
                         <div class="stat-card-glow"></div>
-                        <div class="stat-icon">🔥</div>
+                        <div class="stat-icon">ðŸ”¥</div>
                         <div class="stat-value" id="streak">0</div>
                         <div class="stat-label">Day Streak</div>
                         <div class="stat-trend">Keep it going!</div>
                     </div>
                     <div class="stat-card stat-card-animated" data-stat="rank" style="animation-delay: 0.3s;">
                         <div class="stat-card-glow"></div>
-                        <div class="stat-icon">🏆</div>
+                        <div class="stat-icon">ðŸ†</div>
                         <div class="stat-value" id="rank">-</div>
                         <div class="stat-label">Your Rank</div>
                         <div class="stat-trend">Leaderboard position</div>
@@ -244,7 +279,7 @@
                 <!-- Progress Bar -->
                 <div class="progress-section">
                     <div class="progress-header">
-                        <h3>Daily Goal Progress</h3>
+                        <h3 id="dailyGoalTitle">Daily Goal Progress</h3>
                         <span class="progress-badge" id="progressBadge">0%</span>
                     </div>
                     <div class="progress-bar-container">
@@ -256,17 +291,18 @@
                     <div class="progress-details">
                         <div class="progress-item">
                             <span class="progress-label">Goal:</span>
-                            <span class="progress-value">10,000 steps</span>
+                            <span class="progress-value" id="dailyGoalLabel">1 KM (~1,300 steps)</span>
                         </div>
                         <div class="progress-item">
                             <span class="progress-label">Remaining:</span>
-                            <span class="progress-value highlight" id="remainingSteps">10,000</span>
+                            <span class="progress-value highlight" id="remainingSteps">1,300 steps</span>
                         </div>
                     </div>
+                    <p class="goal-note">Progressive challenge: Day N goal = N KM (~1,300 steps per KM for tracking).</p>
                     <!-- Motivation Messages -->
                     <div class="motivation-messages" id="motivationMessages">
                         <div class="motivation-badge" id="motivationBadge" style="display: none;">
-                            <span class="badge-icon">🎯</span>
+                            <span class="badge-icon">ðŸŽ¯</span>
                             <span class="badge-text" id="badgeText"></span>
                         </div>
                     </div>
@@ -274,13 +310,13 @@
 
                 <!-- Add Steps Form -->
                 <div class="add-steps-section">
-                    <h3>🏃‍♂️ ➕ Add Your Steps</h3>
+                    <h3>&#127939; + Add Your Steps</h3>
                     
                     <!-- Input Method Tabs -->
                     <div class="input-method-tabs">
-                        <button type="button" class="method-tab active" data-method="counter">👣 Count Steps</button>
-                        <button type="button" class="method-tab" data-method="manual">✏️ Manual Entry</button>
-                        <button type="button" class="method-tab" data-method="screenshot">📷 From Screenshot</button>
+                        <button type="button" class="method-tab active" data-method="counter">ðŸ‘£ Count Steps</button>
+                        <button type="button" class="method-tab" data-method="manual">âœï¸ Manual Entry</button>
+                        <button type="button" class="method-tab" data-method="screenshot">ðŸ“| From Screenshot</button>
                     </div>
 
                     <!-- Manual Entry Form -->
@@ -295,7 +331,7 @@
                             <div class="upload-area-small" id="manualUploadArea">
                                 <input type="file" id="manualScreenshot" accept="image/*" style="display: none;">
                                 <div class="upload-content-small">
-                                    <div class="upload-icon-small">📷</div>
+                                    <div class="upload-icon-small">ðŸ“|</div>
                                     <p class="upload-text-small">Click to upload screenshot</p>
                                     <p class="upload-hint-small" id="screenshotHint">Required for manual entry validation</p>
                                     <button type="button" class="btn btn-secondary" onclick="document.getElementById('manualScreenshot').click()">
@@ -316,7 +352,7 @@
                         <div class="upload-area" id="uploadArea">
                             <input type="file" id="screenshotInput" accept="image/*" style="display: none;">
                             <div class="upload-content">
-                                <div class="upload-icon">📷</div>
+                                <div class="upload-icon">ðŸ“|</div>
                                 <p class="upload-text">Click or drag screenshot here</p>
                                 <p class="upload-hint">Supports: Fitbit, Apple Health, Google Fit, Samsung Health, etc.</p>
                                 <button type="button" class="btn btn-secondary" onclick="document.getElementById('screenshotInput').click()">
@@ -340,7 +376,7 @@
                         <!-- Extracted Steps Result -->
                         <div id="extractedResult" class="extracted-result" style="display: none;">
                             <div class="result-card">
-                                <h4>📊 Detected Steps</h4>
+                                <h4>ðŸ“Š Detected Steps</h4>
                                 <div class="extracted-steps">
                                     <span class="steps-value" id="extractedSteps">0</span>
                                     <span class="steps-label">steps</span>
@@ -354,7 +390,7 @@
                                     <button type="button" class="btn btn-primary" id="saveEditedStepsBtn">Save</button>
                                 </div>
                                 <details class="debug-info" style="margin-top: 15px; text-align: left;">
-                                    <summary style="cursor: pointer; font-size: 0.85rem; opacity: 0.8;">🔍 Debug Info (Click to view OCR text)</summary>
+                                    <summary style="cursor: pointer; font-size: 0.85rem; opacity: 0.8;">ðŸ” Debug Info (Click to view OCR text)</summary>
                                     <div style="margin-top: 10px; font-size: 0.75rem; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 5px; max-height: 150px; overflow-y: auto;">
                                         <strong>OCR Detected Text:</strong>
                                         <pre id="debugOcrText" style="white-space: pre-wrap; word-break: break-all; margin-top: 5px; font-size: 0.7rem;"></pre>
@@ -368,7 +404,7 @@
                     <div id="stepCounterForm" class="steps-form active" style="display: block;">
                         <div class="step-counter-container">
                             <div class="step-counter-header-section">
-                                <div class="step-counter-icon">🚶‍♂️</div>
+                                <div class="step-counter-icon">STEPS</div>
                                 <h3>Live Step Counter</h3>
                                 <p class="step-counter-subtitle">Track your steps in real-time using your device's motion sensors</p>
                             </div>
@@ -383,7 +419,7 @@
                                 
                                 <!-- Timer Display -->
                                 <div class="step-counter-timer" id="counterTimer" style="display: none;">
-                                    <span class="timer-icon">⏱️</span>
+                                    <span class="timer-icon">â±ï¸</span>
                                     <span class="timer-value" id="timerValue">00:00</span>
                                 </div>
                             </div>
@@ -391,15 +427,15 @@
                             <!-- Control Buttons -->
                             <div class="step-counter-controls-section">
                                 <button type="button" class="btn btn-counter-start" id="startCounterBtn">
-                                    <span class="btn-icon">▶️</span>
+                                    <span class="btn-icon">â–¶ï¸</span>
                                     <span class="btn-text">Start Counting</span>
                                 </button>
                                 <button type="button" class="btn btn-counter-stop" id="stopCounterBtn" style="display: none;">
-                                    <span class="btn-icon">⏸️</span>
+                                    <span class="btn-icon">â¸ï¸</span>
                                     <span class="btn-text">Stop Counting</span>
                                 </button>
                                 <button type="button" class="btn btn-counter-reset" id="resetCounterBtn">
-                                    <span class="btn-icon">🔄</span>
+                                    <span class="btn-icon">ðŸ”„</span>
                                     <span class="btn-text">Reset</span>
                                 </button>
                             </div>
@@ -407,7 +443,7 @@
                             <!-- Status and Info -->
                             <div class="step-counter-info-section">
                                 <div class="counter-status-card" id="counterStatusCard">
-                                    <div class="status-icon">ℹ️</div>
+                                    <div class="status-icon">â„¹ï¸</div>
                                     <div class="status-content">
                                         <p class="counter-status" id="counterStatus">Ready to start counting</p>
                                         <p class="counter-hint" id="counterHint">Click "Start Counting" and hold your phone while walking</p>
@@ -415,7 +451,7 @@
                                 </div>
                                 
                                 <div class="counter-tips">
-                                    <h4>💡 Tips for Accurate Counting:</h4>
+                                    <h4>ðŸ’¡ Tips for Accurate Counting:</h4>
                                     <ul>
                                         <li>Hold your phone in your hand or pocket</li>
                                         <li>Walk naturally - the sensor detects your movement</li>
@@ -428,14 +464,14 @@
                             <!-- Action Buttons -->
                             <div class="step-counter-actions-section">
                                 <button type="button" class="btn btn-success btn-large" id="saveCounterStepsBtn" style="display: none;">
-                                    <span class="btn-icon">💾</span>
+                                    <span class="btn-icon">ðŸ’¾</span>
                                     <span class="btn-text">Save Steps & Update Leaderboard</span>
                                 </button>
                             </div>
 
                             <!-- Permission Note -->
                             <div class="counter-permission-note" id="counterPermissionNote" style="display: none;">
-                                <div class="permission-icon">⚠️</div>
+                                <div class="permission-icon">âš ï¸</div>
                                 <div class="permission-text">
                                     <strong>Motion Sensor Permission Required</strong>
                                     <p>Please allow motion sensor access to enable step counting. This is required for accurate step detection.</p>
@@ -448,7 +484,7 @@
 
             <!-- Leaderboard Section -->
             <div class="card leaderboard-card">
-                <h2>🏅 Leaderboard</h2>
+                <h2>ðŸ… Leaderboard</h2>
                 <div class="leaderboard-filters">
                     <button class="filter-btn active" data-filter="total">Total Steps</button>
                     <button class="filter-btn" data-filter="today">Today</button>
@@ -465,14 +501,14 @@
 
             <!-- Fitness Motivation Section -->
             <div class="card motivation-card">
-                <h2>💪 Daily Motivation</h2>
+                <h2>ðŸ’ª Daily Motivation</h2>
                 <div class="motivation-content">
-                    <div class="motivation-icon">🏃‍♂️</div>
+                    <div class="motivation-icon">RUN</div>
                     <p class="motivation-text" id="dailyMotivation">"The only bad workout is the one that didn't happen!"</p>
                     <button class="btn btn-secondary" id="refreshMotivationBtn">Get New Motivation</button>
                 </div>
                 <div class="fitness-tips">
-                    <h3>💡 Fitness Tips</h3>
+                    <h3>ðŸ’¡ Fitness Tips</h3>
                     <ul class="tips-list" id="fitnessTips">
                         <li>Take the stairs instead of the elevator</li>
                         <li>Park farther away to add extra steps</li>
@@ -484,16 +520,16 @@
 
             <!-- Recent Activity -->
             <div class="card activity-card">
-                <h2>📝 Recent Activity</h2>
+                <h2>ðŸ“ Recent Activity</h2>
                 <div class="activity-list" id="activityList">
-                    <p class="no-activity">No activity yet. Start walking! 🚶‍♂️</p>
+                    <p class="no-activity">No activity yet. Start walking!</p>
                 </div>
             </div>
 
             <!-- Admin Dashboard -->
             <div class="card admin-dashboard" id="adminDashboard" style="display: none;">
                 <div class="admin-header">
-                    <h2>🔐 Admin Dashboard</h2>
+                    <h2>ðŸ” Admin Dashboard</h2>
                     <button class="btn btn-secondary" id="adminLogoutBtn">Logout</button>
                 </div>
                 
@@ -526,10 +562,17 @@
         </div>
 
         <footer>
-            <p>© 2026 CSG International | WoW-CSG Stepathon Challenge | Let's get moving together! 💪</p>
+            <p>(c) 2026 CSG International | WOW-CSG 7 Days Fitness Challenge | Step Together. Thrive Together.</p>
+            <p class="footer-subtext">From 1 KM to 7 KM, Every Day Stronger Than Yesterday!</p>
+            <p class="footer-hashtags">
+                <span class="htag htag-red">#WOWCSGFitnessChallenge</span>
+                <span class="htag htag-green">#StepTogetherThriveTogether</span>
+                <span class="htag htag-pink">#WellnessAtCSG</span>
+                <span class="htag htag-blue">#EveryStepCounts</span>
+            </p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
-                <a href="#" id="footerHelpLink" class="help-link">❓ Need Help? Contact us at wow-csg@csgi.com</a>
+                <a href="#" id="footerHelpLink" class="help-link">â“ Need Help? Contact us at wow-csg@csgi.com</a>
             </p>
         </footer>
 
@@ -537,28 +580,28 @@
         <div class="modal-overlay" id="helpModal" style="display: none;">
             <div class="modal-content help-modal">
                 <div class="modal-header">
-                    <h2>❓ Help & Support</h2>
-                    <button class="modal-close" onclick="app.closeHelpModal()">×</button>
+                    <h2>â“ Help & Support</h2>
+                    <button class="modal-close" onclick="app.closeHelpModal()">Ã—</button>
                 </div>
                 <div class="modal-body">
                     <div class="help-section">
-                        <h3>📧 Contact Support</h3>
-                        <p>If you need assistance with the Stepathon Challenge, please reach out to us:</p>
+                        <h3>ðŸ“§ Contact Support</h3>
+                        <p>If you need assistance with the WOW-CSG 7 Days Fitness Challenge, please reach out to us:</p>
                         <div class="contact-info">
                             <div class="contact-item">
                                 <strong>Email:</strong>
-                                <a href="mailto:wow-csg@csgi.com?subject=Stepathon Challenge Support&body=Hello,%0D%0A%0D%0AI need help with:" class="contact-link">
+                                <a href="mailto:wow-csg@csgi.com?subject=WOW-CSG Fitness Challenge Support&body=Hello,%0D%0A%0D%0AI need help with:" class="contact-link">
                                     wow-csg@csgi.com
                                 </a>
                                 <button class="btn btn-primary btn-small" onclick="app.openEmailClient()" style="margin-top: 10px;">
-                                    📧 Open Email Client
+                                    ðŸ“§ Open Email Client
                                 </button>
                             </div>
                         </div>
                     </div>
 
                     <div class="help-section">
-                        <h3>❓ Frequently Asked Questions</h3>
+                        <h3>â“ Frequently Asked Questions</h3>
                         <div class="faq-item">
                             <strong>Q: How do I add my steps?</strong>
                             <p>A: You can add steps using three methods: Step Counter (real-time tracking), Manual Entry, or by uploading a screenshot from your fitness app.</p>
@@ -569,7 +612,11 @@
                         </div>
                         <div class="faq-item">
                             <strong>Q: How is my daily goal calculated?</strong>
-                            <p>A: The daily goal is set to 10,000 steps. You can track your progress in the Daily Goal Progress section.</p>
+                            <p>A: This is a progressive 7-day challenge. Day 1 = 1 KM, Day 2 = 2 KM, ... up to Day 7 = 7 KM. For step tracking we use ~1,300 steps per KM (e.g. Day 3 goal ~ 3,900 steps). Complete your day's KM distance and log steps via counter, manual entry, or fitness-app screenshot.</p>
+                        </div>
+                        <div class="faq-item">
+                            <strong>Q: Who can join and how are winners chosen?</strong>
+                            <p>A: Open to all CSG employees. There are 7 winners - one winner every day of the challenge (26 July - 1 August).</p>
                         </div>
                         <div class="faq-item">
                             <strong>Q: What if I forgot my password?</strong>
@@ -582,7 +629,7 @@
                     </div>
 
                     <div class="help-section">
-                        <h3>💡 Tips</h3>
+                        <h3>ðŸ’¡ Tips</h3>
                         <ul class="help-tips">
                             <li>Use the Step Counter feature for real-time step tracking</li>
                             <li>Take screenshots of your fitness app to validate manual entries</li>
@@ -593,8 +640,8 @@
                     </div>
 
                     <div class="help-actions">
-                        <a href="mailto:wow-csg@csgi.com?subject=Stepathon Challenge Support&body=Hello,%0D%0A%0D%0AI need help with:" class="btn btn-primary">
-                            📧 Contact Support
+                        <a href="mailto:wow-csg@csgi.com?subject=WOW-CSG Fitness Challenge Support&body=Hello,%0D%0A%0D%0AI need help with:" class="btn btn-primary">
+                            ðŸ“§ Contact Support
                         </a>
                         <button class="btn btn-secondary" onclick="app.closeHelpModal()">Close</button>
                     </div>

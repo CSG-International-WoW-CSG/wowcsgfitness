@@ -1,7 +1,7 @@
 {
-  "name": "WoW-CSG Stepathon Challenge 2026",
-  "short_name": "Stepathon",
-  "description": "Step Your Way to Victory! Track your daily steps and compete in the CSG Stepathon Challenge.",
+  "name": "WOW-CSG 7 Days Fitness Challenge",
+  "short_name": "WOW-CSG Fitness",
+  "description": "Step Together. Thrive Together. Progressive 1 KM to 7 KM challenge — 26 July to 1 August.",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#003366",
@@ -27,7 +27,7 @@
     {
       "name": "Add Steps",
       "short_name": "Add Steps",
-      "description": "Quickly add your daily steps",
+      "description": "Log your daily walk/run steps",
       "url": "./index.html?action=add-steps",
       "icons": [{ "src": "favicon.svg", "sizes": "any" }]
     },
@@ -41,4 +41,3 @@
   ],
   "prefer_related_applications": false
 }
-

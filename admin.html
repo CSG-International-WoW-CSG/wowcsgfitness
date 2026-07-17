@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Admin Dashboard - WoW-CSG Stepathon Challenge</title>
+    <title>Admin Dashboard - WOW-CSG 7 Days Fitness Challenge</title>
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="apple-touch-icon" href="favicon.svg">
@@ -38,13 +38,13 @@
                 </div>
                 <h1 class="animated-title">Admin Dashboard</h1>
             </div>
-            <p class="subtitle">WoW-CSG Stepathon Challenge 2026</p>
+            <p class="subtitle">WOW-CSG 7 Days Fitness Challenge</p>
         </header>
 
         <div class="main-content">
             <!-- Admin Login Card -->
             <div class="card" id="adminLoginCard">
-                <h2>🔐 Admin Access</h2>
+                <h2>ðŸ” Admin Access</h2>
                 <form id="adminForm">
                     <div class="form-group">
                         <label for="adminUsername">Username <span class="required">*</span></label>
@@ -56,7 +56,7 @@
                     </div>
                     <button type="submit" class="btn btn-primary">Login as Admin</button>
                     <div class="back-link-section">
-                        <a href="index.html" class="back-link">← Back to Main Site</a>
+                        <a href="index.html" class="back-link">â† Back to Main Site</a>
                     </div>
                 </form>
             </div>
@@ -64,9 +64,9 @@
             <!-- Admin Dashboard -->
             <div class="card admin-dashboard" id="adminDashboard" style="display: none;">
                 <div class="admin-header">
-                    <h2>🔐 Admin Dashboard</h2>
+                    <h2>ðŸ” Admin Dashboard</h2>
                     <div class="admin-header-actions">
-                        <a href="index.html" class="btn btn-secondary">← Main Site</a>
+                        <a href="index.html" class="btn btn-secondary">â† Main Site</a>
                         <button class="btn btn-secondary" id="adminLogoutBtn">Logout</button>
                     </div>
                 </div>
@@ -91,8 +91,8 @@
                 </div>
 
                 <div class="admin-tabs">
-                    <button class="admin-tab-btn active" data-tab="validations">📋 Validations</button>
-                    <button class="admin-tab-btn" data-tab="users">👥 User Management</button>
+                    <button class="admin-tab-btn active" data-tab="validations">ðŸ“‹ Validations</button>
+                    <button class="admin-tab-btn" data-tab="users">ðŸ‘¥ User Management</button>
                 </div>
 
                 <!-- Validations Tab -->
@@ -102,8 +102,8 @@
                         <button class="filter-btn" data-filter="approved">Approved</button>
                         <button class="filter-btn" data-filter="rejected">Rejected</button>
                         <button class="filter-btn" data-filter="all">All</button>
-                        <button class="filter-btn" id="refreshDashboardBtn" style="background: #4caf50;" title="Refresh Dashboard">🔄 Refresh</button>
-                        <button class="filter-btn" id="emailjsConfigBtn" style="background: #ff9800;">⚙️ Email Settings</button>
+                        <button class="filter-btn" id="refreshDashboardBtn" style="background: #4caf50;" title="Refresh Dashboard">ðŸ”„ Refresh</button>
+                        <button class="filter-btn" id="emailjsConfigBtn" style="background: #ff9800;">âš™ï¸ Email Settings</button>
                     </div>
 
                     <div class="validation-list" id="validationList">
@@ -114,10 +114,10 @@
                 <!-- User Management Tab -->
                 <div class="admin-tab-content" id="usersTab">
                     <div class="user-management-header">
-                        <h3>👥 All Users</h3>
+                        <h3>ðŸ‘¥ All Users</h3>
                         <div class="user-management-actions">
-                            <button class="btn btn-secondary" id="refreshUsersBtn">🔄 Refresh Users</button>
-                            <button class="btn btn-secondary" id="migrateUsersBtn" title="Move local users into Firebase">☁️ Migrate Local Users</button>
+                            <button class="btn btn-secondary" id="refreshUsersBtn">ðŸ”„ Refresh Users</button>
+                            <button class="btn btn-secondary" id="migrateUsersBtn" title="Move local users into Firebase">â˜ï¸ Migrate Local Users</button>
                         </div>
                     </div>
                     <div class="users-list" id="usersList">
@@ -130,8 +130,8 @@
             <div class="modal-overlay" id="userDetailsModal" style="display: none;">
                 <div class="modal-content user-details-modal">
                     <div class="modal-header">
-                        <h2>👤 User Details</h2>
-                        <button class="modal-close" onclick="app.closeUserDetailsModal()">×</button>
+                        <h2>ðŸ‘¤ User Details</h2>
+                        <button class="modal-close" onclick="app.closeUserDetailsModal()">Ã—</button>
                     </div>
                     <div class="modal-body" id="userDetailsContent">
                         <!-- User details will be loaded here -->
@@ -142,7 +142,7 @@
             <!-- EmailJS Configuration Modal -->
             <div class="card admin-dashboard" id="emailjsConfigModal" style="display: none;">
                 <div class="admin-header">
-                    <h2>⚙️ EmailJS Configuration</h2>
+                    <h2>âš™ï¸ EmailJS Configuration</h2>
                     <button class="btn btn-secondary" onclick="app.closeEmailJSConfig()">Close</button>
                 </div>
                 <div class="emailjs-config-content">
@@ -161,22 +161,22 @@
                         <div class="form-group">
                             <label for="emailjsServiceId">EmailJS Service ID <span class="required">*</span></label>
                             <input type="text" id="emailjsServiceId" placeholder="service_xxxxxxx" required>
-                            <small class="form-hint">Found in EmailJS Dashboard → Email Services</small>
+                            <small class="form-hint">Found in EmailJS Dashboard -> Email Services</small>
                         </div>
                         <div class="form-group">
                             <label for="emailjsTemplateId">EmailJS Template ID <span class="required">*</span></label>
                             <input type="text" id="emailjsTemplateId" placeholder="template_xxxxxxx" required>
-                            <small class="form-hint">Found in EmailJS Dashboard → Email Templates</small>
+                            <small class="form-hint">Found in EmailJS Dashboard -> Email Templates</small>
                         </div>
                         <div class="form-group">
                             <label for="emailjsPublicKey">EmailJS Public Key <span class="required">*</span></label>
                             <input type="text" id="emailjsPublicKey" placeholder="xxxxxxxxxxxxx" required>
-                            <small class="form-hint">Found in EmailJS Dashboard → Account → API Keys → Public Key</small>
+                            <small class="form-hint">Found in EmailJS Dashboard -> Account -> API Keys -> Public Key</small>
                         </div>
                         <div class="email-actions">
-                            <button type="submit" class="btn btn-primary">💾 Save Configuration</button>
-                            <button type="button" class="btn btn-secondary" onclick="app.testEmailJS()">🧪 Test Email</button>
-                            <button type="button" class="btn btn-danger" onclick="app.clearEmailJSConfig()">🗑️ Clear Configuration</button>
+                            <button type="submit" class="btn btn-primary">ðŸ’¾ Save Configuration</button>
+                            <button type="button" class="btn btn-secondary" onclick="app.testEmailJS()">ðŸ§ª Test Email</button>
+                            <button type="button" class="btn btn-danger" onclick="app.clearEmailJSConfig()">ðŸ—‘ï¸ Clear Configuration</button>
                         </div>
                     </form>
                     <div id="emailjsStatus" class="emailjs-status"></div>
@@ -185,7 +185,7 @@
         </div>
 
         <footer>
-            <p>© 2026 CSG International | WoW-CSG Stepathon Challenge | Admin Portal</p>
+            <p>(c) 2026 CSG International | WOW-CSG 7 Days Fitness Challenge | Admin Portal</p>
         </footer>
     </div>
 
