@@ -571,6 +571,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
+            <p class="footer-subtext">Site version: 2026-07-17-v6 | If text looks garbled, hard-refresh (Ctrl+F5) or clear site data for this page.</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#" id="footerHelpLink" class="help-link">&#10067; Need Help? Contact us at wow-csg@csgi.com</a>
@@ -655,13 +656,26 @@
     <script src="firebase-config.js"></script>
     <script src="script.js"></script>
     
-    <!-- Service Worker Registration -->
+    <!-- Service Worker: force update + clear stale caches (fixes old garbled emoji pages) -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./service-worker.js')
+                navigator.serviceWorker.getRegistrations().then((regs) => {
+                    regs.forEach((reg) => {
+                        reg.update();
+                    });
+                });
+                if (window.caches && caches.keys) {
+                    caches.keys().then((keys) => {
+                        keys.filter((k) => k !== 'wowcsg-fitness-v6').forEach((k) => caches.delete(k));
+                    });
+                }
+                navigator.serviceWorker.register('./service-worker.js?v=6')
                     .then((registration) => {
                         console.log('Service Worker registered:', registration);
+                        if (registration.waiting) {
+                            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                        }
                     })
                     .catch((error) => {
                         console.log('Service Worker registration failed:', error);
