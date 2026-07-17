@@ -638,12 +638,14 @@ class StepathonApp {
  });
  }
 
- // Leaderboard filters
- document.querySelectorAll('.filter-btn').forEach(btn => {
+ // Leaderboard filters (overall + per-day)
+ document.querySelectorAll('.filter-btn, .day-filter-btn').forEach(btn => {
  btn.addEventListener('click', (e) => {
- document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
- e.target.classList.add('active');
- this.updateLeaderboard(e.target.dataset.filter);
+ const button = e.currentTarget;
+ const filter = button.dataset.filter;
+ document.querySelectorAll('.filter-btn, .day-filter-btn').forEach(b => b.classList.remove('active'));
+ button.classList.add('active');
+ this.updateLeaderboard(filter);
  });
  });
  }
@@ -4282,12 +4284,145 @@ Please keep this information secure.`;
  return sorted.findIndex(p => p.name === user.name) + 1;
  }
 
- updateLeaderboard(filter = 'total') {
+ getChallengeDayDate(dayNum) {
+ const { startDate } = this.getChallengeBounds();
+ const d = new Date(startDate);
+ d.setDate(d.getDate() + (dayNum - 1));
+ d.setHours(0, 0, 0, 0);
+ return d;
+ }
+
+ formatDurationClock(totalSec) {
+ if (totalSec == null || !Number.isFinite(totalSec) || totalSec < 0) {
+ return '--';
+ }
+ const sec = Math.round(totalSec);
+ const hours = Math.floor(sec / 3600);
+ const minutes = Math.floor((sec % 3600) / 60);
+ const seconds = sec % 60;
+ if (hours > 0) {
+ return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+ }
+ return `${minutes}:${String(seconds).padStart(2, '0')}`;
+ }
+
+ /**
+ * Build per-day leaderboard rows: completed finishers first (shortest time),
+ * then in-progress by distance.
+ */
+ getDayLeaderboardRows(dayNum) {
+ const goalKm = this.challengeConfig.dayGoalsKm[dayNum - 1] || dayNum;
+ const goalSteps = goalKm * (this.challengeConfig.stepsPerKm || 1300);
+ const dayDate = this.getChallengeDayDate(dayNum);
+ const dateKey = dayDate.toDateString();
+
+ return this.participants
+ .map((p) => {
+ const stats = p.dailyStats && p.dailyStats[dateKey] ? p.dailyStats[dateKey] : null;
+ const steps = stats && typeof stats.steps === 'number'
+ ? stats.steps
+ : (p.dailySteps && p.dailySteps[dateKey]) || 0;
+ const distanceKm = stats && typeof stats.distanceKm === 'number'
+ ? stats.distanceKm
+ : (p.dailyDistanceKm && p.dailyDistanceKm[dateKey])
+ || (steps / (this.challengeConfig.stepsPerKm || 1300));
+ const completed = stats && typeof stats.completed === 'boolean'
+ ? stats.completed
+ : (distanceKm >= goalKm - 0.01 || steps >= goalSteps);
+ let durationSec = null;
+ if (stats) {
+ if (stats.completed && stats.completionDurationSec != null) {
+ durationSec = stats.completionDurationSec;
+ } else if (stats.durationSec != null) {
+ durationSec = stats.durationSec;
+ }
+ }
+ return {
+ name: p.name,
+ department: p.department,
+ steps,
+ distanceKm: Number(distanceKm) || 0,
+ completed: !!completed,
+ durationSec,
+ goalKm,
+ dateKey
+ };
+ })
+ .filter((row) => row.steps > 0 || row.distanceKm > 0.005)
+ .sort((a, b) => {
+ if (a.completed !== b.completed) {
+ return a.completed ? -1 : 1;
+ }
+ if (a.completed && b.completed) {
+ const da = a.durationSec != null ? a.durationSec : Number.MAX_SAFE_INTEGER;
+ const db = b.durationSec != null ? b.durationSec : Number.MAX_SAFE_INTEGER;
+ if (da !== db) return da - db;
+ return a.distanceKm - b.distanceKm;
+ }
+ if (b.distanceKm !== a.distanceKm) return b.distanceKm - a.distanceKm;
+ return b.steps - a.steps;
+ });
+ }
+
+ updateLeaderboardSubtitle(filter) {
+ const el = document.getElementById('leaderboardSubtitle');
+ if (!el) return;
+ if (filter === 'total') {
+ el.textContent = 'Overall ranking by total steps';
+ } else if (filter === 'today') {
+ el.textContent = 'Ranking by steps logged today';
+ } else if (filter === 'avg') {
+ el.textContent = 'Ranking by average steps per active day';
+ } else if (String(filter).startsWith('day-')) {
+ const dayNum = parseInt(String(filter).split('-')[1], 10);
+ const goalKm = this.challengeConfig.dayGoalsKm[dayNum - 1] || dayNum;
+ const dayDate = this.getChallengeDayDate(dayNum);
+ const dateLabel = dayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+ el.textContent = `Day ${dayNum} (${dateLabel}) · ${goalKm} KM · shortest finish time wins`;
+ } else {
+ el.textContent = '';
+ }
+ }
+
+ updateLeaderboard(filter) {
+ if (!filter) {
+ const active = document.querySelector('.filter-btn.active, .day-filter-btn.active');
+ filter = (active && active.dataset.filter) || 'total';
+ }
  const list = document.getElementById('leaderboardList');
  if (!list) return; // Element doesn't exist on admin page
  list.innerHTML = '';
+ this.updateLeaderboardSubtitle(filter);
 
  let sorted = [];
+ const dayMatch = String(filter).match(/^day-(\d+)$/);
+
+ if (dayMatch) {
+ const dayNum = parseInt(dayMatch[1], 10);
+ sorted = this.getDayLeaderboardRows(dayNum);
+ if (sorted.length === 0) {
+ list.innerHTML = `<div class="leaderboard-item"><div class="rank">-</div><div class="name">No activity for Day ${dayNum} yet</div><div class="steps">Be the first!</div></div>`;
+ return;
+ }
+
+ sorted.forEach((participant, index) => {
+ const item = document.createElement('div');
+ item.className = 'leaderboard-item' + (participant.completed && index === 0 ? ' is-day-winner' : '');
+ const status = participant.completed
+ ? `Finished · ${this.formatDurationClock(participant.durationSec)}`
+ : `${participant.distanceKm.toFixed(2)} KM · in progress`;
+ const detail = participant.completed
+ ? `${participant.goalKm} KM goal`
+ : `${Math.min(100, Math.round((participant.distanceKm / participant.goalKm) * 100))}% of ${participant.goalKm} KM`;
+ item.innerHTML = `
+ <div class="rank">${index + 1}</div>
+ <div class="name">${participant.name}${participant.department ? ` (${participant.department})` : ''}${participant.completed && index === 0 ? ' <span class="day-winner-tag">Winner</span>' : ''}<div class="lb-detail">${detail}</div></div>
+ <div class="steps">${status}</div>
+ `;
+ list.appendChild(item);
+ });
+ return;
+ }
 
  if (filter === 'total') {
  sorted = [...this.participants].sort((a, b) => 
@@ -5732,6 +5867,36 @@ Please keep this information secure.`;
  this.currentUser.totalCalories = (this.currentUser.totalCalories || 0) + caloriesBurned;
  if (!this.currentUser.dailyCalories) this.currentUser.dailyCalories = {};
  this.currentUser.dailyCalories[today] = (this.currentUser.dailyCalories[today] || 0) + caloriesBurned;
+
+ // Per-day completion stats for daily leaderboards (shortest time wins)
+ if (!this.currentUser.dailyStats) this.currentUser.dailyStats = {};
+ const dayNum = this.getChallengeDayNumber();
+ const goalKmForDay = dayNum >= 1 && dayNum <= 7
+ ? this.challengeConfig.dayGoalsKm[dayNum - 1]
+ : this.getDailyGoalKm();
+ const prevDay = this.currentUser.dailyStats[today] || {
+ distanceKm: 0,
+ durationSec: 0,
+ steps: 0,
+ caloriesBurned: 0,
+ completed: false,
+ completionDurationSec: null,
+ completedAt: null,
+ goalKm: goalKmForDay,
+ challengeDay: dayNum || null
+ };
+ prevDay.distanceKm = Number(((prevDay.distanceKm || 0) + distanceKm).toFixed(3));
+ prevDay.durationSec = (prevDay.durationSec || 0) + (durationSec || 0);
+ prevDay.steps = (prevDay.steps || 0) + steps;
+ prevDay.caloriesBurned = (prevDay.caloriesBurned || 0) + caloriesBurned;
+ prevDay.goalKm = goalKmForDay;
+ prevDay.challengeDay = dayNum || prevDay.challengeDay || null;
+ if (!prevDay.completed && prevDay.distanceKm >= (goalKmForDay - 0.01)) {
+ prevDay.completed = true;
+ prevDay.completionDurationSec = prevDay.durationSec;
+ prevDay.completedAt = new Date().toISOString();
+ }
+ this.currentUser.dailyStats[today] = prevDay;
 
  const entryId = `ENTRY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
  const stepEntry = {

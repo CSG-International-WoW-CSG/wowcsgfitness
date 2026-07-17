@@ -16,7 +16,7 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="apple-touch-icon" href="favicon.svg">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="ui-refresh.css?v=24">
+    <link rel="stylesheet" href="ui-refresh.css?v=25">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -479,10 +479,22 @@
             <div class="card leaderboard-card">
                 <h2>&#127941; Leaderboard</h2>
                 <div class="leaderboard-filters">
-                    <button class="filter-btn active" data-filter="total">Total Steps</button>
-                    <button class="filter-btn" data-filter="today">Today</button>
-                    <button class="filter-btn" data-filter="avg">Average</button>
+                    <button type="button" class="filter-btn active" data-filter="total">Total Steps</button>
+                    <button type="button" class="filter-btn" data-filter="today">Today</button>
+                    <button type="button" class="filter-btn" data-filter="avg">Average</button>
                 </div>
+                <p class="leaderboard-day-heading">Daily challenge boards</p>
+                <p class="leaderboard-day-note">One winner per day &mdash; ranked by shortest time to finish that day&rsquo;s KM goal.</p>
+                <div class="leaderboard-day-filters" id="dayLeaderboardFilters">
+                    <button type="button" class="day-filter-btn" data-filter="day-1">Day 1<br><span>1 KM</span></button>
+                    <button type="button" class="day-filter-btn" data-filter="day-2">Day 2<br><span>2 KM</span></button>
+                    <button type="button" class="day-filter-btn" data-filter="day-3">Day 3<br><span>3 KM</span></button>
+                    <button type="button" class="day-filter-btn" data-filter="day-4">Day 4<br><span>4 KM</span></button>
+                    <button type="button" class="day-filter-btn" data-filter="day-5">Day 5<br><span>5 KM</span></button>
+                    <button type="button" class="day-filter-btn" data-filter="day-6">Day 6<br><span>6 KM</span></button>
+                    <button type="button" class="day-filter-btn" data-filter="day-7">Day 7<br><span>7 KM</span></button>
+                </div>
+                <p class="leaderboard-subtitle" id="leaderboardSubtitle">Overall ranking by total steps</p>
                 <div class="leaderboard-list" id="leaderboardList">
                     <div class="leaderboard-item">
                         <div class="rank">1</div>
@@ -563,7 +575,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-17-v24 | Calorie burner</p>
+            <p class="footer-subtext">Site version: 2026-07-17-v25 | Daily leaderboards</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#" id="footerHelpLink" class="help-link">&#10067; Need Help? Contact us at wow-csg@csgi.com</a>
@@ -646,7 +658,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="firebase-config.js"></script>
-    <script src="script.js?v=24"></script>
+    <script src="script.js?v=25"></script>
     
     <!-- Service Worker: force update + clear stale caches (fixes old garbled emoji pages) -->
     <script>
@@ -659,10 +671,10 @@
                 });
                 if (window.caches && caches.keys) {
                     caches.keys().then((keys) => {
-                        keys.filter((k) => k !== 'wowcsg-fitness-v24').forEach((k) => caches.delete(k));
+                        keys.filter((k) => k !== 'wowcsg-fitness-v25').forEach((k) => caches.delete(k));
                     });
                 }
-                navigator.serviceWorker.register('./service-worker.js?v=24')
+                navigator.serviceWorker.register('./service-worker.js?v=25')
                     .then((registration) => {
                         console.log('Service Worker registered:', registration);
                         if (registration.waiting) {

@@ -856,6 +856,108 @@ header h1 {
   box-shadow: 0 2px 8px rgba(15, 28, 46, 0.08) !important;
 }
 
+.leaderboard-day-heading {
+  margin: 16px 0 4px;
+  font-family: var(--display);
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--navy);
+}
+
+.leaderboard-day-note {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.leaderboard-day-filters {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.day-filter-btn {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 12px;
+  padding: 8px 4px;
+  font-family: var(--display);
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--navy);
+  line-height: 1.25;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, transform 0.2s;
+}
+
+.day-filter-btn span {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.day-filter-btn:hover {
+  border-color: rgba(13, 148, 136, 0.4);
+  transform: translateY(-1px);
+}
+
+.day-filter-btn.active {
+  background: linear-gradient(160deg, #ecfdf5, #d1fae5);
+  border-color: rgba(13, 148, 136, 0.55);
+  color: #047857;
+}
+
+.day-filter-btn.active span {
+  color: #0f766e;
+}
+
+.leaderboard-subtitle {
+  margin: 0 0 12px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #0f766e;
+}
+
+.leaderboard-item .lb-detail {
+  margin-top: 2px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.day-winner-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  background: #fef3c7;
+  color: #b45309;
+  vertical-align: middle;
+}
+
+.leaderboard-item.is-day-winner {
+  border-color: rgba(245, 158, 11, 0.45) !important;
+  background: linear-gradient(160deg, #fffbeb, #fff) !important;
+}
+
+@media (max-width: 700px) {
+  .leaderboard-day-filters {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .leaderboard-day-filters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 .leaderboard-item {
   background: #fff !important;
   border: 1px solid var(--line) !important;
