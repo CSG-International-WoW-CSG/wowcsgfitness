@@ -1347,6 +1347,12 @@ class StepathonApp {
  return now >= startDate && now <= endDate;
  }
 
+ /** Allow logging from now until challenge end (includes pre-start practice) */
+ canLogSteps() {
+ const { endDate } = this.getChallengeBounds();
+ return new Date() <= endDate;
+ }
+
  checkChallengeStatus(startDate, endDate) {
  const now = new Date();
  const isActive = now >= startDate && now <= endDate;
@@ -1415,31 +1421,33 @@ class StepathonApp {
  </div>
  `;
  challengeOverMsg.style.display = 'block';
- this.disableAddStepsSection();
+ this.disableAddStepsSection('ended');
  } else if (notStarted) {
  challengeOverMsg.innerHTML = `
- <div style="background: linear-gradient(135deg, #6B2D8B 0%, #003366 100%); color: white; padding: 25px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(107, 45, 139, 0.35); text-align: center;">
+ <div style="background: linear-gradient(135deg, #0d9488 0%, #0b3d66 100%); color: white; padding: 25px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(13, 148, 136, 0.3); text-align: center;">
  <div style="font-size: 2.5rem; margin-bottom: 15px;"></div>
  <h2 style="margin: 0 0 10px 0; font-size: 1.8rem; font-weight: bold;">Get Ready!</h2>
  <p style="margin: 0 0 15px 0; font-size: 1.1rem; opacity: 0.95;">
- Challenge opens <strong>${this.formatDate(startDate)}</strong>. Progressive goals: 1 KM -> 7 KM.
+ Official challenge: <strong>${this.formatDate(startDate)}</strong> &ndash; <strong>${this.formatDate(endDate)}</strong>. Progressive goals: 1 KM &rarr; 7 KM.
  </p>
  <p style="margin: 0; font-size: 1rem; opacity: 0.9;">
- You can explore the dashboard now. Step logging unlocks when the challenge starts.
+ You can use the step / KM counter now to practice. Official daily winners start on Day 1.
  </p>
  </div>
  `;
  challengeOverMsg.style.display = 'block';
- this.disableAddStepsSection();
+ // Keep counter usable before the official start
+ this.enableAddStepsSection();
  } else {
  challengeOverMsg.style.display = 'none';
  this.enableAddStepsSection();
  }
  }
 
- disableAddStepsSection() {
+ disableAddStepsSection(reason = 'ended') {
  // Disable the entire add steps section
  const addStepsSection = document.querySelector('.add-steps-section');
+ const { endDate, startDate } = this.getChallengeBounds();
  if (addStepsSection) {
  addStepsSection.style.opacity = '0.6';
  addStepsSection.style.pointerEvents = 'none';
@@ -1465,15 +1473,25 @@ class StepathonApp {
  flex-direction: column;
  padding: 20px;
  `;
+ addStepsSection.appendChild(overlay);
+ }
+
+ if (reason === 'not-started') {
+ overlay.innerHTML = `
+ <div style="font-size: 3rem; margin-bottom: 15px;"></div>
+ <h3 style="margin: 0 0 10px 0; color: #0b3d66; font-size: 1.5rem;">Challenge Starts Soon</h3>
+ <p style="margin: 0; color: #666; text-align: center; max-width: 400px;">
+ Official logging opens on <strong>${this.formatDate(startDate)}</strong> (through <strong>${this.formatDate(endDate)}</strong>).
+ </p>
+ `;
+ } else {
  overlay.innerHTML = `
  <div style="font-size: 3rem; margin-bottom: 15px;"></div>
  <h3 style="margin: 0 0 10px 0; color: #f44336; font-size: 1.5rem;">Challenge Has Ended</h3>
  <p style="margin: 0; color: #666; text-align: center; max-width: 400px;">
- New step entries are no longer being accepted. The challenge ended on <strong>${this.formatDate(new Date(2026, 1, 15))}</strong>.
+ New step entries are no longer being accepted. The challenge ended on <strong>${this.formatDate(endDate)}</strong>.
  </p>
  `;
- addStepsSection.style.position = 'relative';
- addStepsSection.appendChild(overlay);
  }
  }
  
@@ -2869,8 +2887,9 @@ Please keep this information secure.`;
  if (!this.currentUser) return;
 
  // Check if challenge is still active
- if (!this.isChallengeActive()) {
- alert('The challenge has ended. New step entries are no longer being accepted.\n\nThank you for participating!');
+ if (!this.canLogSteps()) {
+ const { endDate } = this.getChallengeBounds();
+ alert(`The challenge has ended. New step entries are no longer being accepted.\n\nEnded on ${this.formatDate(endDate)}.`);
  return;
  }
 
@@ -5136,6 +5155,11 @@ Please keep this information secure.`;
  if (display) {
  display.textContent = this.stepCounter.stepCount.toLocaleString();
  }
+ const kmEl = document.getElementById('liveKmCount');
+ if (kmEl) {
+ const km = this.stepCounter.stepCount / (this.challengeConfig.stepsPerKm || 1300);
+ kmEl.textContent = `${km.toFixed(2)} KM`;
+ }
  }
 
  animateStepCounter() {
@@ -5247,8 +5271,9 @@ Please keep this information secure.`;
  }
 
  // Check if challenge is still active
- if (!this.isChallengeActive()) {
- alert('The challenge has ended. New step entries are no longer being accepted.\n\nThank you for participating!');
+ if (!this.canLogSteps()) {
+ const { endDate } = this.getChallengeBounds();
+ alert(`The challenge has ended. New step entries are no longer being accepted.\n\nEnded on ${this.formatDate(endDate)}.`);
  return;
  }
 

@@ -952,3 +952,12 @@ footer p {
   .meta-row { grid-template-columns: 1fr; }
   header.hero-shell { top: 8px !important; }
 }
+
+.step-counter-km {
+  margin-top: 6px;
+  font-family: var(--display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0d9488;
+  letter-spacing: -0.02em;
+}

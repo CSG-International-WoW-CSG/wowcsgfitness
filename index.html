@@ -16,7 +16,7 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="apple-touch-icon" href="favicon.svg">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="ui-refresh.css?v=18">
+    <link rel="stylesheet" href="ui-refresh.css?v=19">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <!-- Microsoft Teams SDK (optional, only loads if in Teams) -->
     <script src="https://statics.teams.cdn.office.net/sdk/v1.11.0/js/MicrosoftTeams.min.js" crossorigin="anonymous"></script>
@@ -430,6 +430,7 @@
                                 <div class="step-counter-circle">
                                     <div class="step-counter-value-large" id="liveStepCount">0</div>
                                     <div class="step-counter-label-large">Steps</div>
+                                    <div class="step-counter-km" id="liveKmCount">0.00 KM</div>
                                     <div class="step-counter-pulse" id="counterPulse"></div>
                                 </div>
                                 
@@ -586,7 +587,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-17-v18 | Login recreates cleared profiles</p>
+            <p class="footer-subtext">Site version: 2026-07-17-v19 | Fixed challenge dates + KM counter</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#" id="footerHelpLink" class="help-link">&#10067; Need Help? Contact us at wow-csg@csgi.com</a>
@@ -683,10 +684,10 @@
                 });
                 if (window.caches && caches.keys) {
                     caches.keys().then((keys) => {
-                        keys.filter((k) => k !== 'wowcsg-fitness-v17').forEach((k) => caches.delete(k));
+                        keys.filter((k) => k !== 'wowcsg-fitness-v19').forEach((k) => caches.delete(k));
                     });
                 }
-                navigator.serviceWorker.register('./service-worker.js?v=17')
+                navigator.serviceWorker.register('./service-worker.js?v=19')
                     .then((registration) => {
                         console.log('Service Worker registered:', registration);
                         if (registration.waiting) {
