@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" role="img" aria-label="WOW-CSG Fitness">
+  <defs>
+    <linearGradient id="markBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b3d66"/>
+      <stop offset="55%" stop-color="#0d9488"/>
+      <stop offset="100%" stop-color="#ff6b4a"/>
+    </linearGradient>
+    <linearGradient id="trail" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ff9f43" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#ff6b4a"/>
+      <stop offset="100%" stop-color="#2dd4bf" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <circle cx="40" cy="40" r="38" fill="url(#markBg)"/>
+  <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.5" stroke-dasharray="6 5">
+    <animateTransform attributeName="transform" type="rotate" from="0 40 40" to="360 40 40" dur="12s" repeatCount="indefinite"/>
+  </circle>
+  <path d="M12 52 C22 44, 30 58, 40 50 C50 42, 58 56, 68 48" fill="none" stroke="url(#trail)" stroke-width="3" stroke-linecap="round" opacity="0.9">
+    <animate attributeName="opacity" values="0.45;0.95;0.45" dur="2.4s" repeatCount="indefinite"/>
+  </path>
+  <g fill="#fff" stroke="#fff" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="44" cy="22" r="5.5" fill="#fff" stroke="none"/>
+    <path d="M44 28 L42 40 L34 36" fill="none" stroke-width="3.2"/>
+    <path d="M42 40 L36 54" fill="none" stroke-width="3.2"/>
+    <path d="M42 40 L50 54" fill="none" stroke-width="3.2"/>
+    <path d="M42 32 L52 28" fill="none" stroke-width="3"/>
+    <path d="M42 32 L33 38" fill="none" stroke-width="3"/>
+  </g>
+  <circle cx="28" cy="58" r="2.2" fill="#ff9f43">
+    <animate attributeName="opacity" values="0.2;1;0.2" dur="1.6s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="36" cy="60" r="2.2" fill="#2dd4bf">
+    <animate attributeName="opacity" values="0.2;1;0.2" dur="1.6s" begin="0.35s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="44" cy="58" r="2.2" fill="#fff">
+    <animate attributeName="opacity" values="0.2;1;0.2" dur="1.6s" begin="0.7s" repeatCount="indefinite"/>
+  </circle>
+</svg>
