@@ -17,8 +17,8 @@ class StepathonApp {
  dayGoalsKm: [1, 2, 3, 4, 5, 6, 7]
  };
 
- // Bump this to start a clean data season (filters old Firestore profiles out of the app)
- this.dataSeason = 'jul2026-v1';
+ // Bump this to clear the visible roster (old season profiles are hidden)
+ this.dataSeason = 'jul2026-v2';
  // Firestore security rules only allow these collection names
  this.participantsCollection = 'participants';
  this.stepEntriesCollection = 'stepEntries';
