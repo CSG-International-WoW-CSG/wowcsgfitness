@@ -2761,25 +2761,25 @@ Please keep this information secure.`;
  // Hide previous badge
  motivationBadge.style.display = 'none';
  
- // Show appropriate motivation based on progress
+ // Use real Unicode glyphs (textContent does not decode HTML entities like &#128694;)
  let message = '';
- let icon = '&#127919;';
+ let icon = String.fromCodePoint(0x1F3AF); // target
  
  if (progress >= 100) {
  message = 'Amazing! You crushed your daily goal!';
-            icon = '&#127942;';
+ icon = String.fromCodePoint(0x1F3C6); // trophy
  } else if (progress >= 75) {
  message = 'Almost there! Keep pushing!';
-            icon = '&#128293;';
+ icon = String.fromCodePoint(0x1F525); // fire
  } else if (progress >= 50) {
  message = 'Halfway there! You\'re doing great!';
-            icon = '&#11088;';
+ icon = String.fromCodePoint(0x2B50); // star
  } else if (progress >= 25) {
  message = 'Great start! Every step counts!';
-            icon = '&#128099;';
+ icon = String.fromCodePoint(0x1F463); // footprints
  } else if (todaySteps > 0) {
  message = 'You\'re on the right track! Keep moving!';
-            icon = '&#128694;';
+ icon = String.fromCodePoint(0x1F6B6); // walker
  }
  
  if (message) {

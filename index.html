@@ -16,7 +16,7 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="apple-touch-icon" href="favicon.svg">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="ui-refresh.css?v=25">
+    <link rel="stylesheet" href="ui-refresh.css?v=26">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -380,7 +380,7 @@
                             <div class="step-counter-header-section">
                                 <div class="step-counter-icon">&#128694;</div>
                                 <h3>Live KM / Step Counter</h3>
-                                <p class="step-counter-subtitle">Count your walk/run in this app only — no manual entry or screenshots needed</p>
+                                <p class="step-counter-subtitle">Count your walk/run in this app only â€” no manual entry or screenshots needed</p>
                             </div>
 
                             <!-- Main Counter Display -->
@@ -575,7 +575,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-17-v25 | Daily leaderboards</p>
+            <p class="footer-subtext">Site version: 2026-07-17-v26 | Badge icon fix</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#" id="footerHelpLink" class="help-link">&#10067; Need Help? Contact us at wow-csg@csgi.com</a>
@@ -658,7 +658,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="firebase-config.js"></script>
-    <script src="script.js?v=25"></script>
+    <script src="script.js?v=26"></script>
     
     <!-- Service Worker: force update + clear stale caches (fixes old garbled emoji pages) -->
     <script>
@@ -671,10 +671,10 @@
                 });
                 if (window.caches && caches.keys) {
                     caches.keys().then((keys) => {
-                        keys.filter((k) => k !== 'wowcsg-fitness-v25').forEach((k) => caches.delete(k));
+                        keys.filter((k) => k !== 'wowcsg-fitness-v26').forEach((k) => caches.delete(k));
                     });
                 }
-                navigator.serviceWorker.register('./service-worker.js?v=25')
+                navigator.serviceWorker.register('./service-worker.js?v=26')
                     .then((registration) => {
                         console.log('Service Worker registered:', registration);
                         if (registration.waiting) {
@@ -690,4 +690,5 @@
     
 </body>
 </html>
+
 
