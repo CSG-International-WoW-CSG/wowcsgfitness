@@ -17,10 +17,11 @@ class StepathonApp {
  dayGoalsKm: [1, 2, 3, 4, 5, 6, 7]
  };
 
- // Bump this to start a clean data season (new Firebase collections + wipe local caches)
+ // Bump this to start a clean data season (filters old Firestore profiles out of the app)
  this.dataSeason = 'jul2026-v1';
- this.participantsCollection = 'participants_' + this.dataSeason;
- this.stepEntriesCollection = 'stepEntries_' + this.dataSeason;
+ // Firestore security rules only allow these collection names
+ this.participantsCollection = 'participants';
+ this.stepEntriesCollection = 'stepEntries';
  this.resetLocalUserDataIfNeeded();
 
  this.currentUser = null;
@@ -161,6 +162,22 @@ class StepathonApp {
 
  stepEntriesCol() {
  return this.db.collection(this.stepEntriesCollection);
+ }
+
+ isCurrentSeasonParticipant(participant) {
+ return participant && participant.season === this.dataSeason;
+ }
+
+ isCurrentSeasonEntry(entry) {
+ return entry && entry.season === this.dataSeason;
+ }
+
+ filterCurrentSeasonParticipants(list) {
+ return (list || []).filter((p) => this.isCurrentSeasonParticipant(p));
+ }
+
+ filterCurrentSeasonEntries(list) {
+ return (list || []).filter((e) => this.isCurrentSeasonEntry(e));
  }
 
  isEmail(value) {
@@ -1780,7 +1797,8 @@ class StepathonApp {
  streak: 0,
  lastActivity: null,
  activities: [],
- registeredAt: new Date().toISOString()
+ registeredAt: new Date().toISOString(),
+ season: this.dataSeason
  };
 
  await this.participantsCol().doc(credential.user.uid).set(participant);
@@ -1849,9 +1867,12 @@ class StepathonApp {
  } else if (error.code === 'auth/weak-password') {
  alert('Password is too weak. Please use at least 6 characters.');
  document.getElementById('password').focus();
+ } else if (error.code === 'permission-denied') {
+ console.error('Firebase registration permission error:', error);
+ alert('Registration failed due to a permissions issue. Please try again or contact support.');
  } else {
  console.error('Firebase registration error:', error);
- alert('Registration failed. Please try again.');
+ alert('Registration failed. Please try again.\n\n' + (error.message || error.code || ''));
  }
  }
  return;
@@ -2903,7 +2924,8 @@ Please keep this information secure.`;
  lastModifiedBy: null,
  lastModifiedAt: null,
  notes: null,
- source: fromStepCounter ? 'step-counter' : 'manual'
+ source: fromStepCounter ? 'step-counter' : 'manual',
+ season: this.dataSeason
  };
 
  // Ensure stepEntries is initialized
@@ -4502,20 +4524,22 @@ Please keep this information secure.`;
  const normalizedIdentifier = identifier.toLowerCase();
  const collection = this.participantsCol();
 
- const usernameSnap = await collection.where('usernameLower', '==', normalizedIdentifier).limit(1).get();
- if (!usernameSnap.empty) {
- return usernameSnap.docs[0].data();
- }
+ const pickCurrent = (snap) => {
+ const match = snap.docs.map((d) => d.data()).find((p) => this.isCurrentSeasonParticipant(p));
+ return match || null;
+ };
 
- const employeeIdSnap = await collection.where('employeeIdLower', '==', normalizedIdentifier).limit(1).get();
- if (!employeeIdSnap.empty) {
- return employeeIdSnap.docs[0].data();
- }
+ const usernameSnap = await collection.where('usernameLower', '==', normalizedIdentifier).limit(25).get();
+ const byUsername = pickCurrent(usernameSnap);
+ if (byUsername) return byUsername;
 
- const emailSnap = await collection.where('emailLower', '==', normalizedIdentifier).limit(1).get();
- if (!emailSnap.empty) {
- return emailSnap.docs[0].data();
- }
+ const employeeIdSnap = await collection.where('employeeIdLower', '==', normalizedIdentifier).limit(25).get();
+ const byEmployee = pickCurrent(employeeIdSnap);
+ if (byEmployee) return byEmployee;
+
+ const emailSnap = await collection.where('emailLower', '==', normalizedIdentifier).limit(25).get();
+ const byEmail = pickCurrent(emailSnap);
+ if (byEmail) return byEmail;
 
  return null;
  }
@@ -4524,8 +4548,19 @@ Please keep this information secure.`;
  if (!this.firebaseEnabled || !this.db) {
  return false;
  }
- const snap = await this.participantsCol().where(fieldName, '==', value).limit(1).get();
+ try {
+ const snap = await this.participantsCol()
+ .where(fieldName, '==', value)
+ .where('season', '==', this.dataSeason)
+ .limit(1)
+ .get();
  return !snap.empty;
+ } catch (error) {
+ // Fallback if composite index is missing: scan season-filtered cache/docs
+ console.warn('Season field query failed, falling back:', error.message || error);
+ const snap = await this.participantsCol().where(fieldName, '==', value).limit(25).get();
+ return snap.docs.some((docSnap) => docSnap.data().season === this.dataSeason);
+ }
  }
 
  async loadCurrentUserFromFirebase(uid) {
@@ -4538,6 +4573,10 @@ Please keep this information secure.`;
  return null;
  }
  const participant = doc.data();
+ // Old-season profiles are treated as cleared
+ if (!this.isCurrentSeasonParticipant(participant)) {
+ return null;
+ }
  this.currentUser = participant;
  localStorage.setItem('currentUser', JSON.stringify(participant));
  return participant;
@@ -4553,7 +4592,7 @@ Please keep this information secure.`;
  }
  try {
  const snapshot = await this.participantsCol().get();
- this.participants = snapshot.docs.map(doc => doc.data());
+ this.participants = this.filterCurrentSeasonParticipants(snapshot.docs.map(doc => doc.data()));
  this.saveParticipantsCache();
  if (!window.location.pathname.includes('admin.html')) {
  this.updateLeaderboard();
@@ -4569,7 +4608,7 @@ Please keep this information secure.`;
  }
  try {
  const snapshot = await this.stepEntriesCol().get();
- this.stepEntries = snapshot.docs.map(doc => doc.data());
+ this.stepEntries = this.filterCurrentSeasonEntries(snapshot.docs.map(doc => doc.data()));
  this.saveStepEntries();
  } catch (error) {
  console.warn('Failed to sync step entries from Firebase:', error);
@@ -5186,7 +5225,8 @@ Please keep this information secure.`;
  lastModifiedBy: null,
  lastModifiedAt: null,
  notes: fromStepCounter ? 'Step counter entry - screenshot optional' : null,
- source: fromStepCounter ? 'step-counter' : 'manual' // Mark source
+ source: fromStepCounter ? 'step-counter' : 'manual', // Mark source
+ season: this.dataSeason
  };
 
  // Ensure stepEntries is initialized
