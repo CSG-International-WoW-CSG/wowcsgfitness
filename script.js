@@ -508,6 +508,19 @@ class StepathonApp {
  });
  }
 
+ const bodyWeightInput = document.getElementById('bodyWeightKg');
+ if (bodyWeightInput) {
+ const savedWeight = this.getBodyWeightKg();
+ bodyWeightInput.value = String(savedWeight);
+ bodyWeightInput.addEventListener('change', () => {
+ this.setBodyWeightKg(bodyWeightInput.value);
+ this.updateStepCounterDisplay();
+ });
+ bodyWeightInput.addEventListener('input', () => {
+ this.updateStepCounterDisplay();
+ });
+ }
+
  // Method tabs (only if exists - not on admin page)
  const methodTabs = document.querySelectorAll('.method-tab');
  if (methodTabs.length > 0) {
@@ -2708,6 +2721,19 @@ Please keep this information secure.`;
  progressTitle.textContent = dayNum >= 1 && dayNum <= 7
  ? `Day ${dayNum} Goal - ${goalKm} KM Walk/Run`
  : 'Daily Goal Progress';
+ }
+
+ const todayCalories = this.currentUser.dailyCalories && this.currentUser.dailyCalories[today]
+ ? this.currentUser.dailyCalories[today]
+ : 0;
+ const totalCalories = this.currentUser.totalCalories || 0;
+ const todayCalEl = document.getElementById('todayCaloriesLabel');
+ if (todayCalEl) {
+ todayCalEl.textContent = `${Math.round(todayCalories).toLocaleString()} kcal`;
+ }
+ const totalCalEl = document.getElementById('totalCaloriesLabel');
+ if (totalCalEl) {
+ totalCalEl.textContent = `${Math.round(totalCalories).toLocaleString()} kcal`;
  }
 
  // Update rank
@@ -5043,6 +5069,79 @@ Please keep this information secure.`;
  return Math.max(gpsKm, stepKm);
  }
 
+ getBodyWeightKg() {
+ const stored = parseFloat(localStorage.getItem('bodyWeightKg') || '');
+ if (Number.isFinite(stored) && stored >= 30 && stored <= 200) {
+ return stored;
+ }
+ const input = document.getElementById('bodyWeightKg');
+ if (input) {
+ const fromInput = parseFloat(input.value);
+ if (Number.isFinite(fromInput) && fromInput >= 30 && fromInput <= 200) {
+ return fromInput;
+ }
+ }
+ return 70;
+ }
+
+ setBodyWeightKg(value) {
+ const weight = parseFloat(value);
+ if (!Number.isFinite(weight) || weight < 30 || weight > 200) {
+ return this.getBodyWeightKg();
+ }
+ localStorage.setItem('bodyWeightKg', String(weight));
+ return weight;
+ }
+
+ /**
+ * Estimate calories from distance, duration, and body weight (MET-based).
+ * Uses pace to pick intensity; falls back to walking estimate if duration is missing.
+ */
+ estimateCaloriesBurned(distanceKm, durationSec, weightKg) {
+ const distance = Math.max(0, Number(distanceKm) || 0);
+ const weight = Math.max(30, Math.min(200, Number(weightKg) || 70));
+ if (distance <= 0) return 0;
+
+ const duration = Math.max(0, Number(durationSec) || 0);
+ let met = 3.5; // casual walk default
+
+ if (duration >= 30 && distance > 0.01) {
+ const hours = duration / 3600;
+ const speedKmh = distance / hours;
+ if (speedKmh < 4) met = 3.0;
+ else if (speedKmh < 5.5) met = 3.8;
+ else if (speedKmh < 6.5) met = 4.5;
+ else if (speedKmh < 8) met = 7.0;
+ else if (speedKmh < 10) met = 9.8;
+ else if (speedKmh < 12) met = 11.0;
+ else met = 12.5;
+
+ return Math.round(met * weight * hours);
+ }
+
+ // No usable duration: ~0.55 kcal per kg per km (walking) to ~1.0 for running-like
+ const kcalPerKgPerKm = 0.63;
+ return Math.round(weight * distance * kcalPerKgPerKm);
+ }
+
+ getSessionDurationSec() {
+ if (this.stepCounter.startTime) {
+ return Math.max(0, Math.round((Date.now() - this.stepCounter.startTime) / 1000));
+ }
+ if (this.timerStartTime) {
+ return Math.max(0, Math.round((Date.now() - this.timerStartTime) / 1000));
+ }
+ return 0;
+ }
+
+ getSessionCalories() {
+ return this.estimateCaloriesBurned(
+ this.getTrackedDistanceKm(),
+ this.getSessionDurationSec(),
+ this.getBodyWeightKg()
+ );
+ }
+
  haversineKm(lat1, lon1, lat2, lon2) {
  const toRad = (deg) => (deg * Math.PI) / 180;
  const R = 6371;
@@ -5440,6 +5539,7 @@ Please keep this information secure.`;
 
  updateStepCounterDisplay() {
  const distance = this.getTrackedDistanceKm();
+ const calories = this.getSessionCalories();
  const kmEl = document.getElementById('liveKmCount');
  if (kmEl) {
  kmEl.textContent = distance.toFixed(2);
@@ -5448,14 +5548,18 @@ Please keep this information secure.`;
  if (stepsEl) {
  stepsEl.textContent = `${(this.stepCounter.stepCount || 0).toLocaleString()} steps`;
  }
+ const calorieEl = document.getElementById('liveCalorieCount');
+ if (calorieEl) {
+ calorieEl.textContent = `${calories.toLocaleString()} kcal`;
+ }
 
  const gpsDistanceLabel = document.getElementById('gpsDistanceLabel');
  if (gpsDistanceLabel) {
  gpsDistanceLabel.textContent = `${(this.stepCounter.distanceKm || 0).toFixed(2)} KM`;
  }
- const gpsPointsLabel = document.getElementById('gpsPointsLabel');
- if (gpsPointsLabel) {
- gpsPointsLabel.textContent = String((this.stepCounter.path || []).length);
+ const gpsCaloriesLabel = document.getElementById('gpsCaloriesLabel');
+ if (gpsCaloriesLabel) {
+ gpsCaloriesLabel.textContent = `${calories.toLocaleString()} kcal`;
  }
  const paceLabel = document.getElementById('gpsPaceLabel');
  if (paceLabel && this.stepCounter.startTime && distance > 0.01) {
@@ -5508,6 +5612,8 @@ Please keep this information secure.`;
  if (timerValue) {
  timerValue.textContent = timeStr;
  }
+ // Refresh calorie estimate as duration changes
+ this.updateStepCounterDisplay();
  }, 1000);
  }
 
@@ -5591,10 +5697,17 @@ Please keep this information secure.`;
  return;
  }
 
+ const durationSec = this.stepCounter.startTime
+ ? Math.round((Date.now() - this.stepCounter.startTime) / 1000)
+ : this.getSessionDurationSec();
+ const caloriesBurned = this.estimateCaloriesBurned(distanceKm, durationSec, this.getBodyWeightKg());
+
  await this.saveStepsWithScreenshot(steps, null, true, {
  distanceKm,
  path: (this.stepCounter.path || []).map((p) => ({ lat: p.lat, lng: p.lng, t: p.t })),
- durationSec: this.stepCounter.startTime ? Math.round((Date.now() - this.stepCounter.startTime) / 1000) : null
+ durationSec,
+ caloriesBurned,
+ bodyWeightKg: this.getBodyWeightKg()
  });
  }
 
@@ -5612,6 +5725,14 @@ Please keep this information secure.`;
  if (!this.currentUser.dailyDistanceKm) this.currentUser.dailyDistanceKm = {};
  this.currentUser.dailyDistanceKm[today] = (this.currentUser.dailyDistanceKm[today] || 0) + distanceKm;
 
+ const durationSec = trackMeta && typeof trackMeta.durationSec === 'number' ? trackMeta.durationSec : null;
+ const caloriesBurned = trackMeta && typeof trackMeta.caloriesBurned === 'number'
+ ? trackMeta.caloriesBurned
+ : this.estimateCaloriesBurned(distanceKm, durationSec, this.getBodyWeightKg());
+ this.currentUser.totalCalories = (this.currentUser.totalCalories || 0) + caloriesBurned;
+ if (!this.currentUser.dailyCalories) this.currentUser.dailyCalories = {};
+ this.currentUser.dailyCalories[today] = (this.currentUser.dailyCalories[today] || 0) + caloriesBurned;
+
  const entryId = `ENTRY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
  const stepEntry = {
  id: entryId,
@@ -5621,8 +5742,10 @@ Please keep this information secure.`;
  userEmail: this.currentUser.email || this.currentUser.emailId || 'No email',
  steps: steps,
  distanceKm: Number(distanceKm.toFixed(3)),
+ caloriesBurned,
+ bodyWeightKg: trackMeta && trackMeta.bodyWeightKg ? trackMeta.bodyWeightKg : this.getBodyWeightKg(),
  path: trackMeta && Array.isArray(trackMeta.path) ? trackMeta.path.slice(0, 300) : [],
- durationSec: trackMeta ? trackMeta.durationSec : null,
+ durationSec,
  screenshot: null,
  date: new Date().toISOString(),
  status: fromStepCounter ? 'approved' : 'pending',
@@ -5630,7 +5753,9 @@ Please keep this information secure.`;
  validatedAt: fromStepCounter ? new Date().toISOString() : null,
  lastModifiedBy: null,
  lastModifiedAt: null,
- notes: fromStepCounter ? `In-app GPS activity: ${distanceKm.toFixed(2)} KM` : null,
+ notes: fromStepCounter
+ ? `In-app GPS activity: ${distanceKm.toFixed(2)} KM - ${caloriesBurned} kcal`
+ : null,
  source: fromStepCounter ? 'gps-counter' : 'manual',
  season: this.dataSeason
  };
@@ -5669,13 +5794,14 @@ Please keep this information secure.`;
  }
 
  const activityMessage = fromStepCounter
- ? `Covered ${distanceKm.toFixed(2)} KM (${steps.toLocaleString()} steps) via GPS map tracking`
- : `Added ${steps.toLocaleString()} steps`;
+ ? `Covered ${distanceKm.toFixed(2)} KM (${steps.toLocaleString()} steps) - burned ${caloriesBurned} kcal`
+ : `Added ${steps.toLocaleString()} steps - burned ${caloriesBurned} kcal`;
  
  this.currentUser.activities.unshift({
  date: new Date().toISOString(),
  steps: steps,
  distanceKm: Number(distanceKm.toFixed(3)),
+ caloriesBurned,
  message: activityMessage,
  entryId: entryId
  });
@@ -5711,7 +5837,7 @@ Please keep this information secure.`;
  if (manualUpload) manualUpload.style.display = 'block';
  
  // Show success
- this.showCounterNotification(` ${distanceKm.toFixed(2)} KM saved! Leaderboard updated.`);
+ this.showCounterNotification(` ${distanceKm.toFixed(2)} KM - ${caloriesBurned} kcal saved!`);
  
  // Update dashboard and leaderboard immediately
  this.updateDashboard();
@@ -5719,7 +5845,7 @@ Please keep this information secure.`;
  
  // Show success message
  setTimeout(() => {
- alert(`Saved successfully!\n\n${distanceKm.toFixed(2)} KM covered (~${steps.toLocaleString()} steps) from in-app GPS tracking.\n\nYour leaderboard has been updated.`);
+ alert(`Saved successfully!\n\n${distanceKm.toFixed(2)} KM covered (~${steps.toLocaleString()} steps)\nCalories burned: ~${caloriesBurned} kcal\n\nYour leaderboard has been updated.`);
  }, 500);
  }
 

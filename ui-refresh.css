@@ -962,6 +962,52 @@ footer p {
   letter-spacing: -0.02em;
 }
 
+.step-counter-calories {
+  margin-top: 4px;
+  font-family: var(--display);
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #ea580c;
+  letter-spacing: -0.02em;
+}
+
+.calorie-weight-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 12px;
+  margin: 4px 0 12px;
+  padding: 10px 14px;
+  background: linear-gradient(160deg, #fff7ed, #ffedd5);
+  border: 1px solid rgba(234, 88, 12, 0.25);
+  border-radius: 12px;
+}
+
+.calorie-weight-row label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #9a3412;
+}
+
+.calorie-weight-row input {
+  width: 88px;
+  padding: 8px 10px;
+  border: 1px solid rgba(234, 88, 12, 0.35);
+  border-radius: 10px;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #9a3412;
+  background: #fff;
+  text-align: center;
+}
+
+.calorie-weight-row input:focus {
+  outline: 2px solid rgba(234, 88, 12, 0.45);
+  outline-offset: 1px;
+}
+
 .gps-stats-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

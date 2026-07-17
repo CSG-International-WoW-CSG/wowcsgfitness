@@ -16,7 +16,7 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="apple-touch-icon" href="favicon.svg">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="ui-refresh.css?v=23">
+    <link rel="stylesheet" href="ui-refresh.css?v=24">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -315,6 +315,14 @@
                             <span class="progress-label">Remaining:</span>
                             <span class="progress-value highlight" id="remainingSteps">1,300 steps</span>
                         </div>
+                        <div class="progress-item">
+                            <span class="progress-label">Calories today:</span>
+                            <span class="progress-value" id="todayCaloriesLabel">0 kcal</span>
+                        </div>
+                        <div class="progress-item">
+                            <span class="progress-label">Total calories:</span>
+                            <span class="progress-value" id="totalCaloriesLabel">0 kcal</span>
+                        </div>
                     </div>
                     <p class="goal-note">Progressive challenge: Day N goal = N KM (~1,300 steps per KM for tracking).</p>
                     <!-- Motivation Messages -->
@@ -381,6 +389,7 @@
                                     <div class="step-counter-value-large" id="liveKmCount">0.00</div>
                                     <div class="step-counter-label-large">KM covered</div>
                                     <div class="step-counter-km" id="liveStepCount">0 steps</div>
+                                    <div class="step-counter-calories" id="liveCalorieCount">0 kcal</div>
                                     <div class="step-counter-pulse" id="counterPulse"></div>
                                 </div>
                                 
@@ -391,10 +400,15 @@
                                 </div>
                             </div>
 
+                            <div class="calorie-weight-row">
+                                <label for="bodyWeightKg">Body weight (kg) for calorie estimate</label>
+                                <input type="number" id="bodyWeightKg" min="30" max="200" step="0.5" value="70" inputmode="decimal">
+                            </div>
+
                             <div class="gps-stats-row" id="gpsStatsRow">
                                 <div class="gps-stat"><span>GPS distance</span><strong id="gpsDistanceLabel">0.00 KM</strong></div>
                                 <div class="gps-stat"><span>Pace</span><strong id="gpsPaceLabel">--</strong></div>
-                                <div class="gps-stat"><span>GPS points</span><strong id="gpsPointsLabel">0</strong></div>
+                                <div class="gps-stat"><span>Calories</span><strong id="gpsCaloriesLabel">0 kcal</strong></div>
                             </div>
 
                             <div class="activity-map-wrap">
@@ -549,7 +563,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-17-v22 | Screen wake lock for GPS</p>
+            <p class="footer-subtext">Site version: 2026-07-17-v24 | Calorie burner</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#" id="footerHelpLink" class="help-link">&#10067; Need Help? Contact us at wow-csg@csgi.com</a>
@@ -632,7 +646,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="firebase-config.js"></script>
-    <script src="script.js"></script>
+    <script src="script.js?v=24"></script>
     
     <!-- Service Worker: force update + clear stale caches (fixes old garbled emoji pages) -->
     <script>
@@ -645,10 +659,10 @@
                 });
                 if (window.caches && caches.keys) {
                     caches.keys().then((keys) => {
-                        keys.filter((k) => k !== 'wowcsg-fitness-v22').forEach((k) => caches.delete(k));
+                        keys.filter((k) => k !== 'wowcsg-fitness-v24').forEach((k) => caches.delete(k));
                     });
                 }
-                navigator.serviceWorker.register('./service-worker.js?v=22')
+                navigator.serviceWorker.register('./service-worker.js?v=24')
                     .then((registration) => {
                         console.log('Service Worker registered:', registration);
                         if (registration.waiting) {
