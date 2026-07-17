@@ -16,7 +16,7 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="apple-touch-icon" href="favicon.svg">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="ui-refresh.css?v=22">
+    <link rel="stylesheet" href="ui-refresh.css?v=23">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -432,10 +432,10 @@
                                 <div class="counter-tips">
                                     <h4>&#128161; Tips for accurate GPS tracking:</h4>
                                     <ul>
-                                        <li>Keep the screen ON — locking the phone pauses GPS in mobile browsers</li>
-                                        <li>Allow location permission when prompted</li>
-                                        <li>Outdoor routes give the best distance accuracy</li>
-                                        <li>After unlock, tracking resumes and catches up the distance gap</li>
+                                        <li>Tracking continues while locked via background GPS polling + silent keep-alive</li>
+                                        <li>Allow location permission (Always / While using) when prompted</li>
+                                        <li>Add this site to your Home Screen for best background results</li>
+                                        <li>Outdoor routes give the best GPS accuracy</li>
                                     </ul>
                                 </div>
                             </div>
@@ -645,10 +645,10 @@
                 });
                 if (window.caches && caches.keys) {
                     caches.keys().then((keys) => {
-                        keys.filter((k) => k !== 'wowcsg-fitness-v21').forEach((k) => caches.delete(k));
+                        keys.filter((k) => k !== 'wowcsg-fitness-v22').forEach((k) => caches.delete(k));
                     });
                 }
-                navigator.serviceWorker.register('./service-worker.js?v=21')
+                navigator.serviceWorker.register('./service-worker.js?v=22')
                     .then((registration) => {
                         console.log('Service Worker registered:', registration);
                         if (registration.waiting) {

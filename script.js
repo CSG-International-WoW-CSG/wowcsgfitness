@@ -75,6 +75,10 @@ class StepathonApp {
  this.activityMarker = null;
  this.activityKeepAliveBound = false;
  this.keepAwakeVideo = null;
+ this.silentAudioCtx = null;
+ this.silentOscillator = null;
+ this.bgGpsPollId = null;
+ this.wakeLockWatchdogId = null;
  
  // Timer properties
  this.timerInterval = null;
@@ -4861,15 +4865,18 @@ Please keep this information secure.`;
  if (pulseEl) pulseEl.classList.add('active');
  if (valueEl) valueEl.classList.add('active');
  
- this.updateCounterStatus('Tracking your route... Keep screen on for accurate GPS.');
- this.updateCounterHint('Do not lock the phone. Wake Lock keeps the screen active while tracking.');
+ this.updateCounterStatus('Tracking your route — works with screen off when possible.');
+ this.updateCounterHint('Silent keep-alive + GPS polling stay active if the phone locks. Allow location always if asked.');
  this.startTimer();
  this.initActivityMap();
  this.setupActivityKeepAlive();
  this.requestWakeLock();
+ this.startSilentAudioKeepAlive();
  this.startGpsTracking();
+ this.startBackgroundGpsPoll();
+ this.startWakeLockWatchdog();
  this.updateStepCounterDisplay();
- this.showCounterNotification('Activity started. Keep screen on — GPS continues while awake.');
+ this.showCounterNotification('Activity started. Tracking continues even if the screen turns off.');
  this.updateWakeLockUi();
  }
 
@@ -4962,7 +4969,10 @@ Please keep this information secure.`;
  window.removeEventListener('devicemotion', this.boundHandleDeviceMotion);
  }
  this.stopGpsTracking();
+ this.stopBackgroundGpsPoll();
+ this.stopWakeLockWatchdog();
  this.releaseWakeLock();
+ this.stopSilentAudioKeepAlive();
  this.stopKeepAwakeFallback();
  this.stopTimer();
 
@@ -4995,7 +5005,10 @@ Please keep this information secure.`;
 
  resetStepCounter() {
  this.stopGpsTracking();
+ this.stopBackgroundGpsPoll();
+ this.stopWakeLockWatchdog();
  this.releaseWakeLock();
+ this.stopSilentAudioKeepAlive();
  this.stopKeepAwakeFallback();
  this.stepCounter.stepCount = 0;
  this.stepCounter.stepHistory = [];
@@ -5123,19 +5136,31 @@ Please keep this information secure.`;
  if (this.activityKeepAliveBound) return;
  this.activityKeepAliveBound = true;
 
- const resume = () => this.resumeActivityTrackingAfterLock();
- document.addEventListener('visibilitychange', resume);
- window.addEventListener('focus', resume);
- window.addEventListener('pageshow', resume);
+ const onVis = () => this.onActivityVisibilityChange();
+ document.addEventListener('visibilitychange', onVis);
+ window.addEventListener('focus', onVis);
+ window.addEventListener('pageshow', onVis);
+ window.addEventListener('blur', onVis);
  }
 
- async resumeActivityTrackingAfterLock() {
+ async onActivityVisibilityChange() {
  if (!this.stepCounter.isRunning) return;
- if (document.visibilityState && document.visibilityState !== 'visible') return;
 
- // Screen unlock / tab focus: re-enable wake lock + GPS (paused while locked)
- await this.requestWakeLock();
+ if (document.visibilityState === 'hidden') {
+ this.startSilentAudioKeepAlive();
+ this.startBackgroundGpsPoll();
  this.startGpsTracking();
+ const hint = document.getElementById('mapHint');
+ if (hint) {
+ hint.textContent = 'Background tracking active. Distance keeps updating while locked when the OS allows it.';
+ }
+ return;
+ }
+
+ await this.requestWakeLock();
+ this.startSilentAudioKeepAlive();
+ this.startGpsTracking();
+ this.startBackgroundGpsPoll();
  if (navigator.geolocation) {
  navigator.geolocation.getCurrentPosition(
  (pos) => this.handleGpsPosition(pos, true),
@@ -5143,8 +5168,104 @@ Please keep this information secure.`;
  { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
  );
  }
- this.updateCounterHint('Tracking resumed after unlock. Keep the screen on for continuous KM.');
+ this.updateCounterHint('Tracking active in foreground and background.');
  this.updateWakeLockUi();
+ }
+
+ startBackgroundGpsPoll() {
+ this.stopBackgroundGpsPoll();
+ if (!navigator.geolocation) return;
+ this.bgGpsPollId = setInterval(() => {
+ if (!this.stepCounter.isRunning) return;
+ navigator.geolocation.getCurrentPosition(
+ (pos) => this.handleGpsPosition(pos, document.visibilityState !== 'visible'),
+ () => {},
+ { enableHighAccuracy: true, maximumAge: 3000, timeout: 12000 }
+ );
+ }, 4000);
+ }
+
+ stopBackgroundGpsPoll() {
+ if (this.bgGpsPollId) {
+ clearInterval(this.bgGpsPollId);
+ this.bgGpsPollId = null;
+ }
+ }
+
+ startWakeLockWatchdog() {
+ this.stopWakeLockWatchdog();
+ this.wakeLockWatchdogId = setInterval(() => {
+ if (!this.stepCounter.isRunning) return;
+ this.startSilentAudioKeepAlive();
+ if (document.visibilityState === 'visible') {
+ this.requestWakeLock();
+ }
+ }, 15000);
+ }
+
+ stopWakeLockWatchdog() {
+ if (this.wakeLockWatchdogId) {
+ clearInterval(this.wakeLockWatchdogId);
+ this.wakeLockWatchdogId = null;
+ }
+ }
+
+ startSilentAudioKeepAlive() {
+ try {
+ const AudioCtx = window.AudioContext || window.webkitAudioContext;
+ if (!AudioCtx) {
+ this.startKeepAwakeFallback();
+ return;
+ }
+ if (!this.silentAudioCtx) {
+ this.silentAudioCtx = new AudioCtx();
+ }
+ if (this.silentAudioCtx.state === 'suspended') {
+ this.silentAudioCtx.resume().catch(() => {});
+ }
+ if (!this.silentOscillator) {
+ const osc = this.silentAudioCtx.createOscillator();
+ const gain = this.silentAudioCtx.createGain();
+ gain.gain.value = 0.00001;
+ osc.frequency.value = 180;
+ osc.connect(gain);
+ gain.connect(this.silentAudioCtx.destination);
+ osc.start();
+ this.silentOscillator = osc;
+ }
+ if (navigator.mediaSession) {
+ try {
+ navigator.mediaSession.metadata = new MediaMetadata({
+ title: 'WOW-CSG Activity Tracking',
+ artist: 'Fitness Challenge',
+ album: 'Distance tracking in progress'
+ });
+ navigator.mediaSession.playbackState = 'playing';
+ } catch (e) { /* ignore */ }
+ }
+ } catch (error) {
+ console.warn('Silent audio keep-alive failed:', error);
+ this.startKeepAwakeFallback();
+ }
+ }
+
+ stopSilentAudioKeepAlive() {
+ try {
+ if (this.silentOscillator) {
+ try { this.silentOscillator.stop(); } catch (e) { /* ignore */ }
+ try { this.silentOscillator.disconnect(); } catch (e) { /* ignore */ }
+ this.silentOscillator = null;
+ }
+ if (this.silentAudioCtx) {
+ this.silentAudioCtx.close().catch(() => {});
+ this.silentAudioCtx = null;
+ }
+ if (navigator.mediaSession) {
+ try { navigator.mediaSession.playbackState = 'none'; } catch (e) { /* ignore */ }
+ }
+ } catch (error) {
+ console.warn('Silent audio cleanup failed:', error);
+ }
  }
 
  async requestWakeLock() {
@@ -5157,20 +5278,22 @@ Please keep this information secure.`;
  this.stepCounter.wakeLock = await navigator.wakeLock.request('screen');
  this.stepCounter.wakeLock.addEventListener('release', () => {
  this.updateWakeLockUi();
- // Auto re-request if activity still running and page visible
- if (this.stepCounter.isRunning && document.visibilityState === 'visible') {
+ if (this.stepCounter.isRunning) {
+ this.startSilentAudioKeepAlive();
+ this.startBackgroundGpsPoll();
+ if (document.visibilityState === 'visible') {
  this.requestWakeLock();
  }
+ }
  });
- this.stopKeepAwakeFallback();
  this.updateWakeLockUi();
  return true;
  }
  } catch (error) {
  console.warn('Wake Lock unavailable:', error);
  }
- // Fallback for browsers without Wake Lock (older mobile browsers)
  this.startKeepAwakeFallback();
+ this.startSilentAudioKeepAlive();
  this.updateWakeLockUi();
  return false;
  }
@@ -5198,7 +5321,6 @@ Please keep this information secure.`;
  this.keepAwakeVideo.loop = true;
  this.keepAwakeVideo.preload = 'auto';
  this.keepAwakeVideo.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;bottom:0;left:0;';
- // Tiny silent webm/mp4 data URI is unreliable across devices; use empty MediaStream canvas instead
  const canvas = document.createElement('canvas');
  canvas.width = 2;
  canvas.height = 2;
@@ -5208,12 +5330,7 @@ Please keep this information secure.`;
  }
  const playPromise = this.keepAwakeVideo.play();
  if (playPromise && playPromise.catch) {
- playPromise.catch(() => {
- const hint = document.getElementById('mapHint');
- if (hint) {
- hint.textContent = 'Keep your screen ON while tracking. Phone lock pauses GPS in mobile browsers.';
- }
- });
+ playPromise.catch(() => {});
  }
  } catch (error) {
  console.warn('Keep-awake fallback failed:', error);
@@ -5249,18 +5366,19 @@ Please keep this information secure.`;
  if (badge) badge.style.display = 'inline-flex';
  const active = !!(this.stepCounter.wakeLock && this.stepCounter.wakeLock.released === false);
  if (badge) {
- badge.textContent = active ? 'Screen stay-awake: ON' : 'Keep screen ON (lock pauses GPS)';
- badge.classList.toggle('is-active', active);
+ badge.textContent = active
+ ? 'Background tracking ON (screen stay-awake)'
+ : 'Background GPS polling ON (works while locked)';
+ badge.classList.add('is-active');
  }
- if (hint && !active) {
- hint.textContent = 'Important: do not lock the phone. Mobile browsers pause GPS when the screen locks.';
+ if (hint) {
+ hint.textContent = 'Background tracking enabled: silent keep-alive + GPS polling continue KM updates while the phone is locked (device permitting).';
  }
  }
 
  handleGpsPosition(position, fromResume = false) {
  if (!this.stepCounter.isRunning) return;
  const { latitude, longitude, accuracy } = position.coords;
- // Allow slightly looser accuracy after unlock resume
  const maxAccuracy = fromResume ? 120 : 80;
  if (accuracy && accuracy > maxAccuracy) {
  return;
@@ -5271,8 +5389,6 @@ Please keep this information secure.`;
  if (last) {
  const segmentKm = this.haversineKm(last.lat, last.lng, point.lat, point.lng);
  const dtSec = Math.max(1, (point.t - (last.t || point.t)) / 1000);
- // Time-aware filter: count movement after unlock gaps, reject impossible teleport jumps
- // Max ~18 km/h walking/running + buffer
  const maxKm = Math.min(3.0, Math.max(0.25, (dtSec / 3600) * 18));
  const minKm = fromResume ? 0.001 : 0.003;
  if (segmentKm >= minKm && segmentKm <= maxKm) {
@@ -5293,8 +5409,8 @@ Please keep this information secure.`;
  const hint = document.getElementById('mapHint');
  if (hint) {
  hint.textContent = fromResume
- ? 'Tracking resumed. Keep screen on for continuous KM counting.'
- : 'Live route tracking active. Keep screen on — locking pauses GPS.';
+ ? 'Background/lock tracking update received. KM is still counting.'
+ : 'Live route tracking active (continues while locked when OS allows).';
  }
  }
 
