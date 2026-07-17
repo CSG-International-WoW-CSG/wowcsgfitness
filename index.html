@@ -16,7 +16,7 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="apple-touch-icon" href="favicon.svg">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="ui-refresh.css?v=19">
+    <link rel="stylesheet" href="ui-refresh.css?v=20">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <!-- Microsoft Teams SDK (optional, only loads if in Teams) -->
     <script src="https://statics.teams.cdn.office.net/sdk/v1.11.0/js/MicrosoftTeams.min.js" crossorigin="anonymous"></script>
@@ -328,91 +328,39 @@
                 <div class="add-steps-section">
                     <h3>&#127939; + Add Your Steps</h3>
                     
-                    <!-- Input Method Tabs -->
-                    <div class="input-method-tabs">
-                        <button type="button" class="method-tab active" data-method="counter">&#128099; Count Steps</button>
-                        <button type="button" class="method-tab" data-method="manual">&#9999;&#65039; Manual Entry</button>
-                        <button type="button" class="method-tab" data-method="screenshot">&#128247; From Screenshot</button>
+                    <!-- App counter only: manual entry and screenshots disabled -->
+                    <div class="input-method-tabs" style="display: none;" aria-hidden="true">
+                        <button type="button" class="method-tab active" data-method="counter">Count Steps</button>
                     </div>
 
-                    <!-- Manual Entry Form -->
-                    <form id="addStepsForm" class="steps-form" style="display: none;">
-                        <div class="form-group">
-                            <label for="stepsInput">Steps <span class="required">*</span></label>
-                            <input type="number" id="stepsInput" placeholder="Enter steps" min="0" required>
+                    <form id="addStepsForm" class="steps-form" style="display: none;" hidden>
+                        <input type="number" id="stepsInput" min="0" disabled>
+                        <input type="file" id="manualScreenshot" accept="image/*" style="display: none;" disabled>
+                        <span id="screenshotRequired" style="display:none"></span>
+                        <span id="screenshotHint" style="display:none"></span>
+                        <div id="manualImagePreview" style="display:none">
+                            <img id="manualPreviewImage" alt="">
+                            <button type="button" id="removeManualImageBtn">Remove</button>
                         </div>
-
-                        <div class="form-group" id="screenshotGroup">
-                            <label for="manualScreenshot">Screenshot <span class="required" id="screenshotRequired">*</span></label>
-                            <div class="upload-area-small" id="manualUploadArea">
-                                <input type="file" id="manualScreenshot" accept="image/*" style="display: none;">
-                                <div class="upload-content-small">
-                                    <div class="upload-icon-small">&#128247;</div>
-                                    <p class="upload-text-small">Click to upload screenshot</p>
-                                    <p class="upload-hint-small" id="screenshotHint">Required for manual entry validation</p>
-                                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('manualScreenshot').click()">
-                                        Choose Screenshot
-                                    </button>
-                                </div>
-                            </div>
-                            <div id="manualImagePreview" class="image-preview-small" style="display: none;">
-                                <img id="manualPreviewImage" src="" alt="Screenshot preview">
-                                <button type="button" class="btn btn-secondary" id="removeManualImageBtn">Remove</button>
-                            </div>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Add Steps</button>
                     </form>
 
-                    <!-- Screenshot Upload Form -->
-                    <div id="screenshotForm" class="steps-form" style="display: none;">
-                        <div class="upload-area" id="uploadArea">
-                            <input type="file" id="screenshotInput" accept="image/*" style="display: none;">
-                            <div class="upload-content">
-                                <div class="upload-icon">&#128247;</div>
-                                <p class="upload-text">Click or drag screenshot here</p>
-                                <p class="upload-hint">Supports: Fitbit, Apple Health, Google Fit, Samsung Health, etc.</p>
-                                <button type="button" class="btn btn-secondary" onclick="document.getElementById('screenshotInput').click()">
-                                    Choose Screenshot
-                                </button>
+                    <div id="screenshotForm" class="steps-form" style="display: none;" hidden>
+                        <input type="file" id="screenshotInput" accept="image/*" style="display: none;" disabled>
+                        <div id="uploadArea" style="display:none"></div>
+                        <div id="imagePreview" style="display:none">
+                            <img id="previewImage" alt="">
+                            <button type="button" id="removeImageBtn">Remove</button>
+                        </div>
+                        <div id="ocrProcessing" style="display:none"></div>
+                        <div id="extractedResult" style="display:none">
+                            <span id="extractedSteps">0</span>
+                            <button type="button" id="editStepsBtn">Edit</button>
+                            <button type="button" id="confirmStepsBtn">Confirm</button>
+                            <div id="editStepsInput" style="display:none">
+                                <input type="number" id="editedSteps">
+                                <button type="button" id="saveEditedStepsBtn">Save</button>
                             </div>
-                        </div>
-                        
-                        <!-- Image Preview -->
-                        <div id="imagePreview" class="image-preview" style="display: none;">
-                            <img id="previewImage" src="" alt="Screenshot preview">
-                            <button type="button" class="btn btn-secondary" id="removeImageBtn">Remove</button>
-                        </div>
-
-                        <!-- OCR Processing -->
-                        <div id="ocrProcessing" class="ocr-processing" style="display: none;">
-                            <div class="spinner"></div>
-                            <p>Analyzing screenshot... Please wait</p>
-                        </div>
-
-                        <!-- Extracted Steps Result -->
-                        <div id="extractedResult" class="extracted-result" style="display: none;">
-                            <div class="result-card">
-                                <h4>&#128202; Detected Steps</h4>
-                                <div class="extracted-steps">
-                                    <span class="steps-value" id="extractedSteps">0</span>
-                                    <span class="steps-label">steps</span>
-                                </div>
-                                <div class="result-actions">
-                                    <button type="button" class="btn btn-secondary" id="editStepsBtn">Edit</button>
-                                    <button type="button" class="btn btn-primary" id="confirmStepsBtn">Confirm & Add</button>
-                                </div>
-                                <div id="editStepsInput" class="edit-input" style="display: none;">
-                                    <input type="number" id="editedSteps" placeholder="Enter correct steps" min="0">
-                                    <button type="button" class="btn btn-primary" id="saveEditedStepsBtn">Save</button>
-                                </div>
-                                <details class="debug-info" style="margin-top: 15px; text-align: left;">
-                                    <summary style="cursor: pointer; font-size: 0.85rem; opacity: 0.8;">&#128269; Debug Info (Click to view OCR text)</summary>
-                                    <div style="margin-top: 10px; font-size: 0.75rem; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 5px; max-height: 150px; overflow-y: auto;">
-                                        <strong>OCR Detected Text:</strong>
-                                        <pre id="debugOcrText" style="white-space: pre-wrap; word-break: break-all; margin-top: 5px; font-size: 0.7rem;"></pre>
-                                    </div>
-                                </details>
-                            </div>
+                            <pre id="debugOcrText" style="display:none"></pre>
                         </div>
                     </div>
 
@@ -421,8 +369,8 @@
                         <div class="step-counter-container">
                             <div class="step-counter-header-section">
                                 <div class="step-counter-icon">&#128694;</div>
-                                <h3>Live Step Counter</h3>
-                                <p class="step-counter-subtitle">Track your steps in real-time using your device's motion sensors</p>
+                                <h3>Live KM / Step Counter</h3>
+                                <p class="step-counter-subtitle">Count your walk/run in this app only — no manual entry or screenshots needed</p>
                             </div>
 
                             <!-- Main Counter Display -->
@@ -482,7 +430,7 @@
                             <div class="step-counter-actions-section">
                                 <button type="button" class="btn btn-success btn-large" id="saveCounterStepsBtn" style="display: none;">
                                     <span class="btn-icon">&#128190;</span>
-                                    <span class="btn-text">Save Steps & Update Leaderboard</span>
+                                    <span class="btn-text">Save KM & Update Leaderboard</span>
                                 </button>
                             </div>
 
@@ -587,7 +535,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-17-v19 | Fixed challenge dates + KM counter</p>
+            <p class="footer-subtext">Site version: 2026-07-17-v20 | App counter only</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#" id="footerHelpLink" class="help-link">&#10067; Need Help? Contact us at wow-csg@csgi.com</a>
@@ -621,15 +569,15 @@
                         <h3>&#10067; Frequently Asked Questions</h3>
                         <div class="faq-item">
                             <strong>Q: How do I add my steps?</strong>
-                            <p>A: You can add steps using three methods: Step Counter (real-time tracking), Manual Entry, or by uploading a screenshot from your fitness app.</p>
+                            <p>A: Use the in-app Live KM / Step Counter only. Start Counting, walk/run, then Save. Manual entry and screenshots are not used.</p>
                         </div>
                         <div class="faq-item">
                             <strong>Q: Do I need to provide a screenshot?</strong>
-                            <p>A: Screenshots are required for manual entry validation. However, if you use the Step Counter feature, screenshots are optional.</p>
+                            <p>A: No. All activity is tracked inside this app with the Live KM / Step Counter. Screenshots are not required.</p>
                         </div>
                         <div class="faq-item">
                             <strong>Q: How is my daily goal calculated?</strong>
-                            <p>A: This is a progressive 7-day challenge. Day 1 = 1 KM, Day 2 = 2 KM, ... up to Day 7 = 7 KM. For step tracking we use ~1,300 steps per KM (e.g. Day 3 goal ~ 3,900 steps). Complete your day's KM distance and log steps via counter, manual entry, or fitness-app screenshot.</p>
+                            <p>A: This is a progressive 7-day challenge. Day 1 = 1 KM, Day 2 = 2 KM, ... up to Day 7 = 7 KM. For step tracking we use ~1,300 steps per KM (e.g. Day 3 goal ~ 3,900 steps). Complete your day's KM distance using the in-app Live KM / Step Counter, then Save.</p>
                         </div>
                         <div class="faq-item">
                             <strong>Q: Who can join and how are winners chosen?</strong>
@@ -650,7 +598,6 @@
                         <ul class="help-tips">
                             <li>Use the Step Counter feature for real-time step tracking</li>
                             <li>Complete your daily KM goal as quickly as you can &mdash; shortest time wins that day</li>
-                            <li>Take screenshots of your fitness app to validate manual entries</li>
                             <li>Check the leaderboard regularly to see your progress</li>
                             <li>Maintain your daily streak by logging steps every day</li>
                             <li>Contact support if you encounter any technical issues</li>
@@ -684,10 +631,10 @@
                 });
                 if (window.caches && caches.keys) {
                     caches.keys().then((keys) => {
-                        keys.filter((k) => k !== 'wowcsg-fitness-v19').forEach((k) => caches.delete(k));
+                        keys.filter((k) => k !== 'wowcsg-fitness-v20').forEach((k) => caches.delete(k));
                     });
                 }
-                navigator.serviceWorker.register('./service-worker.js?v=19')
+                navigator.serviceWorker.register('./service-worker.js?v=20')
                     .then((registration) => {
                         console.log('Service Worker registered:', registration);
                         if (registration.waiting) {

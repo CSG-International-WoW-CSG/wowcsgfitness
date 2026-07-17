@@ -620,6 +620,9 @@ class StepathonApp {
  }
 
  switchInputMethod(method) {
+ // Challenge logging is app counter only
+ method = 'counter';
+
  document.querySelectorAll('.method-tab').forEach(tab => {
  tab.classList.remove('active');
  });
@@ -628,28 +631,17 @@ class StepathonApp {
  activeTab.classList.add('active');
  }
 
- // Hide all forms
  const addStepsForm = document.getElementById('addStepsForm');
  const screenshotForm = document.getElementById('screenshotForm');
  const stepCounterForm = document.getElementById('stepCounterForm');
- 
+ const methodTabs = document.querySelector('.input-method-tabs');
+
+ if (methodTabs) methodTabs.style.display = 'none';
  if (addStepsForm) addStepsForm.style.display = 'none';
  if (screenshotForm) screenshotForm.style.display = 'none';
- if (stepCounterForm) stepCounterForm.style.display = 'none';
-
- // Show the selected form
- if (method === 'counter') {
  if (stepCounterForm) {
  stepCounterForm.style.display = 'block';
- // Request permission when counter tab is opened
  this.requestMotionPermission();
- }
- } else if (method === 'manual') {
- if (addStepsForm) addStepsForm.style.display = 'block';
- this.resetScreenshotForm();
- } else if (method === 'screenshot') {
- if (screenshotForm) screenshotForm.style.display = 'block';
- this.resetScreenshotForm();
  }
  }
 
@@ -2884,150 +2876,8 @@ Please keep this information secure.`;
  }
 
  async addSteps() {
- if (!this.currentUser) return;
-
- // Check if challenge is still active
- if (!this.canLogSteps()) {
- const { endDate } = this.getChallengeBounds();
- alert(`The challenge has ended. New step entries are no longer being accepted.\n\nEnded on ${this.formatDate(endDate)}.`);
+ alert('Manual entry is disabled. Please use the Live KM / Step Counter in the app.');
  return;
- }
-
- const steps = parseInt(document.getElementById('stepsInput').value);
- if (isNaN(steps) || steps <= 0) {
- alert('Please enter a valid number of steps!');
- return;
- }
-
- // Check for screenshot (mandatory for manual entry, optional for step counter)
- const manualScreenshot = document.getElementById('manualScreenshot');
- let screenshotData = null;
- let file = null;
- let fromStepCounter = false;
-
- // Check if steps came from step counter (check if step counter was used)
- if (this.stepCounter.stepCount > 0 && parseInt(document.getElementById('stepsInput').value) === this.stepCounter.stepCount) {
- fromStepCounter = true;
- }
-
- // Check if screenshot is from OCR method (tempScreenshotFile) or manual upload
- if (this.tempScreenshotFile) {
- file = this.tempScreenshotFile;
- screenshotData = await this.convertFileToBase64(file);
- } else if (manualScreenshot && manualScreenshot.files.length > 0) {
- file = manualScreenshot.files[0];
- screenshotData = await this.convertFileToBase64(file);
- } else if (!fromStepCounter) {
- // Screenshot required for manual entry (not from step counter)
- alert('Please upload a screenshot for entry validation!');
- return;
- }
- // If fromStepCounter is true and no screenshot, proceed without screenshot
-
- const today = new Date().toDateString();
- const currentSteps = this.currentUser.dailySteps[today] || 0;
- this.currentUser.dailySteps[today] = currentSteps + steps;
- this.currentUser.totalSteps = (this.currentUser.totalSteps || 0) + steps;
- this.currentUser.lastActivity = new Date().toISOString();
-
- // Create step entry for admin validation
- const entryId = `ENTRY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
- const stepEntry = {
- id: entryId,
- userId: this.currentUser.id || this.currentUser.employeeId || 'unknown',
- userUid: this.currentUser.uid || null,
- userName: this.currentUser.name || 'Unknown User',
- userEmail: this.currentUser.email || this.currentUser.emailId || 'No email',
- steps: steps,
- screenshot: screenshotData,
- date: new Date().toISOString(),
- status: 'pending', // pending, approved, rejected
- validatedBy: null,
- validatedAt: null,
- lastModifiedBy: null,
- lastModifiedAt: null,
- notes: null,
- source: fromStepCounter ? 'step-counter' : 'manual',
- season: this.dataSeason
- };
-
- // Ensure stepEntries is initialized
- if (!this.stepEntries || !Array.isArray(this.stepEntries)) {
- console.warn('stepEntries not initialized in addSteps, loading from localStorage...');
- this.stepEntries = this.loadStepEntries();
- }
- 
- this.stepEntries.unshift(stepEntry);
- 
- console.log('=== Entry Creation (addSteps) ===');
- console.log('Entry created:', stepEntry);
- console.log('Total entries before save:', this.stepEntries.length);
- 
- this.saveStepEntries();
- this.upsertStepEntryInFirebase(stepEntry);
- 
- // Verify save immediately
- const verify = this.loadStepEntries();
- console.log('Verification - Entries in localStorage after save:', verify.length);
- console.log('Verification - Latest entry ID:', verify.length > 0 ? verify[0].id : 'none');
- 
- if (verify.length === 0) {
- console.error('ERROR: Entry was not saved to localStorage! Attempting manual save...');
- // Try manual save
- try {
- const storageKey = this.firebaseEnabled ? 'stepEntries_cache' : 'stepEntries';
- localStorage.setItem(storageKey, JSON.stringify([stepEntry]));
- console.log('Manual save attempted');
- } catch (e) {
- console.error('Manual save also failed:', e);
- alert('CRITICAL: Entry could not be saved to localStorage! Please check browser settings.');
- }
- }
-
- // Add activity
- const activityMessage = fromStepCounter 
- ? `Counted ${steps.toLocaleString()} steps using step counter (Pending validation)`
- : `Added ${steps.toLocaleString()} steps (Pending validation)`;
- 
- this.currentUser.activities.unshift({
- date: new Date().toISOString(),
- steps: steps,
- message: activityMessage,
- entryId: entryId
- });
-
- // Keep only last 20 activities
- if (this.currentUser.activities.length > 20) {
- this.currentUser.activities = this.currentUser.activities.slice(0, 20);
- }
-
- // Update streak
- this.currentUser.streak = this.calculateStreak(this.currentUser);
-
- // Save
- const index = this.participants.findIndex(p => p.name === this.currentUser.name);
- if (index !== -1) {
- this.participants[index] = this.currentUser;
- }
-
- localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
- this.saveParticipantsCache();
- this.syncParticipantToFirebase(this.currentUser);
-
- document.getElementById('stepsInput').value = '';
- this.resetManualScreenshot();
- 
- // Reset step counter if it was used
- if (fromStepCounter) {
- this.resetStepCounter();
- this.hideStepCounterPanel();
- }
- 
- // Show success animation
- this.showSuccessAnimation(steps);
- 
- this.updateDashboard();
- this.updateLeaderboard();
  }
 
  convertFileToBase64(file) {
@@ -5283,18 +5133,8 @@ Please keep this information secure.`;
  return;
  }
 
- // Screenshot is optional for step counter entries
- const manualScreenshot = document.getElementById('manualScreenshot');
- let screenshotData = null;
-
- // Check if screenshot was already uploaded (optional)
- if (manualScreenshot && manualScreenshot.files.length > 0) {
- const file = manualScreenshot.files[0];
- screenshotData = await this.convertFileToBase64(file);
- }
-
- // Save steps (screenshot is optional for step counter)
- await this.saveStepsWithScreenshot(steps, screenshotData, true);
+ // App counter only — no screenshots / manual entry
+ await this.saveStepsWithScreenshot(steps, null, true);
  }
 
  async saveStepsWithScreenshot(steps, screenshotData, fromStepCounter = false) {
@@ -5315,13 +5155,13 @@ Please keep this information secure.`;
  steps: steps,
  screenshot: screenshotData, // Optional for step counter
  date: new Date().toISOString(),
- status: 'pending', // Always pending for admin validation
- validatedBy: null,
- validatedAt: null,
+ status: fromStepCounter ? 'approved' : 'pending',
+ validatedBy: fromStepCounter ? 'App Counter' : null,
+ validatedAt: fromStepCounter ? new Date().toISOString() : null,
  lastModifiedBy: null,
  lastModifiedAt: null,
- notes: fromStepCounter ? 'Step counter entry - screenshot optional' : null,
- source: fromStepCounter ? 'step-counter' : 'manual', // Mark source
+ notes: fromStepCounter ? 'Recorded by in-app KM / step counter' : null,
+ source: fromStepCounter ? 'step-counter' : 'manual',
  season: this.dataSeason
  };
 
@@ -5393,11 +5233,12 @@ Please keep this information secure.`;
  this.stopTimer();
  
  // Clear screenshot input if it was used
- if (document.getElementById('manualScreenshot')) {
- document.getElementById('manualScreenshot').value = '';
- document.getElementById('manualImagePreview').style.display = 'none';
- document.getElementById('manualUploadArea').style.display = 'block';
- }
+ const manualShot = document.getElementById('manualScreenshot');
+ const manualPreview = document.getElementById('manualImagePreview');
+ const manualUpload = document.getElementById('manualUploadArea');
+ if (manualShot) manualShot.value = '';
+ if (manualPreview) manualPreview.style.display = 'none';
+ if (manualUpload) manualUpload.style.display = 'block';
  
  // Show success
  this.showCounterNotification(` ${steps.toLocaleString()} steps saved! Leaderboard updated.`);
@@ -5408,7 +5249,7 @@ Please keep this information secure.`;
  
  // Show success message
  setTimeout(() => {
- alert(`Steps saved successfully! \n\n${steps.toLocaleString()} steps have been added to your account.\n\nYour leaderboard position has been updated.\n\nNote: Entry is pending admin validation. Once approved, it will be confirmed in the system.`);
+ alert(`Saved successfully!\n\n${steps.toLocaleString()} steps (~${(steps / (this.challengeConfig.stepsPerKm || 1300)).toFixed(2)} KM) added from the in-app counter.\n\nYour leaderboard has been updated.`);
  }, 500);
  }
 
