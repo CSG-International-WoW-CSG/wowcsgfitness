@@ -1306,7 +1306,7 @@ class StepathonApp {
  The <strong>WOW-CSG 7 Days Fitness Challenge</strong> runs from <strong>${this.formatDate(startDate)}</strong> to <strong>${this.formatDate(endDate)}</strong>.
  </p>
  <p style="margin: 0; font-size: 0.95rem; opacity: 0.9;">
- Register now | Day 1 = 1 KM | Build up to 7 KM | One winner every day!
+ Register now | Day 1 = 1 KM | Build up to 7 KM | Fastest finisher wins each day!
  </p>
  </div>`;
  } else {

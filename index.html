@@ -16,7 +16,7 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="apple-touch-icon" href="favicon.svg">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="ui-refresh.css?v=11">
+    <link rel="stylesheet" href="ui-refresh.css?v=12">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <!-- Microsoft Teams SDK (optional, only loads if in Teams) -->
     <script src="https://statics.teams.cdn.office.net/sdk/v1.11.0/js/MicrosoftTeams.min.js" crossorigin="anonymous"></script>
@@ -49,9 +49,10 @@
                 <h2>Step Together. Thrive Together.</h2>
                 <p>
                     A progressive walk/run challenge for all CSG employees &mdash; start at 1 KM and build to 7 KM.
-                    One winner every day. Move more, connect more, finish stronger.
+                    One winner every day: whoever completes that day's challenge in the shortest time wins.
+                    Move more, connect more, finish stronger.
                 </p>
-                <span class="band-dates">26 July &ndash; 1 August 2026 &middot; 7 Days &middot; 7 Winners</span>
+                <span class="band-dates">26 July &ndash; 1 August 2026 &middot; 7 Days &middot; Fastest Finisher Wins</span>
             </div>
             <div class="challenge-band-meta">
                 <div class="meta-row">
@@ -132,7 +133,7 @@
                     <span>|</span>
                     <span>Open to All CSG Employees</span>
                     <span>|</span>
-                    <span>7 Winners - One Winner Every Day!</span>
+                    <span>Daily winner = shortest completion time</span>
                 </div>
             </div>
 
@@ -159,9 +160,9 @@
                     <div class="value-prop"><span class="vp-icon">&#128095;</span><strong>Walk More</strong><span>Move more, feel more!</span></div>
                     <div class="value-prop"><span class="vp-icon">&#10084;&#65039;</span><strong>Stay Healthy</strong><span>Better health, better you!</span></div>
                     <div class="value-prop"><span class="vp-icon">&#129309;</span><strong>Build Connections</strong><span>Stronger together, every step!</span></div>
-                    <div class="value-prop"><span class="vp-icon">&#127942;</span><strong>Win Together</strong><span>Great prizes, big smiles!</span></div>
+                    <div class="value-prop"><span class="vp-icon">&#127942;</span><strong>Win Together</strong><span>Shortest time wins each day!</span></div>
                 </div>
-                <p class="challenge-quote">EVERY STEP COUNTS! Whether you're a casual walker or a fitness enthusiast - move more, have fun, and support one another.</p>
+                <p class="challenge-quote">EVERY STEP COUNTS! Complete your daily KM goal in the shortest time to win that day. Move more, have fun, and support one another.</p>
             </div>
 
             <!-- Login Section -->
@@ -585,7 +586,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-17-v11 | Colorful product UI</p>
+            <p class="footer-subtext">Site version: 2026-07-17-v12 | Shortest-time winner rule</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#" id="footerHelpLink" class="help-link">&#10067; Need Help? Contact us at wow-csg@csgi.com</a>
@@ -631,7 +632,7 @@
                         </div>
                         <div class="faq-item">
                             <strong>Q: Who can join and how are winners chosen?</strong>
-                            <p>A: Open to all CSG employees. There are 7 winners - one winner every day of the challenge (26 July - 1 August).</p>
+                            <p>A: Open to all CSG employees. There are 7 winners &mdash; one every day (26 July &ndash; 1 August). Whoever completes that day's KM challenge in the shortest time is the winner.</p>
                         </div>
                         <div class="faq-item">
                             <strong>Q: What if I forgot my password?</strong>
@@ -647,6 +648,7 @@
                         <h3>&#128161; Tips</h3>
                         <ul class="help-tips">
                             <li>Use the Step Counter feature for real-time step tracking</li>
+                            <li>Complete your daily KM goal as quickly as you can &mdash; shortest time wins that day</li>
                             <li>Take screenshots of your fitness app to validate manual entries</li>
                             <li>Check the leaderboard regularly to see your progress</li>
                             <li>Maintain your daily streak by logging steps every day</li>
@@ -681,10 +683,10 @@
                 });
                 if (window.caches && caches.keys) {
                     caches.keys().then((keys) => {
-                        keys.filter((k) => k !== 'wowcsg-fitness-v11').forEach((k) => caches.delete(k));
+                        keys.filter((k) => k !== 'wowcsg-fitness-v12').forEach((k) => caches.delete(k));
                     });
                 }
-                navigator.serviceWorker.register('./service-worker.js?v=11')
+                navigator.serviceWorker.register('./service-worker.js?v=12')
                     .then((registration) => {
                         console.log('Service Worker registered:', registration);
                         if (registration.waiting) {
