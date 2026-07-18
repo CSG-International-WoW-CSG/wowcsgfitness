@@ -1,6 +1,6 @@
 ﻿// Service Worker for WOW-CSG 7 Days Fitness Challenge
 // Bump CACHE_NAME whenever HTML/JS content changes so clients drop stale pages.
-const CACHE_NAME = 'wowcsg-fitness-v29';
+const CACHE_NAME = 'wowcsg-fitness-v30';
 const urlsToCache = [
   './styles.css',
   './ui-refresh.css',
@@ -9,6 +9,38 @@ const urlsToCache = [
   './brand-mark.svg',
   './CSG_Logo_K_outline.jpg'
 ];
+
+let trackingHeartbeatId = null;
+
+function stopTrackingHeartbeat() {
+  if (trackingHeartbeatId) {
+    clearInterval(trackingHeartbeatId);
+    trackingHeartbeatId = null;
+  }
+}
+
+function startTrackingHeartbeat() {
+  stopTrackingHeartbeat();
+  // Ping open pages so GPS can keep sampling while phone is locked (best-effort).
+  trackingHeartbeatId = setInterval(() => {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      clients.forEach((client) => {
+        client.postMessage({ type: 'TRACKING_TICK', t: Date.now() });
+      });
+    });
+  }, 2500);
+}
+
+self.addEventListener('message', (event) => {
+  const data = event.data || {};
+  if (data.type === 'TRACKING_START') {
+    startTrackingHeartbeat();
+  } else if (data.type === 'TRACKING_STOP') {
+    stopTrackingHeartbeat();
+  } else if (data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -79,4 +111,3 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
-
