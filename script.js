@@ -67,7 +67,11 @@ class StepathonApp {
  watchId: null,
  lastPosition: null,
  gpsReady: false,
- wakeLock: null
+ wakeLock: null,
+ trackingMode: 'outdoor', // 'outdoor' | 'treadmill'
+ treadmillSpeedKmh: 5,
+ treadmillDistanceKm: 0,
+ lastTreadmillTickAt: null
  };
 
  this.activityMap = null;
@@ -524,6 +528,35 @@ class StepathonApp {
  bodyWeightInput.addEventListener('input', () => {
  this.updateStepCounterDisplay();
  });
+ }
+
+ document.querySelectorAll('.mode-btn').forEach((btn) => {
+ btn.addEventListener('click', () => {
+ this.setTrackingMode(btn.dataset.mode);
+ });
+ });
+
+ const treadmillSpeedInput = document.getElementById('treadmillSpeedKmh');
+ if (treadmillSpeedInput) {
+ const savedSpeed = parseFloat(localStorage.getItem('treadmillSpeedKmh') || '');
+ if (Number.isFinite(savedSpeed) && savedSpeed >= 1 && savedSpeed <= 25) {
+ treadmillSpeedInput.value = String(savedSpeed);
+ this.stepCounter.treadmillSpeedKmh = savedSpeed;
+ }
+ const syncSpeed = () => {
+ const speed = this.getTreadmillSpeedKmh();
+ this.stepCounter.treadmillSpeedKmh = speed;
+ localStorage.setItem('treadmillSpeedKmh', String(speed));
+ };
+ treadmillSpeedInput.addEventListener('change', syncSpeed);
+ treadmillSpeedInput.addEventListener('input', syncSpeed);
+ }
+
+ const savedMode = localStorage.getItem('trackingMode');
+ if (savedMode === 'treadmill' || savedMode === 'outdoor') {
+ this.setTrackingMode(savedMode, true);
+ } else {
+ this.setTrackingMode('outdoor', true);
  }
 
  // Method tabs (only if exists - not on admin page)
@@ -5010,6 +5043,8 @@ Please keep this information secure.`;
  initializeStepCounter() {
  if (this.stepCounter.isRunning) return;
 
+ const mode = this.getTrackingMode();
+ this.stepCounter.trackingMode = mode;
  this.stepCounter.isRunning = true;
  this.stepCounter.startTime = Date.now();
  this.stepCounter.lastAcceleration = { x: 0, y: 0, z: 0 };
@@ -5019,13 +5054,33 @@ Please keep this information secure.`;
  this.stepCounter.path = [];
  this.stepCounter.lastPosition = null;
  this.stepCounter.stepCount = 0;
+ this.stepCounter.treadmillDistanceKm = 0;
+ this.stepCounter.lastTreadmillTickAt = Date.now();
+ this.stepCounter.treadmillSpeedKmh = this.getTreadmillSpeedKmh();
+
+ // Treadmill: slightly more sensitive motion thresholds (phone in pocket / on arm)
+ if (mode === 'treadmill') {
+ this.stepCounter.threshold = 0.85;
+ this.stepCounter.minVerticalChange = 0.45;
+ } else {
+ this.stepCounter.threshold = 1.2;
+ this.stepCounter.minVerticalChange = 0.8;
+ }
 
  this.bindMotionListener();
  this.applyRunningActivityUi();
+
+ if (mode === 'treadmill') {
+ this.updateCounterStatus('Treadmill mode — distance from speed x time + step backup.');
+ this.updateCounterHint('Match treadmill speed on the display. Keep the phone on your body for step backup.');
+ this.showCounterNotification('Treadmill tracking started. Set speed to match your machine.');
+ } else {
  this.updateCounterStatus('Tracking your route — works with screen off when possible.');
  this.updateCounterHint('Keep the app open (Home Screen recommended). Tracking continues while locked when the OS allows.');
+ this.showCounterNotification('Activity started. Tracking continues while the phone is locked.');
+ }
+
  this.startTimer(false);
- this.initActivityMap();
  this.setupActivityKeepAlive();
  this.setupServiceWorkerTrackingBridge();
  this.notifyServiceWorkerTracking(true);
@@ -5033,13 +5088,106 @@ Please keep this information secure.`;
  this.startSilentAudioKeepAlive();
  this.startHtmlAudioKeepAlive();
  this.startKeepAwakeFallback();
+
+ if (mode === 'outdoor') {
+ this.initActivityMap();
  this.startGpsTracking();
  this.startBackgroundGpsPoll();
+ } else {
+ this.stopGpsTracking();
+ this.stopBackgroundGpsPoll();
+ }
+
  this.startWakeLockWatchdog();
  this.updateStepCounterDisplay();
  this.persistActivitySession(true);
- this.showCounterNotification('Activity started. Tracking continues while the phone is locked.');
  this.updateWakeLockUi();
+ this.applyTrackingModeUi();
+ }
+
+ getTrackingMode() {
+ const active = document.querySelector('.mode-btn.active');
+ if (active && active.dataset.mode) return active.dataset.mode;
+ return this.stepCounter.trackingMode || 'outdoor';
+ }
+
+ getTreadmillSpeedKmh() {
+ const input = document.getElementById('treadmillSpeedKmh');
+ const fromInput = input ? parseFloat(input.value) : NaN;
+ if (Number.isFinite(fromInput) && fromInput >= 1 && fromInput <= 25) {
+ return fromInput;
+ }
+ const stored = parseFloat(localStorage.getItem('treadmillSpeedKmh') || '');
+ if (Number.isFinite(stored) && stored >= 1 && stored <= 25) return stored;
+ return this.stepCounter.treadmillSpeedKmh || 5;
+ }
+
+ setTrackingMode(mode, silent = false) {
+ if (mode !== 'outdoor' && mode !== 'treadmill') mode = 'outdoor';
+ if (this.stepCounter.isRunning && this.stepCounter.trackingMode !== mode) {
+ if (!silent) {
+ alert('Stop the current activity before switching Outdoor / Treadmill mode.');
+ }
+ // Re-sync button active state to current mode
+ mode = this.stepCounter.trackingMode || 'outdoor';
+ }
+
+ this.stepCounter.trackingMode = mode;
+ localStorage.setItem('trackingMode', mode);
+ document.querySelectorAll('.mode-btn').forEach((btn) => {
+ btn.classList.toggle('active', btn.dataset.mode === mode);
+ });
+ this.applyTrackingModeUi();
+ }
+
+ applyTrackingModeUi() {
+ const mode = this.stepCounter.trackingMode || this.getTrackingMode();
+ const speedRow = document.getElementById('treadmillSpeedRow');
+ const mapWrap = document.getElementById('activityMapWrap');
+ const distLabel = document.getElementById('distanceStatLabel');
+ const modeRow = document.getElementById('activityModeRow');
+
+ if (speedRow) speedRow.style.display = mode === 'treadmill' ? 'flex' : 'none';
+ if (mapWrap) {
+ mapWrap.style.display = mode === 'treadmill' ? 'none' : 'block';
+ }
+ if (distLabel) {
+ distLabel.textContent = mode === 'treadmill' ? 'Treadmill distance' : 'GPS distance';
+ }
+ if (modeRow) {
+ modeRow.classList.toggle('is-locked', !!this.stepCounter.isRunning);
+ }
+ }
+
+ accumulateTreadmillDistance() {
+ if (!this.stepCounter.isRunning || this.stepCounter.trackingMode !== 'treadmill') return;
+ const now = Date.now();
+ const last = this.stepCounter.lastTreadmillTickAt || now;
+ const dtSec = Math.max(0, (now - last) / 1000);
+ this.stepCounter.lastTreadmillTickAt = now;
+ if (dtSec <= 0 || dtSec > 30) return; // ignore huge gaps after deep sleep (catch-up below)
+ const speed = this.getTreadmillSpeedKmh();
+ this.stepCounter.treadmillSpeedKmh = speed;
+ this.stepCounter.treadmillDistanceKm += (speed / 3600) * dtSec;
+ }
+
+ /** After unlock in treadmill mode, credit missed time at current speed (capped) */
+ catchUpTreadmillAfterUnlock() {
+ if (!this.stepCounter.isRunning || this.stepCounter.trackingMode !== 'treadmill') return;
+ const now = Date.now();
+ const last = this.stepCounter.lastTreadmillTickAt || this.stepCounter.startTime || now;
+ const dtSec = Math.max(0, (now - last) / 1000);
+ // Cap catch-up at 2 hours to avoid absurd values if session was abandoned
+ const creditSec = Math.min(dtSec, 2 * 3600);
+ if (creditSec < 2) {
+ this.stepCounter.lastTreadmillTickAt = now;
+ return;
+ }
+ const speed = this.getTreadmillSpeedKmh();
+ this.stepCounter.treadmillDistanceKm += (speed / 3600) * creditSec;
+ this.stepCounter.lastTreadmillTickAt = now;
+ this.updateStepCounterDisplay();
+ this.persistActivitySession(true);
  }
 
  bindMotionListener() {
@@ -5099,6 +5247,10 @@ Please keep this information secure.`;
  startTime: this.stepCounter.startTime,
  stepCount: this.stepCounter.stepCount || 0,
  distanceKm: this.stepCounter.distanceKm || 0,
+ treadmillDistanceKm: this.stepCounter.treadmillDistanceKm || 0,
+ treadmillSpeedKmh: this.stepCounter.treadmillSpeedKmh || this.getTreadmillSpeedKmh(),
+ trackingMode: this.stepCounter.trackingMode || 'outdoor',
+ lastTreadmillTickAt: this.stepCounter.lastTreadmillTickAt || null,
  path,
  lastPosition: this.stepCounter.lastPosition || null,
  savedAt: now
@@ -5156,12 +5308,30 @@ Please keep this information secure.`;
  this.stepCounter.startTime = data.startTime;
  this.stepCounter.stepCount = data.stepCount || 0;
  this.stepCounter.distanceKm = Number(data.distanceKm) || 0;
+ this.stepCounter.treadmillDistanceKm = Number(data.treadmillDistanceKm) || 0;
+ this.stepCounter.treadmillSpeedKmh = Number(data.treadmillSpeedKmh) || this.getTreadmillSpeedKmh();
+ this.stepCounter.trackingMode = data.trackingMode === 'treadmill' ? 'treadmill' : 'outdoor';
+ this.stepCounter.lastTreadmillTickAt = data.lastTreadmillTickAt || data.savedAt || Date.now();
  this.stepCounter.path = Array.isArray(data.path) ? data.path : [];
  this.stepCounter.lastPosition = data.lastPosition || null;
  this.stepCounter.stepHistory = [];
  this.stepCounter.accelerationHistory = [];
  this.stepCounter.lastAcceleration = { x: 0, y: 0, z: 0 };
  this.stepCounter.gpsReady = (this.stepCounter.path || []).length > 0;
+
+ if (this.stepCounter.trackingMode === 'treadmill') {
+ this.stepCounter.threshold = 0.85;
+ this.stepCounter.minVerticalChange = 0.45;
+ } else {
+ this.stepCounter.threshold = 1.2;
+ this.stepCounter.minVerticalChange = 0.8;
+ }
+
+ this.setTrackingMode(this.stepCounter.trackingMode, true);
+ const speedInput = document.getElementById('treadmillSpeedKmh');
+ if (speedInput && this.stepCounter.treadmillSpeedKmh) {
+ speedInput.value = String(this.stepCounter.treadmillSpeedKmh);
+ }
 
  this.bindMotionListener();
  this.applyRunningActivityUi();
@@ -5196,10 +5366,17 @@ Please keep this information secure.`;
  this.startSilentAudioKeepAlive();
  this.startHtmlAudioKeepAlive();
  this.startKeepAwakeFallback();
+ if (this.stepCounter.trackingMode === 'outdoor') {
  this.startGpsTracking();
  this.startBackgroundGpsPoll();
+ } else {
+ this.stopGpsTracking();
+ this.stopBackgroundGpsPoll();
+ this.catchUpTreadmillAfterUnlock();
+ }
  this.startWakeLockWatchdog();
  this.applyRunningActivityUi();
+ this.applyTrackingModeUi();
  this.updateStepCounterDisplay();
  this.persistActivitySession(true);
  this.updateWakeLockUi();
@@ -5270,9 +5447,9 @@ Please keep this information secure.`;
  ? now - this.stepCounter.stepHistory[this.stepCounter.stepHistory.length - 1]
  : 1000;
 
- // Minimum 400ms between steps (prevents false positives from hand movements)
- // Average walking pace is about 2 steps per second (500ms per step)
- if (timeSinceLastStep > 400) {
+ // Minimum gap between steps (treadmill cadence can be faster when jogging)
+ const minStepGapMs = this.stepCounter.trackingMode === 'treadmill' ? 280 : 400;
+ if (timeSinceLastStep > minStepGapMs) {
  this.stepCounter.stepCount++;
  this.stepCounter.stepHistory.push(now);
  
@@ -5349,6 +5526,8 @@ Please keep this information secure.`;
  this.stepCounter.accelerationHistory = [];
  this.stepCounter.startTime = null;
  this.stepCounter.distanceKm = 0;
+ this.stepCounter.treadmillDistanceKm = 0;
+ this.stepCounter.lastTreadmillTickAt = null;
  this.stepCounter.path = [];
  this.stepCounter.lastPosition = null;
  this.stepCounter.gpsReady = false;
@@ -5374,8 +5553,16 @@ Please keep this information secure.`;
  }
 
  getTrackedDistanceKm() {
- const gpsKm = this.stepCounter.distanceKm || 0;
+ const mode = this.stepCounter.trackingMode || 'outdoor';
  const stepKm = (this.stepCounter.stepCount || 0) / (this.challengeConfig.stepsPerKm || 1300);
+
+ if (mode === 'treadmill') {
+ const speedKm = this.stepCounter.treadmillDistanceKm || 0;
+ // Prefer treadmill speed×time; use steps if somehow higher (phone-only fallback)
+ return Math.max(speedKm, stepKm);
+ }
+
+ const gpsKm = this.stepCounter.distanceKm || 0;
  // Prefer GPS when we have a real track; otherwise fall back to step estimate
  if ((this.stepCounter.path || []).length >= 2 && gpsKm > 0) {
  return gpsKm;
@@ -5592,8 +5779,12 @@ Please keep this information secure.`;
  }
 
  // Visible again after unlock — reinstate timers/GPS + catch up missed distance
- this.ensureActivityRuntimeAlive('Lock-screen tracking active. Distance updates while locked when the OS allows.');
+ this.ensureActivityRuntimeAlive('Tracking active again after unlock.');
+ if (this.stepCounter.trackingMode === 'outdoor') {
  this.catchUpGpsAfterUnlock();
+ } else {
+ this.catchUpTreadmillAfterUnlock();
+ }
  }
 
  startBackgroundGpsPoll() {
@@ -5647,7 +5838,12 @@ Please keep this information secure.`;
  this.startSilentAudioKeepAlive();
  this.startHtmlAudioKeepAlive();
  this.startKeepAwakeFallback();
+ if (this.stepCounter.trackingMode === 'outdoor') {
  this.pollGpsOnce(document.visibilityState !== 'visible');
+ } else {
+ this.accumulateTreadmillDistance();
+ this.updateStepCounterDisplay();
+ }
  this.persistActivitySession(false);
  if (document.visibilityState === 'visible') {
  this.requestWakeLock();
@@ -5720,6 +5916,10 @@ Please keep this information secure.`;
  this.persistActivitySession(false);
  this.startHtmlAudioKeepAlive();
  this.startSilentAudioKeepAlive();
+ if (this.stepCounter.trackingMode === 'treadmill') {
+ this.accumulateTreadmillDistance();
+ this.updateStepCounterDisplay();
+ }
  });
  }
 
@@ -5989,7 +6189,11 @@ Please keep this information secure.`;
 
  const gpsDistanceLabel = document.getElementById('gpsDistanceLabel');
  if (gpsDistanceLabel) {
- gpsDistanceLabel.textContent = `${(this.stepCounter.distanceKm || 0).toFixed(2)} KM`;
+ const mode = this.stepCounter.trackingMode || 'outdoor';
+ const shown = mode === 'treadmill'
+ ? (this.stepCounter.treadmillDistanceKm || distance)
+ : (this.stepCounter.distanceKm || distance);
+ gpsDistanceLabel.textContent = `${Number(shown).toFixed(2)} KM`;
  }
  const gpsCaloriesLabel = document.getElementById('gpsCaloriesLabel');
  if (gpsCaloriesLabel) {
@@ -6052,6 +6256,7 @@ Please keep this information secure.`;
  if (timerValue) {
  timerValue.textContent = timeStr;
  }
+ this.accumulateTreadmillDistance();
  // Refresh calorie estimate as duration changes
  this.updateStepCounterDisplay();
  if (elapsed > 0 && elapsed % 5 === 0) {
@@ -6130,13 +6335,17 @@ Please keep this information secure.`;
  return;
  }
 
+ this.accumulateTreadmillDistance();
  const distanceKm = this.getTrackedDistanceKm();
  const motionSteps = this.stepCounter.stepCount || 0;
- const gpsSteps = Math.round(distanceKm * (this.challengeConfig.stepsPerKm || 1300));
- const steps = Math.max(motionSteps, gpsSteps);
+ const estimatedSteps = Math.round(distanceKm * (this.challengeConfig.stepsPerKm || 1300));
+ const steps = Math.max(motionSteps, estimatedSteps);
+ const mode = this.stepCounter.trackingMode || 'outdoor';
 
  if (distanceKm <= 0 && steps <= 0) {
- alert('No distance recorded yet. Start Activity, move with GPS on, then Stop and Save.');
+ alert(mode === 'treadmill'
+ ? 'No treadmill distance yet. Set speed, Start Activity, walk/run, then Stop and Save.'
+ : 'No distance recorded yet. Start Activity, move with GPS on, then Stop and Save.');
  return;
  }
 
@@ -6147,10 +6356,12 @@ Please keep this information secure.`;
 
  await this.saveStepsWithScreenshot(steps, null, true, {
  distanceKm,
- path: (this.stepCounter.path || []).map((p) => ({ lat: p.lat, lng: p.lng, t: p.t })),
+ path: mode === 'treadmill' ? [] : (this.stepCounter.path || []).map((p) => ({ lat: p.lat, lng: p.lng, t: p.t })),
  durationSec,
  caloriesBurned,
- bodyWeightKg: this.getBodyWeightKg()
+ bodyWeightKg: this.getBodyWeightKg(),
+ trackingMode: mode,
+ treadmillSpeedKmh: mode === 'treadmill' ? this.getTreadmillSpeedKmh() : null
  });
  }
 
@@ -6227,9 +6438,15 @@ Please keep this information secure.`;
  lastModifiedBy: null,
  lastModifiedAt: null,
  notes: fromStepCounter
- ? `In-app GPS activity: ${distanceKm.toFixed(2)} KM - ${caloriesBurned} kcal`
+ ? ((trackMeta && trackMeta.trackingMode === 'treadmill')
+ ? `Treadmill activity: ${distanceKm.toFixed(2)} KM at ${trackMeta.treadmillSpeedKmh || '?'} km/h - ${caloriesBurned} kcal`
+ : `In-app GPS activity: ${distanceKm.toFixed(2)} KM - ${caloriesBurned} kcal`)
  : null,
- source: fromStepCounter ? 'gps-counter' : 'manual',
+ source: fromStepCounter
+ ? ((trackMeta && trackMeta.trackingMode === 'treadmill') ? 'treadmill-counter' : 'gps-counter')
+ : 'manual',
+ trackingMode: trackMeta && trackMeta.trackingMode ? trackMeta.trackingMode : (fromStepCounter ? 'outdoor' : null),
+ treadmillSpeedKmh: trackMeta && trackMeta.treadmillSpeedKmh ? trackMeta.treadmillSpeedKmh : null,
  season: this.dataSeason
  };
 
@@ -6266,8 +6483,9 @@ Please keep this information secure.`;
  }
  }
 
+ const modeLabel = trackMeta && trackMeta.trackingMode === 'treadmill' ? 'treadmill' : 'GPS';
  const activityMessage = fromStepCounter
- ? `Covered ${distanceKm.toFixed(2)} KM (${steps.toLocaleString()} steps) - burned ${caloriesBurned} kcal`
+ ? `Covered ${distanceKm.toFixed(2)} KM (${steps.toLocaleString()} steps) via ${modeLabel} - burned ${caloriesBurned} kcal`
  : `Added ${steps.toLocaleString()} steps - burned ${caloriesBurned} kcal`;
  
  this.currentUser.activities.unshift({
