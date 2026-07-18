@@ -79,6 +79,8 @@ class StepathonApp {
  this.silentOscillator = null;
  this.bgGpsPollId = null;
  this.wakeLockWatchdogId = null;
+ this.activitySessionKey = 'wowcsg_active_activity_v1';
+ this._lastActivityPersistAt = 0;
  
  // Timer properties
  this.timerInterval = null;
@@ -96,6 +98,7 @@ class StepathonApp {
  requestAnimationFrame(() => {
  // Check challenge status immediately on page load
  this.updateDates();
+ this.setupActivityKeepAlive();
  
  this.checkCurrentUser();
  // Defer heavy operations
@@ -2678,7 +2681,11 @@ Please keep this information secure.`;
  
  this.updateDashboard();
  this.switchInputMethod('counter');
- setTimeout(() => this.initActivityMap(), 250);
+ setTimeout(() => {
+ this.initActivityMap();
+ // Restore in-progress activity if the phone killed/reloaded the page while locked
+ this.tryRestoreActivitySession();
+ }, 250);
  }
 
  updateDashboard() {
@@ -4507,6 +4514,11 @@ Please keep this information secure.`;
  }
 
  logout() {
+ if (this.stepCounter.isRunning) {
+ this.stopStepCounter();
+ } else {
+ this.clearActivitySession();
+ }
  if (this.firebaseEnabled && this.auth) {
  this.auth.signOut().catch((error) => {
  console.warn('Firebase sign out failed:', error);
@@ -5004,31 +5016,13 @@ Please keep this information secure.`;
  this.stepCounter.distanceKm = 0;
  this.stepCounter.path = [];
  this.stepCounter.lastPosition = null;
+ this.stepCounter.stepCount = 0;
 
- // Motion steps are optional backup; GPS distance is primary
- if (typeof DeviceMotionEvent !== 'undefined') {
- this.boundHandleDeviceMotion = this.handleDeviceMotion.bind(this);
- window.addEventListener('devicemotion', this.boundHandleDeviceMotion);
- }
-
- // Update UI
- const startBtn = document.getElementById('startCounterBtn');
- const stopBtn = document.getElementById('stopCounterBtn');
- const saveBtn = document.getElementById('saveCounterStepsBtn');
- const timerEl = document.getElementById('counterTimer');
- const pulseEl = document.getElementById('counterPulse');
- const valueEl = document.getElementById('liveKmCount');
- 
- if (startBtn) startBtn.style.display = 'none';
- if (stopBtn) stopBtn.style.display = 'inline-block';
- if (saveBtn) saveBtn.style.display = 'none';
- if (timerEl) timerEl.style.display = 'flex';
- if (pulseEl) pulseEl.classList.add('active');
- if (valueEl) valueEl.classList.add('active');
- 
+ this.bindMotionListener();
+ this.applyRunningActivityUi();
  this.updateCounterStatus('Tracking your route — works with screen off when possible.');
- this.updateCounterHint('Silent keep-alive + GPS polling stay active if the phone locks. Allow location always if asked.');
- this.startTimer();
+ this.updateCounterHint('If the phone locks, your activity is saved and resumes when you return.');
+ this.startTimer(false);
  this.initActivityMap();
  this.setupActivityKeepAlive();
  this.requestWakeLock();
@@ -5037,8 +5031,172 @@ Please keep this information secure.`;
  this.startBackgroundGpsPoll();
  this.startWakeLockWatchdog();
  this.updateStepCounterDisplay();
- this.showCounterNotification('Activity started. Tracking continues even if the screen turns off.');
+ this.persistActivitySession(true);
+ this.showCounterNotification('Activity started. Progress is saved if the phone locks.');
  this.updateWakeLockUi();
+ }
+
+ bindMotionListener() {
+ if (typeof DeviceMotionEvent === 'undefined') return;
+ if (!this.boundHandleDeviceMotion) {
+ this.boundHandleDeviceMotion = this.handleDeviceMotion.bind(this);
+ }
+ window.removeEventListener('devicemotion', this.boundHandleDeviceMotion);
+ window.addEventListener('devicemotion', this.boundHandleDeviceMotion);
+ }
+
+ applyRunningActivityUi() {
+ const startBtn = document.getElementById('startCounterBtn');
+ const stopBtn = document.getElementById('stopCounterBtn');
+ const saveBtn = document.getElementById('saveCounterStepsBtn');
+ const timerEl = document.getElementById('counterTimer');
+ const pulseEl = document.getElementById('counterPulse');
+ const valueEl = document.getElementById('liveKmCount');
+
+ if (startBtn) startBtn.style.display = 'none';
+ if (stopBtn) stopBtn.style.display = 'inline-block';
+ if (saveBtn) saveBtn.style.display = 'none';
+ if (timerEl) timerEl.style.display = 'flex';
+ if (pulseEl) pulseEl.classList.add('active');
+ if (valueEl) valueEl.classList.add('active');
+ }
+
+ getActivitySessionUserKey() {
+ if (!this.currentUser) return null;
+ return this.currentUser.uid
+ || this.currentUser.id
+ || this.currentUser.employeeId
+ || this.currentUser.email
+ || this.currentUser.name
+ || null;
+ }
+
+ persistActivitySession(force = false) {
+ try {
+ if (!this.stepCounter.isRunning) return;
+ const now = Date.now();
+ if (!force && now - (this._lastActivityPersistAt || 0) < 2000) return;
+ this._lastActivityPersistAt = now;
+
+ const userKey = this.getActivitySessionUserKey();
+ if (!userKey) return;
+
+ const path = (this.stepCounter.path || []).slice(-250).map((p) => ({
+ lat: p.lat,
+ lng: p.lng,
+ t: p.t
+ }));
+ const payload = {
+ version: 1,
+ isRunning: true,
+ userKey,
+ startTime: this.stepCounter.startTime,
+ stepCount: this.stepCounter.stepCount || 0,
+ distanceKm: this.stepCounter.distanceKm || 0,
+ path,
+ lastPosition: this.stepCounter.lastPosition || null,
+ savedAt: now
+ };
+ localStorage.setItem(this.activitySessionKey, JSON.stringify(payload));
+ } catch (error) {
+ console.warn('Could not persist activity session:', error);
+ }
+ }
+
+ loadActivitySession() {
+ try {
+ const raw = localStorage.getItem(this.activitySessionKey);
+ if (!raw) return null;
+ const data = JSON.parse(raw);
+ if (!data || !data.isRunning || !data.startTime) return null;
+ return data;
+ } catch (error) {
+ console.warn('Could not load activity session:', error);
+ return null;
+ }
+ }
+
+ clearActivitySession() {
+ try {
+ localStorage.removeItem(this.activitySessionKey);
+ } catch (error) {
+ console.warn('Could not clear activity session:', error);
+ }
+ }
+
+ tryRestoreActivitySession() {
+ if (window.location.pathname.includes('admin.html')) return false;
+
+ if (this.stepCounter.isRunning) {
+ this.ensureActivityRuntimeAlive('Activity still running after unlock.');
+ return true;
+ }
+
+ const data = this.loadActivitySession();
+ if (!data) return false;
+
+ const maxAgeMs = 8 * 60 * 60 * 1000;
+ if (!data.savedAt || (Date.now() - data.savedAt) > maxAgeMs) {
+ this.clearActivitySession();
+ return false;
+ }
+
+ const userKey = this.getActivitySessionUserKey();
+ if (userKey && data.userKey && data.userKey !== userKey) {
+ return false;
+ }
+
+ this.stepCounter.isRunning = true;
+ this.stepCounter.startTime = data.startTime;
+ this.stepCounter.stepCount = data.stepCount || 0;
+ this.stepCounter.distanceKm = Number(data.distanceKm) || 0;
+ this.stepCounter.path = Array.isArray(data.path) ? data.path : [];
+ this.stepCounter.lastPosition = data.lastPosition || null;
+ this.stepCounter.stepHistory = [];
+ this.stepCounter.accelerationHistory = [];
+ this.stepCounter.lastAcceleration = { x: 0, y: 0, z: 0 };
+ this.stepCounter.gpsReady = (this.stepCounter.path || []).length > 0;
+
+ this.bindMotionListener();
+ this.applyRunningActivityUi();
+ this.initActivityMap();
+ if (this.stepCounter.path.length) {
+ const latLngs = this.stepCounter.path.map((p) => [p.lat, p.lng]);
+ if (this.activityPolyline) {
+ this.activityPolyline.setLatLngs(latLngs);
+ }
+ const last = this.stepCounter.path[this.stepCounter.path.length - 1];
+ if (last) this.updateActivityMap(last);
+ if (this.activityMap && this.activityPolyline && latLngs.length > 1) {
+ try {
+ this.activityMap.fitBounds(this.activityPolyline.getBounds(), { padding: [24, 24] });
+ } catch (e) { /* ignore */ }
+ }
+ }
+
+ this.ensureActivityRuntimeAlive('Activity restored after unlock — tracking continued.');
+ this.showCounterNotification('Activity restored. Your distance was kept after unlock.');
+ this.updateCounterStatus('Resumed after unlock. Keep moving — tracking is active.');
+ return true;
+ }
+
+ ensureActivityRuntimeAlive(hintMessage) {
+ if (!this.stepCounter.isRunning) return;
+ this.setupActivityKeepAlive();
+ this.startTimer(true);
+ this.requestWakeLock();
+ this.startSilentAudioKeepAlive();
+ this.startKeepAwakeFallback();
+ this.startGpsTracking();
+ this.startBackgroundGpsPoll();
+ this.startWakeLockWatchdog();
+ this.applyRunningActivityUi();
+ this.updateStepCounterDisplay();
+ this.persistActivitySession(true);
+ this.updateWakeLockUi();
+ if (hintMessage) {
+ this.updateCounterHint(hintMessage);
+ }
  }
 
  handleDeviceMotion(event) {
@@ -5136,6 +5294,7 @@ Please keep this information secure.`;
  this.stopSilentAudioKeepAlive();
  this.stopKeepAwakeFallback();
  this.stopTimer();
+ this.clearActivitySession();
 
  const startBtn = document.getElementById('startCounterBtn');
  const stopBtn = document.getElementById('stopCounterBtn');
@@ -5171,6 +5330,7 @@ Please keep this information secure.`;
  this.releaseWakeLock();
  this.stopSilentAudioKeepAlive();
  this.stopKeepAwakeFallback();
+ this.stepCounter.isRunning = false;
  this.stepCounter.stepCount = 0;
  this.stepCounter.stepHistory = [];
  this.stepCounter.accelerationHistory = [];
@@ -5179,19 +5339,25 @@ Please keep this information secure.`;
  this.stepCounter.path = [];
  this.stepCounter.lastPosition = null;
  this.stepCounter.gpsReady = false;
+ this.clearActivitySession();
  this.clearActivityMapTrack();
  this.updateStepCounterDisplay();
  this.updateCounterStatus('Reset. Ready to track your next walk/run.');
  this.updateCounterHint('Start Activity to begin GPS map tracking.');
  
+ const startBtn = document.getElementById('startCounterBtn');
+ const stopBtn = document.getElementById('stopCounterBtn');
  const saveBtn = document.getElementById('saveCounterStepsBtn');
  const timerEl = document.getElementById('counterTimer');
  
+ if (startBtn) startBtn.style.display = 'inline-block';
+ if (stopBtn) stopBtn.style.display = 'none';
  if (saveBtn) saveBtn.style.display = 'none';
  if (timerEl) timerEl.style.display = 'none';
  
  const timerValue = document.getElementById('timerValue');
  if (timerValue) timerValue.textContent = '00:00';
+ this.stopTimer();
  }
 
  getTrackedDistanceKm() {
@@ -5373,28 +5539,44 @@ Please keep this information secure.`;
  const onVis = () => this.onActivityVisibilityChange();
  document.addEventListener('visibilitychange', onVis);
  window.addEventListener('focus', onVis);
- window.addEventListener('pageshow', onVis);
- window.addEventListener('blur', onVis);
+ window.addEventListener('pageshow', (event) => {
+ this.onActivityVisibilityChange();
+ // bfcache / reload after lock: restore persisted session if needed
+ if (!this.stepCounter.isRunning) {
+ this.tryRestoreActivitySession();
+ }
+ if (event && event.persisted && this.stepCounter.isRunning) {
+ this.ensureActivityRuntimeAlive('Activity resumed from browser cache.');
+ }
+ });
+ window.addEventListener('pagehide', () => this.persistActivitySession(true));
+ window.addEventListener('beforeunload', () => this.persistActivitySession(true));
+ window.addEventListener('blur', () => this.persistActivitySession(true));
  }
 
  async onActivityVisibilityChange() {
- if (!this.stepCounter.isRunning) return;
+ if (!this.stepCounter.isRunning) {
+ // Page may have been killed while locked — try restore when user returns
+ if (document.visibilityState === 'visible') {
+ this.tryRestoreActivitySession();
+ }
+ return;
+ }
 
  if (document.visibilityState === 'hidden') {
+ this.persistActivitySession(true);
  this.startSilentAudioKeepAlive();
  this.startBackgroundGpsPoll();
  this.startGpsTracking();
  const hint = document.getElementById('mapHint');
  if (hint) {
- hint.textContent = 'Background tracking active. Distance keeps updating while locked when the OS allows it.';
+ hint.textContent = 'Background tracking active. Progress is saved if the app reloads after unlock.';
  }
  return;
  }
 
- await this.requestWakeLock();
- this.startSilentAudioKeepAlive();
- this.startGpsTracking();
- this.startBackgroundGpsPoll();
+ // Visible again after unlock — reinstate timers/GPS that mobile OS may have killed
+ this.ensureActivityRuntimeAlive('Back from lock — activity continued from saved progress.');
  if (navigator.geolocation) {
  navigator.geolocation.getCurrentPosition(
  (pos) => this.handleGpsPosition(pos, true),
@@ -5402,8 +5584,6 @@ Please keep this information secure.`;
  { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
  );
  }
- this.updateCounterHint('Tracking active in foreground and background.');
- this.updateWakeLockUi();
  }
 
  startBackgroundGpsPoll() {
@@ -5639,6 +5819,7 @@ Please keep this information secure.`;
  this.stepCounter.gpsReady = true;
  this.updateActivityMap(point);
  this.updateStepCounterDisplay();
+ this.persistActivitySession(false);
 
  const hint = document.getElementById('mapHint');
  if (hint) {
@@ -5731,14 +5912,20 @@ Please keep this information secure.`;
  }
 
  // Timer functions
- startTimer() {
+ startTimer(preserveElapsed = false) {
  if (this.timerInterval) {
  clearInterval(this.timerInterval);
  }
- 
- this.timerStartTime = Date.now();
+
+ if (!preserveElapsed || !this.stepCounter.startTime) {
+ if (!this.stepCounter.startTime) {
+ this.stepCounter.startTime = Date.now();
+ }
+ }
+ this.timerStartTime = this.stepCounter.startTime;
+
  this.timerInterval = setInterval(() => {
- const elapsed = Math.floor((Date.now() - this.timerStartTime) / 1000);
+ const elapsed = Math.floor((Date.now() - this.stepCounter.startTime) / 1000);
  const minutes = Math.floor(elapsed / 60);
  const seconds = elapsed % 60;
  const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
@@ -5749,6 +5936,9 @@ Please keep this information secure.`;
  }
  // Refresh calorie estimate as duration changes
  this.updateStepCounterDisplay();
+ if (elapsed > 0 && elapsed % 5 === 0) {
+ this.persistActivitySession(false);
+ }
  }, 1000);
  }
 
