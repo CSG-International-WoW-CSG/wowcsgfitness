@@ -5319,6 +5319,7 @@ Please keep this information secure.`;
  this.stepCounter.startTime = data.startTime;
  this.stepCounter.stepCount = data.stepCount || 0;
  this.stepCounter.distanceKm = Number(data.distanceKm) || 0;
+ this.stepCounter.pendingSegmentKm = Number(data.pendingSegmentKm) || 0;
  this.stepCounter.treadmillDistanceKm = Number(data.treadmillDistanceKm) || 0;
  this.stepCounter.treadmillSpeedKmh = Number(data.treadmillSpeedKmh) || this.getTreadmillSpeedKmh();
  this.stepCounter.trackingMode = data.trackingMode === 'treadmill' ? 'treadmill' : 'outdoor';
@@ -5362,6 +5363,8 @@ Please keep this information secure.`;
  }
 
  this.ensureActivityRuntimeAlive('Activity restored after unlock — tracking continued.');
+ this.recalculateGpsDistanceFromPath();
+ this.syncStepsFromDistance(true);
  this.showCounterNotification('Activity restored. Your distance was kept after unlock.');
  this.updateCounterStatus('Resumed after unlock. Keep moving — tracking is active.');
  return true;
@@ -6252,11 +6255,7 @@ Please keep this information secure.`;
 
  const gpsDistanceLabel = document.getElementById('gpsDistanceLabel');
  if (gpsDistanceLabel) {
- const mode = this.stepCounter.trackingMode || 'outdoor';
- const shown = mode === 'treadmill'
- ? (this.stepCounter.treadmillDistanceKm || distance)
- : (this.stepCounter.distanceKm || distance);
- gpsDistanceLabel.textContent = `${Number(shown).toFixed(2)} KM`;
+ gpsDistanceLabel.textContent = `${Number(distance).toFixed(2)} KM`;
  }
  const gpsCaloriesLabel = document.getElementById('gpsCaloriesLabel');
  if (gpsCaloriesLabel) {
