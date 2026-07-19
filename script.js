@@ -71,7 +71,11 @@ class StepathonApp {
  trackingMode: 'outdoor', // 'outdoor' | 'treadmill'
  treadmillSpeedKmh: 5,
  treadmillDistanceKm: 0,
- lastTreadmillTickAt: null
+ lastTreadmillTickAt: null,
+ pendingSegmentKm: 0,
+ lastAccelMagnitude: 0,
+ stepPeakArmed: true,
+ lockedStepEstimateAt: null
  };
 
  this.activityMap = null;
@@ -5063,9 +5067,15 @@ Please keep this information secure.`;
  this.stepCounter.threshold = 0.85;
  this.stepCounter.minVerticalChange = 0.45;
  } else {
- this.stepCounter.threshold = 1.2;
- this.stepCounter.minVerticalChange = 0.8;
+ // Outdoor: balanced for pocket / hand (too high under-counts steps)
+ this.stepCounter.threshold = 1.05;
+ this.stepCounter.minVerticalChange = 0.55;
  }
+
+ this.stepCounter.pendingSegmentKm = 0;
+ this.stepCounter.lastAccelMagnitude = 0;
+ this.stepCounter.stepPeakArmed = true;
+ this.stepCounter.lockedStepEstimateAt = null;
 
  this.bindMotionListener();
  this.applyRunningActivityUi();
@@ -5247,6 +5257,7 @@ Please keep this information secure.`;
  startTime: this.stepCounter.startTime,
  stepCount: this.stepCounter.stepCount || 0,
  distanceKm: this.stepCounter.distanceKm || 0,
+ pendingSegmentKm: this.stepCounter.pendingSegmentKm || 0,
  treadmillDistanceKm: this.stepCounter.treadmillDistanceKm || 0,
  treadmillSpeedKmh: this.stepCounter.treadmillSpeedKmh || this.getTreadmillSpeedKmh(),
  trackingMode: this.stepCounter.trackingMode || 'outdoor',
@@ -5389,7 +5400,6 @@ Please keep this information secure.`;
  if (!this.stepCounter.isRunning) return;
 
  const acceleration = event.accelerationIncludingGravity || event.acceleration;
- 
  if (!acceleration) return;
 
  const currentAccel = {
@@ -5398,71 +5408,55 @@ Please keep this information secure.`;
  z: acceleration.z || 0
  };
 
- // Calculate magnitude of acceleration change
- const deltaX = Math.abs(currentAccel.x - this.stepCounter.lastAcceleration.x);
- const deltaY = Math.abs(currentAccel.y - this.stepCounter.lastAcceleration.y);
- const deltaZ = Math.abs(currentAccel.z - this.stepCounter.lastAcceleration.z);
- 
- const magnitude = Math.sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ);
+ // Absolute magnitude peak detection is more reliable than delta-only while walking
+ const mag = Math.sqrt(
+ currentAccel.x * currentAccel.x +
+ currentAccel.y * currentAccel.y +
+ currentAccel.z * currentAccel.z
+ );
+ const lastMag = this.stepCounter.lastAccelMagnitude || mag;
+ const deltaMag = Math.abs(mag - lastMag);
+ const deltaZ = Math.abs(currentAccel.z - (this.stepCounter.lastAcceleration.z || 0));
 
- // Store acceleration history for pattern recognition
  this.stepCounter.accelerationHistory.push({
- magnitude: magnitude,
- deltaZ: deltaZ,
+ magnitude: deltaMag,
+ absMag: mag,
+ deltaZ,
  timestamp: Date.now()
  });
- 
- // Keep only last 20 readings (about 1 second at ~20Hz)
- if (this.stepCounter.accelerationHistory.length > 20) {
+ if (this.stepCounter.accelerationHistory.length > 25) {
  this.stepCounter.accelerationHistory.shift();
  }
 
- // Improved step detection with multiple criteria:
- // 1. Overall magnitude must exceed threshold
- // 2. Vertical (Z-axis) movement must be significant (walking involves vertical motion)
- // 3. Must have rhythmic pattern (check recent history) - but allow first few steps
- const hasSignificantMagnitude = magnitude > this.stepCounter.threshold;
- const hasVerticalMovement = deltaZ > this.stepCounter.minVerticalChange;
- 
- // Check for rhythmic pattern (walking has consistent pattern)
- // Allow first 2 steps without pattern check, then require pattern
- let hasRhythmicPattern = true; // Default to true for first steps
- if (this.stepCounter.stepCount >= 2 && this.stepCounter.accelerationHistory.length >= 5) {
- const recent = this.stepCounter.accelerationHistory.slice(-5);
- const highMagnitudeCount = recent.filter(r => r.magnitude > this.stepCounter.threshold).length;
- // At least 2 high magnitude readings in recent history suggests walking pattern
- hasRhythmicPattern = highMagnitudeCount >= 2;
- }
-
- // Detect step only if all criteria are met
- // For first 2 steps, only require magnitude and vertical movement
- // After that, also require rhythmic pattern
- const canDetectStep = hasSignificantMagnitude && hasVerticalMovement && 
- (this.stepCounter.stepCount < 2 || hasRhythmicPattern);
- 
- if (canDetectStep) {
- // Check if enough time has passed since last step (prevent double counting)
+ const peakThreshold = this.stepCounter.trackingMode === 'treadmill' ? 10.8 : 11.2;
+ const valleyThreshold = this.stepCounter.trackingMode === 'treadmill' ? 9.4 : 9.6;
  const now = Date.now();
- const timeSinceLastStep = this.stepCounter.stepHistory.length > 0 
+ const minStepGapMs = this.stepCounter.trackingMode === 'treadmill' ? 280 : 320;
+ const timeSinceLastStep = this.stepCounter.stepHistory.length > 0
  ? now - this.stepCounter.stepHistory[this.stepCounter.stepHistory.length - 1]
  : 1000;
 
- // Minimum gap between steps (treadmill cadence can be faster when jogging)
- const minStepGapMs = this.stepCounter.trackingMode === 'treadmill' ? 280 : 400;
- if (timeSinceLastStep > minStepGapMs) {
+ // Arm on valley, fire step on rising peak (classic step algorithm)
+ if (mag < valleyThreshold) {
+ this.stepCounter.stepPeakArmed = true;
+ }
+
+ const peakHit = this.stepCounter.stepPeakArmed && mag > peakThreshold && timeSinceLastStep > minStepGapMs;
+ const deltaHit = deltaMag > this.stepCounter.threshold && deltaZ > this.stepCounter.minVerticalChange && timeSinceLastStep > minStepGapMs;
+
+ if (peakHit || deltaHit) {
  this.stepCounter.stepCount++;
  this.stepCounter.stepHistory.push(now);
- 
- // Keep only last 10 steps for calculation
- if (this.stepCounter.stepHistory.length > 10) {
+ this.stepCounter.stepPeakArmed = false;
+ if (this.stepCounter.stepHistory.length > 12) {
  this.stepCounter.stepHistory.shift();
  }
-
  this.updateStepCounterDisplay();
  this.animateStepCounter();
- }
+ this.persistActivitySession(false);
  }
 
+ this.stepCounter.lastAccelMagnitude = mag;
  this.stepCounter.lastAcceleration = currentAccel;
  }
 
@@ -5558,16 +5552,55 @@ Please keep this information secure.`;
 
  if (mode === 'treadmill') {
  const speedKm = this.stepCounter.treadmillDistanceKm || 0;
- // Prefer treadmill speed×time; use steps if somehow higher (phone-only fallback)
  return Math.max(speedKm, stepKm);
  }
 
- const gpsKm = this.stepCounter.distanceKm || 0;
- // Prefer GPS when we have a real track; otherwise fall back to step estimate
- if ((this.stepCounter.path || []).length >= 2 && gpsKm > 0) {
- return gpsKm;
- }
+ const gpsKm = (this.stepCounter.distanceKm || 0) + (this.stepCounter.pendingSegmentKm || 0);
+ // Use the better of GPS and step estimate so neither under-count wins alone
  return Math.max(gpsKm, stepKm);
+ }
+
+ /**
+ * Keep step count in sync with distance when DeviceMotion is paused (phone locked).
+ * Mobile browsers almost always stop accelerometer events while the screen is off.
+ */
+ syncStepsFromDistance(force = false) {
+ if (!this.stepCounter.isRunning) return;
+ const isHidden = document.visibilityState !== 'visible';
+ if (!force && !isHidden) return;
+
+ const dist = this.getTrackedDistanceKm();
+ if (dist <= 0) return;
+ const estimated = Math.round(dist * (this.challengeConfig.stepsPerKm || 1300));
+ if (estimated > (this.stepCounter.stepCount || 0)) {
+ this.stepCounter.stepCount = estimated;
+ }
+ }
+
+ /**
+ * Rebuild GPS distance from the full path (avoids losing short segments).
+ */
+ recalculateGpsDistanceFromPath() {
+ const path = this.stepCounter.path || [];
+ if (path.length < 2) {
+ this.stepCounter.distanceKm = 0;
+ return 0;
+ }
+ let total = 0;
+ for (let i = 1; i < path.length; i++) {
+ const a = path[i - 1];
+ const b = path[i];
+ const segmentKm = this.haversineKm(a.lat, a.lng, b.lat, b.lng);
+ const dtSec = Math.max(1, ((b.t || 0) - (a.t || 0)) / 1000);
+ const maxKm = Math.min(5.0, Math.max(0.35, (dtSec / 3600) * 22));
+ // Drop only teleport/noise jumps
+ if (segmentKm > 0 && segmentKm <= maxKm) {
+ total += segmentKm;
+ }
+ }
+ this.stepCounter.distanceKm = total;
+ this.stepCounter.pendingSegmentKm = 0;
+ return total;
  }
 
  getBodyWeightKg() {
@@ -5810,18 +5843,31 @@ Please keep this information secure.`;
  }
 
  catchUpGpsAfterUnlock() {
- if (!navigator.geolocation || !this.stepCounter.isRunning) return;
+ if (!this.stepCounter.isRunning) return;
+ this.recalculateGpsDistanceFromPath();
+ this.syncStepsFromDistance(true);
+ this.updateStepCounterDisplay();
+ if (!navigator.geolocation) return;
  // Multiple samples help fill gap after OS paused GPS
  const sample = () => {
  navigator.geolocation.getCurrentPosition(
- (pos) => this.handleGpsPosition(pos, true),
+ (pos) => {
+ this.handleGpsPosition(pos, true);
+ this.syncStepsFromDistance(true);
+ },
  () => {},
  { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
  );
  };
  sample();
- setTimeout(sample, 1500);
- setTimeout(sample, 3500);
+ setTimeout(sample, 1200);
+ setTimeout(sample, 3000);
+ setTimeout(() => {
+ this.recalculateGpsDistanceFromPath();
+ this.syncStepsFromDistance(true);
+ this.updateStepCounterDisplay();
+ this.persistActivitySession(true);
+ }, 4500);
  }
 
  stopBackgroundGpsPoll() {
@@ -6106,44 +6152,61 @@ Please keep this information secure.`;
 
  handleGpsPosition(position, fromResume = false) {
  if (!this.stepCounter.isRunning) return;
+ if (this.stepCounter.trackingMode === 'treadmill') return;
+
  const { latitude, longitude, accuracy } = position.coords;
- const maxAccuracy = fromResume ? 150 : 80;
+ const isBackground = fromResume || document.visibilityState !== 'visible';
+ // Accept noisier fixes while locked — otherwise KM freezes outdoors
+ const maxAccuracy = isBackground ? 180 : 100;
  if (accuracy && accuracy > maxAccuracy) {
  return;
  }
 
- const point = { lat: latitude, lng: longitude, t: Date.now() };
+ const point = { lat: latitude, lng: longitude, t: Date.now(), accuracy: accuracy || null };
  const last = this.stepCounter.lastPosition;
  if (last) {
  const segmentKm = this.haversineKm(last.lat, last.lng, point.lat, point.lng);
- const dtSec = Math.max(1, (point.t - (last.t || point.t)) / 1000);
+ const dtSec = Math.max(0.5, (point.t - (last.t || point.t)) / 1000);
  const hours = dtSec / 3600;
- // After lock, OS may skip points — allow larger catch-up at realistic walking/running speed
- const maxKm = fromResume
- ? Math.min(10.0, Math.max(0.4, hours * 14))
- : Math.min(3.0, Math.max(0.25, hours * 18));
- const minKm = fromResume ? 0.0005 : 0.003;
- if (segmentKm >= minKm && segmentKm <= maxKm) {
- this.stepCounter.distanceKm += segmentKm;
+ // Allow realistic walking/running; wider catch-up after lock
+ const maxKm = isBackground
+ ? Math.min(12.0, Math.max(0.5, hours * 16))
+ : Math.min(4.0, Math.max(0.35, hours * 20));
+
+ if (segmentKm > maxKm) {
+ // Teleport / bad fix — skip point entirely (keep previous lastPosition)
+ return;
+ }
+
+ // Bank tiny segments instead of discarding them (previous bug under-counted KM)
+ this.stepCounter.pendingSegmentKm = (this.stepCounter.pendingSegmentKm || 0) + segmentKm;
+ if (this.stepCounter.pendingSegmentKm >= 0.002 || isBackground) {
+ this.stepCounter.distanceKm += this.stepCounter.pendingSegmentKm;
+ this.stepCounter.pendingSegmentKm = 0;
  }
  }
 
  this.stepCounter.lastPosition = point;
  this.stepCounter.path.push(point);
- if (this.stepCounter.path.length > 400) {
- this.stepCounter.path = this.stepCounter.path.filter((_, idx) => idx % 2 === 0);
+ if (this.stepCounter.path.length > 500) {
+ this.stepCounter.path = this.stepCounter.path.filter((_, idx, arr) => idx === 0 || idx === arr.length - 1 || idx % 2 === 0);
+ this.recalculateGpsDistanceFromPath();
  }
 
  this.stepCounter.gpsReady = true;
+ // While locked, motion sensors usually stop — estimate steps from GPS distance
+ if (isBackground) {
+ this.syncStepsFromDistance(true);
+ }
  this.updateActivityMap(point);
  this.updateStepCounterDisplay();
  this.persistActivitySession(false);
 
  const hint = document.getElementById('mapHint');
  if (hint) {
- hint.textContent = fromResume
- ? 'Lock-screen / background GPS update received. KM is still counting.'
- : 'Live GPS tracking ON (continues while phone is locked when OS allows).';
+ hint.textContent = isBackground
+ ? 'Lock-screen GPS update received. KM + steps still counting.'
+ : 'Live GPS tracking ON. Steps also sync from distance if sensors pause.';
  }
  }
 
@@ -6257,6 +6320,10 @@ Please keep this information secure.`;
  timerValue.textContent = timeStr;
  }
  this.accumulateTreadmillDistance();
+ // While locked, sensors pause — keep steps aligned with KM from GPS/treadmill
+ if (document.visibilityState !== 'visible') {
+ this.syncStepsFromDistance(true);
+ }
  // Refresh calorie estimate as duration changes
  this.updateStepCounterDisplay();
  if (elapsed > 0 && elapsed % 5 === 0) {
