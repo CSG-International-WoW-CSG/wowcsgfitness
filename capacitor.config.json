@@ -1,0 +1,21 @@
+{
+  "appId": "com.csgi.wowcsgfitness",
+  "appName": "WOW-CSG Fitness",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1200,
+      "backgroundColor": "#0b3d66",
+      "showSpinner": false
+    },
+    "Geolocation": {
+      "permissions": ["location", "coarseLocation"]
+    }
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

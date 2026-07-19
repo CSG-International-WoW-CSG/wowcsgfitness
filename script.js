@@ -5080,6 +5080,9 @@ Please keep this information secure.`;
  this.bindMotionListener();
  this.applyRunningActivityUi();
 
+ // Capacitor Android: hardware pedometer keeps counting while locked
+ this.startNativeTrackingHelpers();
+
  if (mode === 'treadmill') {
  this.updateCounterStatus('Treadmill mode — distance from speed x time + step backup.');
  this.updateCounterHint('Match treadmill speed on the display. Keep the phone on your body for step backup.');
@@ -5113,6 +5116,41 @@ Please keep this information secure.`;
  this.persistActivitySession(true);
  this.updateWakeLockUi();
  this.applyTrackingModeUi();
+ }
+
+ async startNativeTrackingHelpers() {
+ if (!window.WowNative) return;
+ try {
+ await window.WowNative.ready();
+ if (!window.WowNative.isNative) return;
+ await window.WowNative.requestPermissions();
+ const started = await window.WowNative.startPedometer();
+ if (started) {
+ window.WowNative.startStepPolling((steps) => this.applyNativeStepCount(steps));
+ window.WowNative.watchAppResume(({ steps }) => {
+ this.applyNativeStepCount(steps);
+ this.syncStepsFromDistance(true);
+ this.catchUpGpsAfterUnlock();
+ this.updateStepCounterDisplay();
+ this.persistActivitySession(true);
+ this.updateCounterHint('Android hardware steps synced after unlock.');
+ });
+ this.updateCounterStatus('Android app tracking ON — hardware steps count while locked.');
+ this.showCounterNotification('Native step counter active (works while locked).');
+ }
+ } catch (e) {
+ console.warn('Native tracking helpers failed', e);
+ }
+ }
+
+ applyNativeStepCount(nativeSteps) {
+ if (!this.stepCounter.isRunning) return;
+ const n = Math.max(0, Math.round(Number(nativeSteps) || 0));
+ if (n > (this.stepCounter.stepCount || 0)) {
+ this.stepCounter.stepCount = n;
+ this.updateStepCounterDisplay();
+ this.persistActivitySession(false);
+ }
  }
 
  getTrackingMode() {
@@ -5480,6 +5518,9 @@ Please keep this information secure.`;
  this.notifyServiceWorkerTracking(false);
  this.stopTimer();
  this.clearActivitySession();
+ if (window.WowNative && window.WowNative.isNative) {
+ window.WowNative.stopPedometer();
+ }
 
  const startBtn = document.getElementById('startCounterBtn');
  const stopBtn = document.getElementById('stopCounterBtn');
@@ -5518,6 +5559,9 @@ Please keep this information secure.`;
  this.stopKeepAwakeFallback();
  this.notifyServiceWorkerTracking(false);
  this.stepCounter.isRunning = false;
+ if (window.WowNative && window.WowNative.isNative) {
+ window.WowNative.stopPedometer();
+ }
  this.stepCounter.stepCount = 0;
  this.stepCounter.stepHistory = [];
  this.stepCounter.accelerationHistory = [];
@@ -5731,41 +5775,51 @@ Please keep this information secure.`;
  }
 
  startGpsTracking() {
- if (!navigator.geolocation) {
+ const hasNative = !!(window.WowNative && window.WowNative.isNative);
+ if (!navigator.geolocation && !hasNative) {
  this.updateCounterStatus('GPS not available on this device. Step estimate will be used.');
  const hint = document.getElementById('mapHint');
  if (hint) hint.textContent = 'GPS unavailable — distance will use step estimate.';
  return;
  }
 
- // Restart cleanly (browsers often kill watches when the phone locks)
  this.stopGpsTracking();
 
- const options = {
- enableHighAccuracy: true,
- maximumAge: 0,
- timeout: 20000
- };
-
- this.stepCounter.watchId = navigator.geolocation.watchPosition(
- (pos) => this.handleGpsPosition(pos),
- (err) => {
+ const onPos = (pos) => this.handleGpsPosition(pos);
+ const onErr = (err) => {
  console.warn('GPS error:', err);
  const hint = document.getElementById('mapHint');
  if (hint) {
  hint.textContent = 'Location permission needed for map tracking. You can still use step estimate.';
  }
  this.updateCounterHint('Enable location for accurate KM tracking on the map.');
- },
- options
- );
+ };
+
+ if (hasNative) {
+ window.WowNative.watchPosition(onPos, onErr).then((id) => {
+ this.stepCounter.watchId = id;
+ this.stepCounter._nativeGps = true;
+ });
+ return;
+ }
+
+ const options = {
+ enableHighAccuracy: true,
+ maximumAge: 0,
+ timeout: 20000
+ };
+ this.stepCounter.watchId = navigator.geolocation.watchPosition(onPos, onErr, options);
+ this.stepCounter._nativeGps = false;
  }
 
  stopGpsTracking() {
- if (this.stepCounter.watchId != null && navigator.geolocation) {
+ if (window.WowNative && this.stepCounter._nativeGps) {
+ window.WowNative.clearWatch();
+ } else if (this.stepCounter.watchId != null && navigator.geolocation) {
  navigator.geolocation.clearWatch(this.stepCounter.watchId);
  }
  this.stepCounter.watchId = null;
+ this.stepCounter._nativeGps = false;
  }
 
  setupActivityKeepAlive() {
@@ -5833,7 +5887,17 @@ Please keep this information secure.`;
  }
 
  pollGpsOnce(fromBackground = false) {
- if (!this.stepCounter.isRunning || !navigator.geolocation) return;
+ if (!this.stepCounter.isRunning) return;
+ if (window.WowNative && window.WowNative.isNative) {
+ window.WowNative.getCurrentPosition({
+ enableHighAccuracy: true,
+ timeout: fromBackground ? 15000 : 10000
+ }).then((pos) => {
+ if (pos) this.handleGpsPosition(pos, fromBackground);
+ });
+ return;
+ }
+ if (!navigator.geolocation) return;
  navigator.geolocation.getCurrentPosition(
  (pos) => this.handleGpsPosition(pos, fromBackground),
  () => {},

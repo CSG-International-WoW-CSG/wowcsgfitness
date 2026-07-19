@@ -5,7 +5,7 @@
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <meta name="mobile-web-app-capable" content="yes">
-  we   <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="description" content="WOW-CSG 7 Days Fitness Challenge - Step Together. Thrive Together. 26 July - 1 August.">
     <title>WOW-CSG 7 Days Fitness Challenge</title>
@@ -13,10 +13,10 @@
     <!-- PWA Manifest -->
     <link rel="manifest" href="./manifest.json">
     <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=32">
-    <link rel="apple-touch-icon" href="favicon.svg?v=32">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=33">
+    <link rel="apple-touch-icon" href="favicon.svg?v=33">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="ui-refresh.css?v=32">
+    <link rel="stylesheet" href="ui-refresh.css?v=33">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -38,7 +38,7 @@
                 <div class="brand-lockup" aria-label="WOW-CSG Fitness Challenge">
                     <div class="brand-mark-wrap" aria-hidden="true">
                         <span class="brand-mark-orbit"></span>
-                        <img src="brand-mark.svg?v=32" alt="" class="brand-mark-img" width="56" height="56">
+                        <img src="brand-mark.svg?v=33" alt="" class="brand-mark-img" width="56" height="56">
                     </div>
                     <div class="brand-wordmark">
                         <span class="brand-wow">WOW-CSG</span>
@@ -471,11 +471,11 @@
                                 <div class="counter-tips">
                                     <h4>&#128161; Tracking tips:</h4>
                                     <ul>
-                                        <li><strong>Outdoor:</strong> KM uses GPS + step backup (whichever is higher)</li>
+                                        <li><strong>Android app:</strong> hardware step sensor keeps counting while the phone is locked</li>
+                                        <li><strong>Outdoor (web):</strong> KM uses GPS + step backup</li>
                                         <li><strong>Treadmill:</strong> set speed to match the machine (speed &times; time)</li>
-                                        <li>While locked, phone sensors pause — app keeps KM via GPS and estimates steps from distance</li>
-                                        <li>Add to Home Screen, allow Location, and do not swipe the app away</li>
-                                        <li>Carry the phone (pocket/arm) for best outdoor GPS results</li>
+                                        <li>Allow Location + Physical activity permissions when prompted</li>
+                                        <li>See <code>ANDROID.md</code> to build the APK for best lock-screen accuracy</li>
                                     </ul>
                                 </div>
                             </div>
@@ -601,7 +601,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-19-v32 | KM + lock steps fix</p>
+            <p class="footer-subtext">Site version: 2026-07-19-v32 | Capacitor Android</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#" id="footerHelpLink" class="help-link">&#10067; Need Help? Contact us at wow-csg@csgi.com</a>
@@ -684,7 +684,8 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="firebase-config.js"></script>
-    <script src="script.js?v=32"></script>
+    <script src="native-bridge.js"></script>
+    <script src="script.js?v=33"></script>
     
     <!-- Service Worker: force update + clear stale caches (fixes old garbled emoji pages) -->
     <script>
@@ -697,10 +698,10 @@
                 });
                 if (window.caches && caches.keys) {
                     caches.keys().then((keys) => {
-                        keys.filter((k) => k !== 'wowcsg-fitness-v32').forEach((k) => caches.delete(k));
+                        keys.filter((k) => k !== 'wowcsg-fitness-v33').forEach((k) => caches.delete(k));
                     });
                 }
-                navigator.serviceWorker.register('./service-worker.js?v=32')
+                navigator.serviceWorker.register('./service-worker.js?v=33')
                     .then((registration) => {
                         console.log('Service Worker registered:', registration);
                         if (registration.waiting) {

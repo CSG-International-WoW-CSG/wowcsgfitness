@@ -46,6 +46,15 @@ Step tracking uses ~**1,300 steps per KM** for progress % (editable in `script.j
 Use GitHub Pages, Netlify, Vercel, or any static host.  
 Repo: https://github.com/CSG-International-WoW-CSG/wowcsgfitness
 
+### Option 3: Android App (best lock-screen tracking)
+
+See **[ANDROID.md](./ANDROID.md)** — Capacitor wrapper with hardware step counter.
+
+```bash
+npm install
+npm run android
+```
+
 ## Customization
 
 Edit `challengeConfig` at the top of `script.js` to change dates, KM goals, or steps-per-KM conversion.
