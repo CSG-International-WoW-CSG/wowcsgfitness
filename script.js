@@ -1761,7 +1761,8 @@ class StepathonApp {
  });
  } else if (savedUser) {
  try {
- this.currentUser = JSON.parse(savedUser);
+ this.currentUser = this.stripSecretsFromParticipant(JSON.parse(savedUser));
+ localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
  this.showDashboard();
  } catch (e) {
  localStorage.removeItem('currentUser');
@@ -2106,8 +2107,8 @@ class StepathonApp {
  this.saveParticipantsCache();
  this.syncParticipantsFromFirebase().catch(() => {});
 
- this.currentUser = participant;
- localStorage.setItem('currentUser', JSON.stringify(participant));
+ this.currentUser = this.stripSecretsFromParticipant(participant);
+ localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
 
  this.recordAttempt('registration', true);
  this.generateCaptcha('registration');
@@ -2175,16 +2176,16 @@ class StepathonApp {
  );
  }
 
- hashPassword(password) {
- // Simple hash function (for demo purposes)
- // In production, use a proper hashing library like bcrypt
- let hash = 0;
- for (let i = 0; i < password.length; i++) {
- const char = password.charCodeAt(i);
- hash = ((hash << 5) - hash) + char;
- hash = hash & hash; // Convert to 32bit integer
+ /** Strip credential fields before any localStorage / in-memory cache write. */
+ stripSecretsFromParticipant(participant) {
+ if (!participant || typeof participant !== 'object') {
+ return participant;
  }
- return hash.toString();
+ const clean = { ...participant };
+ delete clean.password;
+ delete clean.passwordHash;
+ delete clean.passwordResetAt;
+ return clean;
  }
 
  initializeEmailJS() {
@@ -2257,14 +2258,13 @@ class StepathonApp {
  });
  }
 
- copyEmailContent(email, username, password) {
+ copyEmailContent(email, username) {
  const content = `Account Details for WOW-CSG 7 Days Fitness Challenge
 
 Email: ${email}
 Username: ${username}
-Password: ${password}
 
-Please keep this information secure.`;
+Use Forgot Password if you need a reset link. Passwords are never emailed by this app.`;
  
  this.copyToClipboard(content, 'Email content');
  }
@@ -2377,7 +2377,7 @@ Please keep this information secure.`;
  to_email: testEmail,
  to_name: 'Test User',
  username: 'testuser',
- password: 'testpass123',
+ password: '[not used — passwords are never emailed]',
  subject: 'Test Email - WOW-CSG Fitness Challenge',
  message: 'This is a test email from WOW-CSG 7 Days Fitness Challenge. If you receive this, EmailJS is configured correctly!'
  };
@@ -2427,31 +2427,20 @@ Please keep this information secure.`;
  }
 
  showForgotPasswordModal() {
+ if (!this.firebaseEnabled) {
+ alert(
+ 'Firebase is required to reset passwords.\n\n' +
+ 'Contact ' + this.securityCfg().supportEmail + ' if the app cannot reach Firebase.'
+ );
+ return;
+ }
+
  // Create modal overlay
  const modal = document.createElement('div');
  modal.className = 'email-modal-overlay';
  
  // Generate CAPTCHA for password reset
  const captcha = this.generateCaptchaValue();
- const useFirebaseReset = this.firebaseEnabled;
- const formHandler = useFirebaseReset ? 'app.resetPasswordFirebase()' : 'app.resetPassword()';
- const infoText = useFirebaseReset
- ? 'Enter your username, email, or Employee ID. We will email you a reset link.'
- : 'Enter your username or email to reset your password.';
- const identifierLabel = useFirebaseReset ? 'Username / Email / Employee ID' : 'Username or Email';
- const identifierPlaceholder = useFirebaseReset
- ? 'Enter username, email, or Employee ID'
- : 'Enter username or email';
- const passwordFields = useFirebaseReset ? '' : `
- <div class="form-group">
- <label for="newPassword">New Password <span class="required">*</span></label>
- <input type="password" id="newPassword" placeholder="Enter new password (min 6 characters)" required minlength="6" autocomplete="new-password">
- <small class="form-hint">Minimum 6 characters</small>
- </div>
- <div class="form-group">
- <label for="confirmNewPassword">Confirm New Password <span class="required">*</span></label>
- <input type="password" id="confirmNewPassword" placeholder="Confirm new password" required minlength="6" autocomplete="new-password">
- </div>`;
 
  modal.innerHTML = `
  <div class="email-modal">
@@ -2460,16 +2449,15 @@ Please keep this information secure.`;
  <button class="email-modal-close" onclick="this.closest('.email-modal-overlay').remove()"></button>
  </div>
  <div class="email-modal-content">
- <p class="email-info">${infoText}</p>
- <form id="resetPasswordForm" onsubmit="event.preventDefault(); ${formHandler}">
+ <p class="email-info">Enter your username, email, or Employee ID. We will email you a Firebase reset link. Passwords are never stored in this browser.</p>
+ <form id="resetPasswordForm" onsubmit="event.preventDefault(); app.resetPasswordFirebase()">
  <!-- Honeypot field -->
  <input type="text" id="resetWebsite" name="website" style="display: none;" tabindex="-1" autocomplete="off">
  
  <div class="form-group">
- <label for="resetIdentifier">${identifierLabel} <span class="required">*</span></label>
- <input type="text" id="resetIdentifier" placeholder="${identifierPlaceholder}" required autocomplete="username">
+ <label for="resetIdentifier">Username / Email / Employee ID <span class="required">*</span></label>
+ <input type="text" id="resetIdentifier" placeholder="Enter username, email, or Employee ID" required autocomplete="username">
  </div>
- ${passwordFields}
  <div class="form-group captcha-group">
  <label for="resetCaptchaAnswer">Security Check <span class="required">*</span></label>
  <div class="captcha-container">
@@ -2480,7 +2468,7 @@ Please keep this information secure.`;
  <small class="form-hint">Please solve the math problem to verify you're human.</small>
  </div>
  <div class="email-actions">
- <button type="submit" class="btn btn-primary">Reset Password</button>
+ <button type="submit" class="btn btn-primary">Send Reset Link</button>
  <button type="button" class="btn btn-secondary" onclick="this.closest('.email-modal-overlay').remove()">Cancel</button>
  </div>
  </form>
@@ -2562,107 +2550,15 @@ Please keep this information secure.`;
  }
 
  resetPassword() {
- // Bot protection: Check honeypot field
- const honeypot = document.getElementById('resetWebsite');
- if (honeypot && honeypot.value.trim() !== '') {
- console.warn('Bot detected: Honeypot field was filled in password reset');
- alert('Bot activity detected. Password reset blocked.');
- return;
- }
-
- // Bot protection: Rate limiting check
- if (!this.checkRateLimit('passwordReset')) {
- this.recordAttempt('passwordReset', false); // Record failed attempt
- alert('Too many password reset attempts. Please try again later.\n\nMaximum 5 attempts per hour and 10 attempts per day.');
- return;
- }
-
- // Bot protection: Verify CAPTCHA
- const modal = document.querySelector('.email-modal-overlay');
- const captchaAnswer = modal ? parseInt(modal.dataset.captchaAnswer) : null;
- const userAnswer = parseInt(document.getElementById('resetCaptchaAnswer').value);
- 
- if (!captchaAnswer || userAnswer !== captchaAnswer) {
- this.recordAttempt('passwordReset', false); // Record failed attempt
- alert('Security check failed. Please solve the math problem correctly.');
- this.refreshResetCaptcha();
- return;
- }
-
- const identifier = document.getElementById('resetIdentifier').value.trim();
- const newPassword = document.getElementById('newPassword').value;
- const confirmNewPassword = document.getElementById('confirmNewPassword').value;
-
- if (!identifier) {
- alert('Please enter your username or email!');
- return;
- }
-
- if (!newPassword || newPassword.length < 6) {
- alert('Password must be at least 6 characters long!');
- return;
- }
-
- if (newPassword !== confirmNewPassword) {
- alert('Passwords do not match!');
- return;
- }
-
- // Find participant by username or email
- const participant = this.participants.find(p => 
- (p.username && p.username.toLowerCase() === identifier.toLowerCase()) ||
- (p.email && p.email.toLowerCase() === identifier.toLowerCase())
+ // Local password reset removed — Firebase Auth only (CSG policy).
+ if (!this.firebaseEnabled || !this.auth) {
+ alert(
+ 'Firebase is required to reset passwords.\n\n' +
+ 'Contact ' + this.securityCfg().supportEmail + ' for help.'
  );
-
- if (!participant) {
- alert('Username or email not found! Please check and try again.');
- document.getElementById('resetIdentifier').focus();
  return;
  }
-
- // Update password
- const oldPassword = participant.password;
- participant.password = this.hashPassword(newPassword);
- participant.passwordResetAt = new Date().toISOString();
-
- // Update in participants array
- const index = this.participants.findIndex(p => 
- (p.username && p.username.toLowerCase() === identifier.toLowerCase()) ||
- (p.email && p.email.toLowerCase() === identifier.toLowerCase())
- );
- if (index !== -1) {
- this.participants[index] = participant;
- }
-
- // Save to localStorage
- this.saveParticipantsCache();
-
- // If current user is logged in and matches, update their session
- if (this.currentUser && (
- (this.currentUser.username && this.currentUser.username.toLowerCase() === identifier.toLowerCase()) ||
- (this.currentUser.email && this.currentUser.email.toLowerCase() === identifier.toLowerCase())
- )) {
- this.currentUser.password = participant.password;
- localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
- }
-
- // Record successful password reset attempt
- this.recordAttempt('passwordReset', true);
-
- // Close modal
- document.querySelector('.email-modal-overlay').remove();
-
- // Show success message
- this.showToast('Password reset successfully! You can now login with your new password.');
- 
- // Switch to login tab if on main page
- if (!window.location.pathname.includes('admin.html')) {
- setTimeout(() => {
- this.switchLoginTab('user-login');
- document.getElementById('loginUsername').value = participant.username || '';
- document.getElementById('loginUsername').focus();
- }, 500);
- }
+ return this.resetPasswordFirebase();
  }
 
  showDashboard() {
@@ -3378,12 +3274,9 @@ Please keep this information secure.`;
  <input type="text" id="editUserUsername" value="${user.username || ''}" required>
  </div>
  <div class="form-group">
- <label>Password <span class="required">*</span></label>
- <input type="password" id="editUserPassword" placeholder="Enter new password (leave blank to keep current)" autocomplete="new-password">
- <small class="form-hint">Password is stored as a hash. Enter a new password to change it, or leave blank to keep the current password.</small>
- <div style="margin-top: 8px; padding: 8px; background: #f5f5f5; border-radius: 4px; font-size: 0.85rem; color: #666;">
- <strong>Current Password Hash:</strong> <code style="font-size: 0.8rem; word-break: break-all;">${user.password || 'Not set'}</code>
- </div>
+ <label>Password</label>
+ <p class="form-hint" style="margin-bottom: 8px;">Passwords are managed by Firebase Auth only. They are never stored in this app.</p>
+ <button type="button" class="btn btn-secondary" onclick="app.sendUserPasswordResetEmail(decodeURIComponent('${encodeURIComponent(user.email || user.emailId || '')}'))">Send password reset email</button>
  </div>
  </div>
 
@@ -3449,7 +3342,6 @@ Please keep this information secure.`;
  const email = document.getElementById('editUserEmail').value.trim();
  const employeeId = document.getElementById('editUserEmployeeId').value.trim();
  const username = document.getElementById('editUserUsername').value.trim();
- const password = document.getElementById('editUserPassword').value.trim();
 
  if (!name || !email || !employeeId || !username) {
  alert('Name, Email, Employee ID, and Username are required!');
@@ -3476,27 +3368,15 @@ Please keep this information secure.`;
  return;
  }
 
- // Update user
+ // Update user profile fields only (never store passwords locally)
  user.name = name;
  user.email = email;
  user.emailId = email;
  user.id = employeeId;
  user.employeeId = employeeId;
  user.username = username;
- 
- // Only update password if a new one was provided
- if (password && password.length > 0) {
- // Check if the password is already hashed (hashes are typically numeric strings)
- // If it looks like a hash (all digits), don't hash again. Otherwise, hash it.
- if (/^\d+$/.test(password) && password.length > 10) {
- // Likely already a hash, use as is
- user.password = password;
- } else {
- // New password, hash it
- user.password = this.hashPassword(password);
- }
- }
- // If password is empty, keep the existing password (don't update)
+ delete user.password;
+ delete user.passwordHash;
 
  // Save to localStorage
  const index = this.participants.findIndex(p => 
@@ -3506,12 +3386,19 @@ Please keep this information secure.`;
  (p.employeeId && String(p.employeeId) === String(searchId))
  );
  if (index !== -1) {
- this.participants[index] = user;
+ this.participants[index] = this.stripSecretsFromParticipant(user);
  this.saveParticipantsCache();
  
  // If this is the current user, update currentUser
  if (this.currentUser && (this.currentUser.id === searchId || this.currentUser.employeeId === searchId)) {
- this.currentUser = user;
+ this.currentUser = this.stripSecretsFromParticipant(user);
+ localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
+ }
+
+ if (user.uid && this.firebaseEnabled) {
+ this.participantsCol().doc(user.uid).set(this.stripSecretsFromParticipant(user), { merge: true }).catch((err) => {
+ console.warn('Failed to sync profile edit to Firebase:', err);
+ });
  }
 
  alert('User details updated successfully!');
@@ -3519,6 +3406,28 @@ Please keep this information secure.`;
  this.loadUsersList();
  } else {
  alert('Error: Could not find user to update!');
+ }
+ }
+
+ async sendUserPasswordResetEmail(email) {
+ if (!this.requireAdmin()) {
+ return;
+ }
+ const target = (email || '').trim();
+ if (!target || !this.isEmail(target)) {
+ alert('A valid email is required to send a Firebase password reset.');
+ return;
+ }
+ if (!this.firebaseEnabled || !this.auth) {
+ alert('Firebase is required to send password reset emails.');
+ return;
+ }
+ try {
+ await this.auth.sendPasswordResetEmail(target);
+ this.showToast('Password reset email sent to ' + target);
+ } catch (error) {
+ console.error('Admin password reset error:', error);
+ alert('Unable to send reset email. Check the address and Firebase Auth settings.');
  }
  }
 
@@ -4526,8 +4435,8 @@ Please keep this information secure.`;
  return;
  }
 
- this.currentUser = profile;
- localStorage.setItem('currentUser', JSON.stringify(profile));
+ this.currentUser = this.stripSecretsFromParticipant(profile);
+ localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
 
  document.getElementById('loginForm').reset();
  this.showDashboard();
@@ -4670,9 +4579,9 @@ Please keep this information secure.`;
  if (!this.isCurrentSeasonParticipant(participant)) {
  return null;
  }
- this.currentUser = participant;
- localStorage.setItem('currentUser', JSON.stringify(participant));
- return participant;
+ this.currentUser = this.stripSecretsFromParticipant(participant);
+ localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
+ return this.currentUser;
  } catch (error) {
  console.error('Failed to load user profile from Firebase:', error);
  return null;
@@ -4685,7 +4594,9 @@ Please keep this information secure.`;
  }
  try {
  const snapshot = await this.participantsCol().get();
- this.participants = this.filterCurrentSeasonParticipants(snapshot.docs.map(doc => doc.data()));
+ this.participants = this.filterCurrentSeasonParticipants(
+ snapshot.docs.map((doc) => this.stripSecretsFromParticipant(doc.data()))
+ );
  this.saveParticipantsCache();
  if (!window.location.pathname.includes('admin.html')) {
  this.updateLeaderboard();
@@ -4925,13 +4836,27 @@ Please keep this information secure.`;
 
  saveParticipantsCache() {
  const storageKey = this.firebaseEnabled ? 'participants_cache' : 'participants';
- localStorage.setItem(storageKey, JSON.stringify(this.participants));
+ const sanitized = (this.participants || []).map((p) => this.stripSecretsFromParticipant(p));
+ this.participants = sanitized;
+ localStorage.setItem(storageKey, JSON.stringify(sanitized));
  }
 
  loadParticipants() {
  const storageKey = this.firebaseEnabled ? 'participants_cache' : 'participants';
  const saved = localStorage.getItem(storageKey);
- return saved ? JSON.parse(saved) : [];
+ if (!saved) {
+ return [];
+ }
+ try {
+ const parsed = JSON.parse(saved);
+ if (!Array.isArray(parsed)) {
+ return [];
+ }
+ return parsed.map((p) => this.stripSecretsFromParticipant(p));
+ } catch (error) {
+ console.warn('Failed to parse participants cache:', error);
+ return [];
+ }
  }
 
  // Step Counter Functions

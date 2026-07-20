@@ -45,11 +45,50 @@ This app handles **CSG employee PII** and optional **location / fitness** data. 
 | No forgeable admin | Removed `localStorage.isAdmin` / hardcoded password |
 | Corporate identity | `@csgi.com` / `@csg.com` only |
 | Data access | `firestore.rules` least-privilege |
-| Passwords | Never stored in localStorage or emailed in plaintext by the app |
+| Passwords | Firebase Auth only; stripped from localStorage/cache; no client hash; reset via email link |
+| Admin CSP | Same Content-Security-Policy as main app |
 | Privacy | Consent banner + versioned privacy notice |
 | Android | `allowBackup=false`, no cleartext, no mixed content |
 | XSS | Escape user strings on leaderboard / credentials UI |
 | GPS | Coarsened coordinates; fewer points; weight kept local |
+
+## Verify Firebase rules + API key lockdown (ops checklist)
+
+Run these after deploy — code alone does not prove production compliance.
+
+### A. Firestore rules are live
+
+1. Open [Firebase Console → Firestore → Rules](https://console.firebase.google.com/project/wow-csg/firestore/rules)
+2. Confirm the published rules match `firestore.rules` in this repo (look for `isCorporateEmail`, `admins/{uid}`, and `allow write: if false` on admins).
+3. Or from a machine with Firebase CLI logged in:
+   ```bash
+   npx firebase use wow-csg
+   npx firebase deploy --only firestore:rules
+   ```
+4. Smoke test in browser DevTools while signed in as a normal `@csgi.com` user:
+   - Can read own `participants/{uid}` and create own `stepEntries`
+   - Cannot write `admins/{anyUid}`
+   - Cannot update another user’s `status` / `validatedBy` on step entries
+
+### B. API key lockdown
+
+1. Open [GCP Credentials for wow-csg](https://console.cloud.google.com/apis/credentials?project=wow-csg)
+2. Find the Browser key matching `firebase-config.js`
+3. Confirm **Application restrictions** = HTTP referrers (your GitHub Pages / localhost / Capacitor hosts only)
+4. Confirm **API restrictions** limited to Identity Toolkit, Token Service, Cloud Firestore (and Installations if used)
+5. Optional negative test: call the key from a random origin — should be rejected
+
+### C. Admin bootstrap hygiene
+
+1. Confirm `admins/{uid}` exists for `wow-csg@csgi.com`
+2. Store the admin password in a password manager
+3. Delete `.admin-bootstrap-secret.txt` from disk after storing it
+4. Prefer rotating the bootstrap password once in Firebase Auth
+
+### D. Recommended follow-ups
+
+- Enable **App Check** for Auth + Firestore
+- Get Legal / InfoSec sign-off for employee wellness + GPS data
 
 ## Privacy notice (summary)
 

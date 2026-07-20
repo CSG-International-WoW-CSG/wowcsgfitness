@@ -7,6 +7,7 @@
  <meta name="apple-mobile-web-app-capable" content="yes">
  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
  <meta name="robots" content="noindex, nofollow">
+ <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com data:; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://unpkg.com https://cdn.jsdelivr.net https://statics.teams.cdn.office.net; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebase.com https://*.cloudfunctions.net wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://www.google-analytics.com https://unpkg.com https://cdn.jsdelivr.net; worker-src 'self' blob:;">
  <title>Admin Dashboard - WOW-CSG 7 Days Fitness Challenge</title>
  <!-- Favicon -->
  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=35">
@@ -168,7 +169,7 @@
  <ol>
  <li>Go to <a href="https://www.emailjs.com/" target="_blank">EmailJS.com</a> and create a free account</li>
  <li>Create an Email Service (Gmail, Outlook, etc.)</li>
- <li>Create an Email Template with these variables: <code>{{to_email}}, {{to_name}}, {{username}}, {{password}}, {{subject}}, {{message}}</code></li>
+ <li>Create an Email Template with these variables: <code>{{to_email}}, {{to_name}}, {{username}}, {{subject}}, {{message}}</code> (do not include password fields)</li>
  <li>Get your Service ID, Template ID, and Public Key from EmailJS dashboard</li>
  <li>Enter them below and save</li>
  </ol>
@@ -378,7 +379,7 @@
  }
 
  // Load script and initialize (cache-bust so Pages/SW cannot keep old admin/admin123 builds)
- loadScript('script.js?v=36')
+ loadScript('script.js?v=37')
  .then(() => {
  console.log('Script loaded, initializing admin page...');
  initAdminPage();
