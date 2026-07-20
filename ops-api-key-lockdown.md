@@ -19,8 +19,9 @@ Key (from `firebase-config.js`): `AIzaSyCX9JCEu6aHqE9EVXiT4Xfi-iA6kmPCLJI`
    - Add your real hosts, for example:
      - `https://csg-international-wow-csg.github.io/*`
      - `https://*.github.io/*`
-     - `http://localhost/*` (dev only; remove later if unused)
-     - Capacitor Android WebView often needs: `https://localhost/*` (androidScheme https)
+     - `https://wow-csg.firebaseapp.com/*` (**required** for password-reset / email action links)
+     - `https://wow-csg.web.app/*`
+     - `http://localhost/*` / `https://localhost/*` (dev + Android WebView)
 4. **API restrictions** → Restrict key → enable at least:
    - Identity Toolkit API
    - Token Service API
