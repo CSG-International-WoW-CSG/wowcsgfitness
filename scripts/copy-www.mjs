@@ -12,6 +12,7 @@ const files = [
   'styles.css',
   'ui-refresh.css',
   'firebase-config.js',
+  'security-config.js',
   'service-worker.js',
   'manifest.json',
   'favicon.svg',
@@ -37,14 +38,18 @@ for (const file of files) {
 const indexPath = join(www, 'index.html');
 let html = readFileSync(indexPath, 'utf8');
 
-// Ensure native bridge loads before app logic (Capacitor injects its runtime separately)
+if (!html.includes('src="security-config.js"')) {
+  html = html.replace(
+    /<script src="firebase-config\.js"><\/script>/,
+    '<script src="firebase-config.js"></script>\n    <script src="security-config.js"></script>'
+  );
+}
+
 if (!html.includes('src="native-bridge.js"')) {
   html = html.replace(
     /<script src="script\.js[^"]*"><\/script>/,
-    '<script src="native-bridge.js"></script>\n    <script src="script.js?v=33"></script>'
+    '<script src="native-bridge.js"></script>\n    <script src="script.js?v=35"></script>'
   );
-} else {
-  html = html.replace(/script\.js(\?v=\d+)?/, 'script.js?v=33');
 }
 
 writeFileSync(indexPath, html, 'utf8');

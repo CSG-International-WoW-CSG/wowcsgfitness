@@ -41,10 +41,7 @@ class StepathonApp {
  this.saveStepEntries(); // Save empty array to localStorage
  }
  console.log('StepathonApp initialized - stepEntries count:', this.stepEntries.length);
- 
- this.adminCredentials = { username: 'admin', password: 'admin123' }; // Default admin credentials
- console.log('Admin credentials initialized:', this.adminCredentials);
- 
+
  // Bot protection: Rate limiting
  this.registrationAttempts = JSON.parse(localStorage.getItem('registrationAttempts') || '[]');
  this.passwordResetAttempts = JSON.parse(localStorage.getItem('passwordResetAttempts') || '[]');
@@ -102,6 +99,7 @@ class StepathonApp {
  init() {
  this.setupEventListeners();
  this.updateStorageNotice();
+ this.ensurePrivacyConsentUi();
  // Only run these on main page, not admin page
  // Use requestAnimationFrame for better performance
  if (!window.location.pathname.includes('admin.html')) {
@@ -116,6 +114,8 @@ class StepathonApp {
  this.updateLeaderboard();
  }, 100);
  });
+ } else {
+ this.restoreAdminSessionIfAuthorized();
  }
 
  // Keep participant cache fresh for admin/user lists
@@ -145,13 +145,30 @@ class StepathonApp {
  this.firebaseEnabled = true;
 
  // Keep session in sync
- this.auth.onAuthStateChanged((user) => {
+ this.auth.onAuthStateChanged(async (user) => {
  if (this.isMigratingUsers) {
  return;
  }
- if (user) {
- this.loadCurrentUserFromFirebase(user.uid);
+ if (!user) {
+ if (this.isAdmin) {
+ this.isAdmin = false;
  }
+ return;
+ }
+ if (window.location.pathname.includes('admin.html')) {
+ const ok = await this.verifyAdminAccess(user);
+ if (ok) {
+ this.isAdmin = true;
+ this.showAdminDashboard();
+ }
+ return;
+ }
+ if (!this.isCorporateEmail(user.email)) {
+ console.warn('Non-corporate account signed in; signing out.');
+ await this.auth.signOut();
+ return;
+ }
+ this.loadCurrentUserFromFirebase(user.uid);
  });
  } catch (error) {
  console.warn('Firebase initialization failed:', error);
@@ -159,6 +176,113 @@ class StepathonApp {
  this.auth = null;
  this.db = null;
  }
+ }
+
+ securityCfg() {
+ return window.securityConfig || {
+ allowedEmailDomains: ['csgi.com', 'csg.com'],
+ adminEmails: ['wow-csg@csgi.com'],
+ minPasswordLength: 8,
+ gpsCoordDecimals: 3,
+ maxGpsPointsCloud: 40,
+ privacyVersion: '2026-07-20',
+ supportEmail: 'wow-csg@csgi.com'
+ };
+ }
+
+ isCorporateEmail(email) {
+ if (!email || typeof email !== 'string' || !email.includes('@')) return false;
+ const domain = email.split('@').pop().toLowerCase().trim();
+ return this.securityCfg().allowedEmailDomains.includes(domain);
+ }
+
+ isAllowlistedAdminEmail(email) {
+ if (!email) return false;
+ const list = (this.securityCfg().adminEmails || []).map((e) => String(e).toLowerCase());
+ return list.includes(String(email).toLowerCase().trim());
+ }
+
+ async verifyAdminAccess(user) {
+ if (!user || !this.firebaseEnabled || !this.db) return false;
+ if (!this.isAllowlistedAdminEmail(user.email) && !this.isCorporateEmail(user.email)) {
+ return false;
+ }
+ if (!this.isAllowlistedAdminEmail(user.email)) {
+ return false;
+ }
+ try {
+ const doc = await this.db.collection('admins').doc(user.uid).get();
+ return doc.exists;
+ } catch (error) {
+ console.warn('Admin verification failed:', error);
+ return false;
+ }
+ }
+
+ async restoreAdminSessionIfAuthorized() {
+ if (!this.firebaseEnabled || !this.auth) return;
+ const user = this.auth.currentUser;
+ if (!user) return;
+ const ok = await this.verifyAdminAccess(user);
+ if (ok) {
+ this.isAdmin = true;
+ this.showAdminDashboard();
+ }
+ }
+
+ requireAdmin() {
+ if (!this.isAdmin) {
+ alert('Admin authorization required.');
+ return false;
+ }
+ if (!this.firebaseEnabled || !this.auth || !this.auth.currentUser) {
+ alert('Admin Firebase session required. Please sign in again.');
+ this.isAdmin = false;
+ return false;
+ }
+ return true;
+ }
+
+ ensurePrivacyConsentUi() {
+ if (typeof document === 'undefined') return;
+ const version = this.securityCfg().privacyVersion;
+ const key = 'wowcsg_privacy_consent_v';
+ if (localStorage.getItem(key) === version) return;
+ if (document.getElementById('privacyConsentBanner')) return;
+
+ const banner = document.createElement('div');
+ banner.id = 'privacyConsentBanner';
+ banner.className = 'privacy-consent-banner';
+ banner.setAttribute('role', 'dialog');
+ banner.setAttribute('aria-label', 'Privacy notice');
+ banner.innerHTML = `
+ <div class="privacy-consent-inner">
+ <strong>Privacy notice (CSG internal challenge)</strong>
+ <p>This app stores your name, employee ID, corporate email, and activity data (distance, time, steps). Outdoor mode may store a shortened, coarsened GPS path. Optional body weight stays on this device for calorie estimates. Data is for the WOW-CSG challenge only and can be wiped after the season. Contact ${this.escapeHtml(this.securityCfg().supportEmail)}.</p>
+ <label class="privacy-consent-check"><input type="checkbox" id="privacyConsentCheck"> I am a CSG employee and agree to this use of my data.</label>
+ <button type="button" class="btn btn-primary" id="privacyConsentAccept" disabled>Continue</button>
+ </div>`;
+ document.body.appendChild(banner);
+ const check = banner.querySelector('#privacyConsentCheck');
+ const btn = banner.querySelector('#privacyConsentAccept');
+ check.addEventListener('change', () => { btn.disabled = !check.checked; });
+ btn.addEventListener('click', () => {
+ localStorage.setItem(key, version);
+ banner.remove();
+ });
+ }
+
+ sanitizePathForCloud(path) {
+ const cfg = this.securityCfg();
+ const decimals = cfg.gpsCoordDecimals || 3;
+ const maxPts = cfg.maxGpsPointsCloud || 40;
+ if (!Array.isArray(path)) return [];
+ const factor = Math.pow(10, decimals);
+ return path.slice(0, maxPts).map((p) => ({
+ lat: Math.round(Number(p.lat) * factor) / factor,
+ lng: Math.round(Number(p.lng) * factor) / factor,
+ t: p.t || p.timestamp || null
+ }));
  }
 
  /** Wipe browser caches when data season changes (fresh challenge start). */
@@ -178,7 +302,8 @@ class StepathonApp {
  'registrationAttempts',
  'passwordResetAttempts',
  'sentEmails',
- 'motivationIndex'
+ 'motivationIndex',
+ 'isAdmin'
  ];
  keysToClear.forEach((key) => localStorage.removeItem(key));
  localStorage.setItem(seasonKey, this.dataSeason);
@@ -1625,21 +1750,22 @@ class StepathonApp {
  }
 
  checkCurrentUser() {
+ localStorage.removeItem('isAdmin');
  const savedUser = localStorage.getItem('currentUser');
- const savedAdmin = localStorage.getItem('isAdmin');
- 
- if (savedAdmin === 'true') {
- this.isAdmin = true;
- this.showAdminDashboard();
- } else if (this.firebaseEnabled && this.auth && this.auth.currentUser) {
+
+ if (this.firebaseEnabled && this.auth && this.auth.currentUser) {
  this.loadCurrentUserFromFirebase(this.auth.currentUser.uid).then((participant) => {
  if (participant) {
  this.showDashboard();
  }
  });
  } else if (savedUser) {
+ try {
  this.currentUser = JSON.parse(savedUser);
  this.showDashboard();
+ } catch (e) {
+ localStorage.removeItem('currentUser');
+ }
  }
  }
 
@@ -1671,35 +1797,73 @@ class StepathonApp {
  }
 
  handleAdminLogin() {
- const username = document.getElementById('adminUsername').value.trim();
- const password = document.getElementById('adminPassword').value.trim();
+ this.handleAdminLoginAsync();
+ }
 
- if (!username || !password) {
- alert('Please enter both username and password!');
+ async handleAdminLoginAsync() {
+ try {
+ const usernameInput = document.getElementById('adminUsername');
+ const passwordInput = document.getElementById('adminPassword');
+
+ if (!usernameInput || !passwordInput) {
+ alert('Error: Admin login form elements not found. Please refresh the page.');
  return;
  }
 
- // Check credentials
- if (username === this.adminCredentials.username && password === this.adminCredentials.password) {
+ const email = usernameInput.value.trim().toLowerCase();
+ const password = passwordInput.value;
+
+ if (!email || !password) {
+ alert('Please enter both admin email and password.');
+ return;
+ }
+
+ if (!this.firebaseEnabled || !this.auth) {
+ alert('Firebase is required for CSG-compliant admin access. Configure Firebase and try again.');
+ return;
+ }
+
+ if (!this.isAllowlistedAdminEmail(email)) {
+ alert('This email is not authorized for admin access.');
+ return;
+ }
+
+ try {
+ const credential = await this.auth.signInWithEmailAndPassword(email, password);
+ const ok = await this.verifyAdminAccess(credential.user);
+ if (!ok) {
+ await this.auth.signOut();
+ alert(
+ 'Signed in, but this account is not an admin.\n\n' +
+ 'Add Firestore document admins/' + credential.user.uid + ' in the Firebase Console.'
+ );
+ return;
+ }
  this.isAdmin = true;
- localStorage.setItem('isAdmin', 'true');
- 
- // Redirect to admin page if not already there
+ localStorage.removeItem('isAdmin');
  if (!window.location.pathname.includes('admin.html')) {
  window.location.href = 'admin.html';
  } else {
  this.showAdminDashboard();
  }
- } else {
- alert('Invalid admin credentials! Please check your username and password.');
- document.getElementById('adminPassword').focus();
+ } catch (error) {
+ console.warn('Admin login failed');
+ alert('Invalid admin credentials or Firebase error. Contact ' + this.securityCfg().supportEmail);
+ passwordInput.focus();
+ }
+ } catch (error) {
+ console.error('Admin login error:', error);
+ alert('An error occurred during admin login.');
  }
  }
 
  adminLogout() {
  this.isAdmin = false;
  localStorage.removeItem('isAdmin');
- 
+ if (this.firebaseEnabled && this.auth) {
+ this.auth.signOut().catch(() => {});
+ }
+
  // Check if we're on admin page
  if (window.location.pathname.includes('admin.html')) {
  document.getElementById('adminLoginCard').style.display = 'block';
@@ -1828,13 +1992,28 @@ class StepathonApp {
  return;
  }
 
+ if (!this.isCorporateEmail(email)) {
+ const domains = this.securityCfg().allowedEmailDomains.join(', @');
+ alert('CSG employees only. Please register with a corporate email (@' + domains + ').');
+ document.getElementById('emailId').focus();
+ return;
+ }
+
+ const privacyKey = 'wowcsg_privacy_consent_v';
+ if (localStorage.getItem(privacyKey) !== this.securityCfg().privacyVersion) {
+ alert('Please accept the privacy notice before registering.');
+ this.ensurePrivacyConsentUi();
+ return;
+ }
+
  if (!username || username.length < 3) {
  alert('Please enter a username with at least 3 characters!');
  return;
  }
 
- if (!password || password.length < 6) {
- alert('Please enter a password with at least 6 characters!');
+ const minPw = this.securityCfg().minPasswordLength || 8;
+ if (!password || password.length < minPw) {
+ alert('Please enter a password with at least ' + minPw + ' characters!');
  return;
  }
 
@@ -1965,65 +2144,12 @@ class StepathonApp {
  return;
  }
 
- // Check if username already exists
- const existingUser = this.participants.find(p => p.username && p.username.toLowerCase() === username.toLowerCase());
- if (existingUser) {
- alert('Username already exists! Please choose a different username.');
- document.getElementById('username').focus();
- return;
- }
-
- // Check if email is already registered
- const existingEmail = this.participants.find(p => p.email && p.email.toLowerCase() === email.toLowerCase());
- if (existingEmail) {
- alert('This email is already registered! Please login instead.');
- document.getElementById('emailId').focus();
- this.switchLoginTab('user-login');
- return;
- }
-
- // Check if employee ID is already registered
- const existingEmployeeId = this.participants.find(p => p.id && p.id.toLowerCase() === id.toLowerCase());
- if (existingEmployeeId) {
- alert('This Employee ID is already registered! Please login instead or contact support if you believe this is an error.');
- document.getElementById('employeeId').focus();
- this.switchLoginTab('user-login');
- return;
- }
-
- // Create new participant
- const participant = {
- id: id,
- name: name,
- email: email,
- username: username,
- password: this.hashPassword(password), // Store hashed password
- totalSteps: 0,
- dailySteps: {},
- streak: 0,
- lastActivity: null,
- activities: [],
- registeredAt: new Date().toISOString()
- };
-
- this.participants.push(participant);
- this.saveParticipantsCache();
-
- // Record successful registration attempt
- this.recordAttempt('registration', true);
-
- // Generate new CAPTCHA for next registration
- this.generateCaptcha('registration');
-
- // Simulate sending password email
- this.sendPasswordEmail(email, password, username);
-
- // Show success message
- alert(`Account created successfully!\n\nYour password has been sent to: ${email}\n\nPlease check your email and login with your username and password.`);
- 
- // Clear form and switch to login
- document.getElementById('registrationForm').reset();
- this.switchLoginTab('user-login');
+ // CSG compliance: local-only accounts disabled (insecure password storage).
+ alert(
+ 'Firebase is required to register. Corporate accounts must use Firebase Auth.\n\n' +
+ 'If you see this message, Firebase is not configured. Contact ' +
+ this.securityCfg().supportEmail
+ );
  }
 
  async handleLogin() {
@@ -2043,39 +2169,10 @@ class StepathonApp {
  return;
  }
 
- const normalizedIdentifier = identifier.toLowerCase();
-
- // Find participant by username, email, or employee ID
- const participant = this.participants.find(p =>
- (p.username && p.username.toLowerCase() === normalizedIdentifier) ||
- (p.email && p.email.toLowerCase() === normalizedIdentifier) ||
- (p.emailId && p.emailId.toLowerCase() === normalizedIdentifier) ||
- (p.id && p.id.toLowerCase() === normalizedIdentifier) ||
- (p.employeeId && p.employeeId.toLowerCase() === normalizedIdentifier)
+ alert(
+ 'Firebase is required for CSG-compliant login.\n\n' +
+ 'Contact ' + this.securityCfg().supportEmail + ' if the app cannot reach Firebase.'
  );
- 
- if (!participant) {
- alert('No account found for that username, email, or Employee ID.\n\nIf you registered in another browser or device, configure Firebase to enable cross-browser login.');
- document.getElementById('loginUsername').focus();
- return;
- }
-
- // Verify password
- const hashedPassword = this.hashPassword(password);
- if (participant.password !== hashedPassword) {
- alert('Invalid username or password!');
- document.getElementById('loginPassword').focus();
- return;
- }
-
- this.currentUser = participant;
- localStorage.setItem('currentUser', JSON.stringify(participant));
-
- // Clear login form
- document.getElementById('loginForm').reset();
-
- this.showDashboard();
- this.updateLeaderboard();
  }
 
  hashPassword(password) {
@@ -2103,183 +2200,40 @@ class StepathonApp {
  }
 
  async sendPasswordEmail(email, password, username) {
- // Try to send email automatically via EmailJS first
- const emailSent = await this.sendEmailViaEmailJS(email, username, password);
- 
- // Create email content for mailto link
- const subject = encodeURIComponent('Welcome to WOW-CSG 7 Days Fitness Challenge - Your Account Details');
- const body = encodeURIComponent(`Dear Participant,
-
-Welcome to the WOW-CSG 7 Days Fitness Challenge!
-
-Your account has been created successfully.
-
-Username: ${username}
-Password: ${password}
-
-Please keep this information secure and login to start tracking your steps.
-
-Note: Each email address and Employee ID can only be registered once.
-
-Best regards,
-WOW-CSG Fitness Team`);
-
- // Store email details for reference
- const emailData = {
- to: email,
- subject: 'Welcome to WOW-CSG 7 Days Fitness Challenge - Your Account Details',
- body: `Dear Participant,
-
-Welcome to the WOW-CSG 7 Days Fitness Challenge!
-
-Your account has been created successfully.
-
-Username: ${username}
-Password: ${password}
-
-Please keep this information secure and login to start tracking your steps.
-
-Note: Each email address and Employee ID can only be registered once.
-
-Best regards,
-WOW-CSG Fitness Team`,
- sentAt: new Date().toISOString(),
- sentViaEmailJS: emailSent
- };
-
- // Store in localStorage for reference
- const sentEmails = JSON.parse(localStorage.getItem('sentEmails') || '[]');
- sentEmails.push(emailData);
- localStorage.setItem('sentEmails', JSON.stringify(sentEmails));
-
- // Show email modal with copy functionality and mailto link
- this.showEmailModal(email, username, password, subject, body, emailSent);
+ // CSG policy: never email or persist plaintext passwords.
+ return false;
  }
 
  async sendEmailViaEmailJS(email, username, password) {
- // Check if EmailJS is configured
- if (typeof emailjs === 'undefined') {
+ // Disabled — passwords must not leave the device via client email APIs.
  return false;
- }
-
- // Get EmailJS configuration from localStorage
- const emailjsServiceId = localStorage.getItem('emailjs_service_id');
- const emailjsTemplateId = localStorage.getItem('emailjs_template_id');
- const emailjsPublicKey = localStorage.getItem('emailjs_public_key');
-
- // If not configured, return false
- if (!emailjsServiceId || !emailjsTemplateId || !emailjsPublicKey) {
- return false;
- }
-
- try {
- // Initialize EmailJS if not already initialized
- if (!emailjs.init) {
- emailjs.init(emailjsPublicKey);
- }
-
- // Prepare email template parameters
- const templateParams = {
- to_email: email,
- to_name: username,
- username: username,
- password: password,
- subject: 'Welcome to WOW-CSG 7 Days Fitness Challenge - Your Account Details',
- message: `Dear Participant,
-
-Welcome to the WOW-CSG 7 Days Fitness Challenge!
-
-Your account has been created successfully.
-
-Username: ${username}
-Password: ${password}
-
-Please keep this information secure and login to start tracking your steps.
-
-Note: Each email address and Employee ID can only be registered once.
-
-Best regards,
-WOW-CSG Fitness Team`
- };
-
- // Send email via EmailJS
- await emailjs.send(emailjsServiceId, emailjsTemplateId, templateParams);
- return true;
- } catch (error) {
- console.error('EmailJS Error:', error);
- return false;
- }
  }
 
  showEmailModal(email, username, password, subject, body, emailSent = false) {
- // Create modal overlay
  const modal = document.createElement('div');
  modal.className = 'email-modal-overlay';
- 
- const emailStatus = emailSent 
- ? '<div class="email-success"><p>OK: Email sent successfully to your registered email address!</p></div>'
- : '<div class="email-warning"><p>Note: Automatic email sending is not configured. Please use the options below to receive your credentials.</p></div>';
- 
+ const safeEmail = this.escapeHtml(email || '');
+ const safeUser = this.escapeHtml(username || '');
  modal.innerHTML = `
  <div class="email-modal">
  <div class="email-modal-header">
- <h3>Account Details ${emailSent ? 'Sent' : 'Ready'}</h3>
- <button class="email-modal-close" onclick="this.closest('.email-modal-overlay').remove()"></button>
+ <h3>Account ready</h3>
+ <button type="button" class="email-modal-close" id="emailModalCloseBtn">&times;</button>
  </div>
  <div class="email-modal-content">
- ${emailStatus}
- <p class="email-info">Your account credentials:</p>
- <div class="email-details">
- <p><strong>To:</strong> ${email}</p>
- <p><strong>Subject:</strong> Welcome to WOW-CSG 7 Days Fitness Challenge - Your Account Details</p>
+ <p>Your account was created. Use the password you chose at registration — it is not stored or emailed by this app.</p>
+ <p><strong>Email:</strong> ${safeEmail}</p>
+ <p><strong>Username:</strong> <span id="copyUsername">${safeUser}</span>
+ <button type="button" class="btn-copy" id="copyUsernameBtn">Copy</button></p>
+ <button type="button" class="btn btn-primary" id="emailModalDoneBtn">Continue</button>
  </div>
- <div class="email-credentials">
- <div class="credential-item">
- <label>Username:</label>
- <div class="credential-value">
- <span id="copyUsername">${username}</span>
- <button class="btn-copy" onclick="app.copyToClipboard('${username}', 'Username')">Copy</button>
- </div>
- </div>
- <div class="credential-item">
- <label>Password:</label>
- <div class="credential-value">
- <span id="copyPassword">${password}</span>
- <button class="btn-copy" onclick="app.copyToClipboard('${password}', 'Password')">Copy</button>
- </div>
- </div>
- </div>
- <div class="email-actions">
- <a href="mailto:${email}?subject=${subject}&body=${body}" class="btn btn-primary" target="_blank" onclick="this.closest('.email-modal-overlay').remove()">Open Email Client
- </a>
- <button class="btn btn-secondary" onclick="app.copyEmailContent('${email}', '${username}', '${password}')">Copy All Details
- </button>
- </div>
- ${!emailSent ? `
- <div class="email-note">
- <p><strong>Note:</strong> To enable automatic email sending, please configure EmailJS settings in the admin panel or contact your administrator.</p>
- </div>
- ` : ''}
- </div>
- </div>
- `;
+ </div>`;
  document.body.appendChild(modal);
- 
- // Close on overlay click
- modal.addEventListener('click', (e) => {
- if (e.target === modal) {
- modal.remove();
- }
- });
- 
- // Auto-close after 5 seconds if email was sent successfully
- if (emailSent) {
- setTimeout(() => {
- if (modal.parentNode) {
- modal.remove();
- }
- }, 5000);
- }
+ const close = () => modal.remove();
+ modal.querySelector('#emailModalCloseBtn').addEventListener('click', close);
+ modal.querySelector('#emailModalDoneBtn').addEventListener('click', close);
+ modal.querySelector('#copyUsernameBtn').addEventListener('click', () => this.copyToClipboard(username, 'Username'));
+ modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
  }
 
  copyToClipboard(text, label) {
@@ -2981,53 +2935,6 @@ Please keep this information secure.`;
  });
  }
 
- handleAdminLogin() {
- try {
- const usernameInput = document.getElementById('adminUsername');
- const passwordInput = document.getElementById('adminPassword');
- 
- if (!usernameInput || !passwordInput) {
- alert('Error: Admin login form elements not found. Please refresh the page.');
- console.error('Admin form elements not found');
- return;
- }
-
- const username = usernameInput.value.trim();
- const password = passwordInput.value.trim();
-
- if (!username || !password) {
- alert('Please enter both username and password!');
- return;
- }
-
- // Debug logging
- console.log('Admin login attempt:', { username, expectedUsername: this.adminCredentials.username });
- console.log('Password check:', { passwordLength: password.length, expectedPassword: this.adminCredentials.password });
-
- // Check credentials
- if (username === this.adminCredentials.username && password === this.adminCredentials.password) {
- this.isAdmin = true;
- localStorage.setItem('isAdmin', 'true');
- 
- console.log('Admin login successful');
- 
- // Redirect to admin page if not already there
- if (!window.location.pathname.includes('admin.html')) {
- window.location.href = 'admin.html';
- } else {
- this.showAdminDashboard();
- }
- } else {
- alert('Invalid admin credentials!\n\nExpected:\nUsername: ' + this.adminCredentials.username + '\nPassword: ' + this.adminCredentials.password + '\n\nYou entered:\nUsername: ' + username + '\nPassword: ' + (password ? '***' : '(empty)'));
- passwordInput.focus();
- passwordInput.select();
- }
- } catch (error) {
- console.error('Admin login error:', error);
- alert('An error occurred during admin login. Please check the console for details.\n\nError: ' + error.message);
- }
- }
-
  showAdminDashboard() {
  // Check if we're on admin page
  if (window.location.pathname.includes('admin.html')) {
@@ -3049,6 +2956,9 @@ Please keep this information secure.`;
 
  async updateAdminDashboard() {
  try {
+ if (!this.requireAdmin()) {
+ return;
+ }
  if (this.firebaseEnabled) {
  await this.syncStepEntriesFromFirebase();
  }
@@ -3136,6 +3046,9 @@ Please keep this information secure.`;
  }
 
  loadUsersList() {
+ if (!this.requireAdmin()) {
+ return;
+ }
  const usersList = document.getElementById('usersList');
  if (!usersList) {
  console.error('usersList element not found!');
@@ -3610,6 +3523,9 @@ Please keep this information secure.`;
  }
 
  deleteUser(userId) {
+ if (!this.requireAdmin()) {
+ return;
+ }
  if (!confirm('Are you sure you want to delete this user? This will also delete all their step entries. This action cannot be undone!')) {
  return;
  }
@@ -3653,8 +3569,7 @@ Please keep this information secure.`;
  * for docs this client can delete. Starts a fresh challenge roster in the UI.
  */
  async clearAllChallengeUserData() {
- if (!this.isAdmin) {
- alert('Admin login required.');
+ if (!this.requireAdmin()) {
  return;
  }
 
@@ -3982,6 +3897,9 @@ Please keep this information secure.`;
  }
 
  validateEntry(entryId, status) {
+ if (!this.requireAdmin()) {
+ return;
+ }
  const entry = this.stepEntries.find(e => e.id === entryId);
  if (!entry) return;
 
@@ -4514,7 +4432,7 @@ Please keep this information secure.`;
 
  item.innerHTML = `
  <div class="rank">${index + 1}</div>
- <div class="name">${participant.name} ${participant.department ? `(${participant.department})` : ''}</div>
+ <div class="name">${this.escapeHtml(participant.name)}${participant.department ? ` (${this.escapeHtml(participant.department)})` : ''}</div>
  <div class="steps">${stepsDisplay}</div>
  `;
 
@@ -4544,7 +4462,7 @@ Please keep this information secure.`;
  });
 
  item.innerHTML = `
- <div>${activity.message}</div>
+ <div>${this.escapeHtml(activity.message || '')}</div>
  <div class="activity-time">${timeStr}</div>
  `;
 
@@ -4587,6 +4505,11 @@ Please keep this information secure.`;
  }
 
  const credential = await this.auth.signInWithEmailAndPassword(email, password);
+ if (!this.isCorporateEmail(credential.user.email || email)) {
+ await this.auth.signOut();
+ alert('Only CSG corporate email accounts can use this challenge.');
+ return;
+ }
  let profile = participant && participant.uid === credential.user.uid && this.isCurrentSeasonParticipant(participant)
  ? participant
  : await this.loadCurrentUserFromFirebase(credential.user.uid);
@@ -4790,7 +4713,17 @@ Please keep this information secure.`;
  return;
  }
  try {
- await this.stepEntriesCol().doc(entry.id).set(entry, { merge: true });
+ const payload = { ...entry };
+ delete payload.screenshot;
+ delete payload.bodyWeightKg;
+ delete payload.password;
+ if (payload.path) {
+ payload.path = this.sanitizePathForCloud(payload.path);
+ }
+ if (!payload.userUid && this.auth && this.auth.currentUser) {
+ payload.userUid = this.auth.currentUser.uid;
+ }
+ await this.stepEntriesCol().doc(entry.id).set(payload, { merge: true });
  } catch (error) {
  console.warn('Failed to upsert step entry in Firebase:', error);
  }
@@ -4819,6 +4752,9 @@ Please keep this information secure.`;
  }
 
  async migrateLocalUsersToFirebase() {
+ if (!this.requireAdmin()) {
+ return;
+ }
  if (!this.firebaseEnabled || !this.auth || !this.db) {
  alert('Firebase is not configured. Please update firebase-config.js first.');
  return;
@@ -6548,17 +6484,21 @@ Please keep this information secure.`;
  this.currentUser.dailyStats[today] = prevDay;
 
  const entryId = `ENTRY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+ const authUid = (this.auth && this.auth.currentUser && this.auth.currentUser.uid) || this.currentUser.uid || null;
+ if (!authUid) {
+ alert('You must be signed in with Firebase to save activity.');
+ return;
+ }
  const stepEntry = {
  id: entryId,
  userId: this.currentUser.id || this.currentUser.employeeId || 'unknown',
- userUid: this.currentUser.uid || null,
+ userUid: authUid,
  userName: this.currentUser.name || 'Unknown User',
  userEmail: this.currentUser.email || this.currentUser.emailId || 'No email',
  steps: steps,
  distanceKm: Number(distanceKm.toFixed(3)),
  caloriesBurned,
- bodyWeightKg: trackMeta && trackMeta.bodyWeightKg ? trackMeta.bodyWeightKg : this.getBodyWeightKg(),
- path: trackMeta && Array.isArray(trackMeta.path) ? trackMeta.path.slice(0, 300) : [],
+ path: this.sanitizePathForCloud(trackMeta && Array.isArray(trackMeta.path) ? trackMeta.path : []),
  durationSec,
  screenshot: null,
  date: new Date().toISOString(),
@@ -6842,125 +6782,3 @@ try {
  // Still set window.app to null so admin.html can detect the error
  window.app = null;
 }
-
-// Debug helper functions (accessible from browser console)
-window.debugStepathon = {
- // Check localStorage
- checkLocalStorage: function() {
- console.log('=== LocalStorage Debug ===');
- const stepEntriesKey = window.app && window.app.firebaseEnabled ? 'stepEntries_cache' : 'stepEntries';
- const stepEntries = localStorage.getItem(stepEntriesKey);
- console.log('stepEntries key exists:', stepEntries !== null);
- console.log('stepEntries value:', stepEntries);
- console.log('stepEntries length:', stepEntries ? stepEntries.length : 0);
- 
- if (stepEntries) {
- try {
- const parsed = JSON.parse(stepEntries);
- console.log('Parsed entries:', parsed);
- console.log('Is array:', Array.isArray(parsed));
- console.log('Entry count:', Array.isArray(parsed) ? parsed.length : 'N/A');
- if (Array.isArray(parsed) && parsed.length > 0) {
- console.log('First entry:', parsed[0]);
- console.log('All entry statuses:', parsed.map(e => e ? e.status : 'null'));
- }
- } catch (e) {
- console.error('Error parsing stepEntries:', e);
- }
- }
- 
- const participantsKey = window.app && window.app.firebaseEnabled ? 'participants_cache' : 'participants';
- const participants = localStorage.getItem(participantsKey);
- console.log('participants key exists:', participants !== null);
- if (participants) {
- try {
- const parsed = JSON.parse(participants);
- console.log('Participants count:', Array.isArray(parsed) ? parsed.length : 'N/A');
- } catch (e) {
- console.error('Error parsing participants:', e);
- }
- }
- },
- 
- // Create a test entry
- createTestEntry: function() {
- console.log('Creating test entry...');
- const testEntry = {
- id: 'TEST_ENTRY_' + Date.now(),
- userId: 'TEST_USER',
- userName: 'Test User',
- userEmail: 'test@example.com',
- steps: 5000,
- screenshot: null,
- date: new Date().toISOString(),
- status: 'pending',
- validatedBy: null,
- validatedAt: null,
- lastModifiedBy: null,
- lastModifiedAt: null,
- notes: null,
- source: 'manual'
- };
- 
- if (window.app) {
- window.app.stepEntries = window.app.loadStepEntries();
- window.app.stepEntries.unshift(testEntry);
- window.app.saveStepEntries();
- console.log('Test entry created:', testEntry);
- console.log('Total entries now:', window.app.stepEntries.length);
- 
- // Refresh dashboard if on admin page
- if (window.location.pathname.includes('admin.html')) {
- window.app.updateAdminDashboard();
- }
- } else {
- console.error('App not available');
- }
- },
- 
- // Clear all entries
- clearEntries: function() {
- if (confirm('Are you sure you want to clear all step entries?')) {
- const stepEntriesKey = window.app && window.app.firebaseEnabled ? 'stepEntries_cache' : 'stepEntries';
- localStorage.removeItem(stepEntriesKey);
- if (window.app) {
- window.app.stepEntries = [];
- if (window.location.pathname.includes('admin.html')) {
- window.app.updateAdminDashboard();
- }
- }
- console.log('All entries cleared');
- }
- },
- 
- // Force refresh dashboard
- refreshDashboard: function() {
- if (window.app && typeof window.app.updateAdminDashboard === 'function') {
- console.log('Forcing dashboard refresh...');
- window.app.updateAdminDashboard();
- } else {
- console.error('App or updateAdminDashboard not available');
- }
- },
- 
- // Show app state
- showAppState: function() {
- if (window.app) {
- console.log('=== App State ===');
- console.log('stepEntries:', window.app.stepEntries);
- console.log('stepEntries length:', window.app.stepEntries ? window.app.stepEntries.length : 'N/A');
- console.log('isAdmin:', window.app.isAdmin);
- console.log('currentUser:', window.app.currentUser);
- } else {
- console.error('App not available');
- }
- }
-};
-
-console.log('Debug helpers available! Use window.debugStepathon to access:');
-console.log(' - checkLocalStorage() - Check localStorage data');
-console.log(' - createTestEntry() - Create a test entry');
-console.log(' - clearEntries() - Clear all entries');
-console.log(' - refreshDashboard() - Force refresh dashboard');
-console.log(' - showAppState() - Show app state');
-

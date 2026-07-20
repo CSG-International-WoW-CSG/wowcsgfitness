@@ -6,12 +6,13 @@
  <meta name="mobile-web-app-capable" content="yes">
  <meta name="apple-mobile-web-app-capable" content="yes">
  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+ <meta name="robots" content="noindex, nofollow">
  <title>Admin Dashboard - WOW-CSG 7 Days Fitness Challenge</title>
  <!-- Favicon -->
- <link rel="icon" type="image/svg+xml" href="favicon.svg?v=33">
- <link rel="apple-touch-icon" href="favicon.svg?v=33">
+ <link rel="icon" type="image/svg+xml" href="favicon.svg?v=35">
+ <link rel="apple-touch-icon" href="favicon.svg?v=35">
  <link rel="stylesheet" href="styles.css">
- <link rel="stylesheet" href="ui-refresh.css?v=33">
+ <link rel="stylesheet" href="ui-refresh.css?v=35">
  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
  <!-- Microsoft Teams SDK (optional, only loads if in Teams) -->
  <script src="https://statics.teams.cdn.office.net/sdk/v1.11.0/js/MicrosoftTeams.min.js" crossorigin="anonymous"></script>
@@ -22,6 +23,7 @@
  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
  <script src="firebase-config.js"></script>
+ <script src="security-config.js"></script>
 </head>
 <body>
  <div class="container">
@@ -37,7 +39,7 @@
  <div class="brand-lockup" aria-label="WOW-CSG Fitness Challenge">
  <div class="brand-mark-wrap" aria-hidden="true">
  <span class="brand-mark-orbit"></span>
- <img src="brand-mark.svg?v=33" alt="" class="brand-mark-img" width="56" height="56">
+ <img src="brand-mark.svg?v=35" alt="" class="brand-mark-img" width="60" height="60">
  </div>
  <div class="brand-wordmark">
  <span class="brand-wow">WOW-CSG</span>
@@ -58,13 +60,14 @@
  <div class="card" id="adminLoginCard">
  <h2>&#128274; Admin Access</h2>
  <form id="adminForm">
+ <p class="form-hint" style="margin-bottom:12px;">CSG admin access uses Firebase Auth. Your email must be allowlisted and present in Firestore <code>admins/{uid}</code>.</p>
  <div class="form-group">
- <label for="adminUsername">Username <span class="required">*</span></label>
- <input type="text" id="adminUsername" placeholder="Enter admin username" required autocomplete="username">
+ <label for="adminUsername">Admin Email <span class="required">*</span></label>
+ <input type="email" id="adminUsername" placeholder="wow-csg@csgi.com" required autocomplete="username">
  </div>
  <div class="form-group">
  <label for="adminPassword">Password <span class="required">*</span></label>
- <input type="password" id="adminPassword" placeholder="Enter admin password" required autocomplete="current-password">
+ <input type="password" id="adminPassword" placeholder="Enter your Firebase password" required autocomplete="current-password">
  </div>
  <button type="submit" class="btn btn-primary">Login as Admin</button>
  <div class="back-link-section">

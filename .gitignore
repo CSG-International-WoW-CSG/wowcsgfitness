@@ -15,3 +15,8 @@ _retarget_collections.py
 *.apk
 *.aab
 .DS_Store
+.admin-bootstrap-secret.txt
+*-firebase-adminsdk-*.json
+serviceAccount*.json
+.env
+.env.*

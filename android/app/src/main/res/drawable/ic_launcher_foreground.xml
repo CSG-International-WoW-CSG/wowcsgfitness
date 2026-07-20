@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Soft inner plate (visible in adaptive safe zone) -->
+    <path
+        android:fillColor="#0A4F5C"
+        android:pathData="M30,30 h48 a12,12 0 0 1 12,12 v48 a12,12 0 0 1 -12,12 h-48 a12,12 0 0 1 -12,-12 v-48 a12,12 0 0 1 12,-12 z"
+        android:fillAlpha="0.35" />
+
+    <!-- Speed swooshes -->
+    <path
+        android:pathData="M24,58 C36,50 48,66 66,54"
+        android:strokeWidth="4.5"
+        android:strokeColor="#FF6B4A"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M26,66 C38,58 50,72 68,62"
+        android:strokeWidth="3.2"
+        android:strokeColor="#2DD4BF"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:strokeAlpha="0.9" />
+    <path
+        android:pathData="M28,50 C40,44 52,58 70,46"
+        android:strokeWidth="2.8"
+        android:strokeColor="#FF9F43"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:strokeAlpha="0.75" />
+
+    <!-- Runner head -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M62,34 m-7,0 a7,7 0 1,1 14,0 a7,7 0 1,1 -14,0" />
+
+    <!-- Torso -->
+    <path
+        android:pathData="M59,42 L50,58"
+        android:strokeWidth="7"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Front arm -->
+    <path
+        android:pathData="M55,46 L72,40"
+        android:strokeWidth="5.8"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Back arm -->
+    <path
+        android:pathData="M55,47 L40,56"
+        android:strokeWidth="5.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Lead leg -->
+    <path
+        android:pathData="M50,58 L66,76"
+        android:strokeWidth="6.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Trail leg -->
+    <path
+        android:pathData="M50,58 L36,74"
+        android:strokeWidth="6.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Shoe accents -->
+    <path
+        android:pathData="M64,76 L74,79"
+        android:strokeWidth="4.5"
+        android:strokeColor="#FFD4A8"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M34,74 L26,77"
+        android:strokeWidth="4"
+        android:strokeColor="#FFD4A8"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Energy bolt -->
+    <path
+        android:fillColor="#FFD166"
+        android:pathData="M76,42 L68,56 L73,56 L65,70 L84,52 L76,52 Z" />
+
+    <!-- Footstep dots -->
+    <path
+        android:fillColor="#FF9F43"
+        android:pathData="M32,82 m-2.8,0 a2.8,2.8 0 1,1 5.6,0 a2.8,2.8 0 1,1 -5.6,0" />
+    <path
+        android:fillColor="#2DD4BF"
+        android:pathData="M42,85 m-2.8,0 a2.8,2.8 0 1,1 5.6,0 a2.8,2.8 0 1,1 -5.6,0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M52,82 m-2.8,0 a2.8,2.8 0 1,1 5.6,0 a2.8,2.8 0 1,1 -5.6,0" />
+</vector>

@@ -149,42 +149,50 @@ header::before,
 
 .brand-mark-wrap {
   position: relative;
-  width: 56px;
-  height: 56px;
+  width: 60px;
+  height: 60px;
   flex-shrink: 0;
 }
 
 .brand-mark-orbit {
   position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  border: 2px dashed rgba(13, 148, 136, 0.45);
-  animation: brandOrbit 10s linear infinite;
+  inset: -6px;
+  border-radius: 22px;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(#fff0, #fff0) padding-box,
+    linear-gradient(135deg, #0d9488, #ff6b4a, #ff9f43) border-box;
+  animation: brandOrbit 8s linear infinite;
   pointer-events: none;
+  opacity: 0.85;
 }
 
 .brand-mark-img {
-  width: 56px;
-  height: 56px;
+  width: 60px;
+  height: 60px;
   display: block;
-  border-radius: 50%;
-  box-shadow: 0 8px 22px rgba(11, 61, 102, 0.28);
-  animation: brandBob 3.2s ease-in-out infinite;
+  border-radius: 18px;
+  box-shadow:
+    0 10px 26px rgba(6, 42, 71, 0.4),
+    0 0 0 2px rgba(255, 255, 255, 0.35);
+  animation: brandPulse 2.4s ease-in-out infinite;
   transition: transform 0.35s var(--ease), box-shadow 0.35s var(--ease);
 }
 
 .brand-lockup:hover .brand-mark-img {
-  transform: scale(1.06) rotate(-4deg);
-  box-shadow: 0 12px 28px rgba(255, 107, 74, 0.28);
+  transform: scale(1.08) rotate(-5deg);
+  box-shadow:
+    0 14px 32px rgba(255, 107, 74, 0.4),
+    0 0 0 2px rgba(255, 209, 102, 0.55);
 }
 
 @keyframes brandOrbit {
   to { transform: rotate(360deg); }
 }
 
-@keyframes brandBob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
+@keyframes brandPulse {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-2px) scale(1.03); }
 }
 
 .brand-wordmark {
@@ -265,6 +273,10 @@ header::before,
   .csg-logo-shine,
   .brand-lockup {
     animation: none !important;
+  }
+
+  .brand-mark-img {
+    transform: none !important;
   }
 }
 
@@ -1188,7 +1200,9 @@ footer p {
 
 @media (max-width: 520px) {
   .brand-mark-wrap,
-  .brand-mark-img { width: 48px; height: 48px; }
+  .brand-mark-img { width: 52px; height: 52px; }
+  .brand-mark-img { border-radius: 15px; }
+  .brand-mark-orbit { border-radius: 18px; inset: -5px; }
   .csg-logo-img { height: 28px !important; }
   .brand-wow { font-size: 1.45rem; }
 }
@@ -1418,3 +1432,50 @@ footer p {
   .gps-stats-row { grid-template-columns: 1fr; }
   .activity-map { height: 220px; }
 }
+
+.privacy-consent-banner {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(15, 28, 46, 0.55);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+}
+
+.privacy-consent-inner {
+  width: min(560px, 100%);
+  background: #fff;
+  border: 1px solid rgba(11, 61, 102, 0.15);
+  border-radius: 16px;
+  padding: 18px 18px 16px;
+  color: #0f1c2e;
+}
+
+.privacy-consent-inner strong {
+  display: block;
+  font-family: var(--display, inherit);
+  font-size: 1.05rem;
+  margin-bottom: 8px;
+}
+
+.privacy-consent-inner p {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: #4a5d72;
+}
+
+.privacy-consent-check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 0.88rem;
+  margin-bottom: 12px;
+}
+
+.privacy-consent-inner .btn {
+  width: 100%;
+}
+

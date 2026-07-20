@@ -1,0 +1,89 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function email() {
+      return signedIn() ? request.auth.token.email.lower() : '';
+    }
+
+    function isCorporateEmail() {
+      return signedIn()
+        && (email().matches('.*@csgi[.]com$') || email().matches('.*@csg[.]com$'));
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isOwnerUid(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // Admin roster — writable only via Console / Admin SDK
+    match /admins/{uid} {
+      allow read: if isOwnerUid(uid) || isAdmin();
+      allow write: if false;
+    }
+
+    // Employee profiles — corporate auth only; full wipe only by admin
+    match /participants/{docId} {
+      allow read: if isCorporateEmail();
+
+      allow create: if isCorporateEmail()
+        && request.resource.data.uid == request.auth.uid
+        && docId == request.auth.uid
+        && request.resource.data.emailLower == email()
+        && request.resource.data.keys().hasAll([
+          'uid', 'name', 'email', 'emailLower', 'employeeId', 'username', 'season'
+        ])
+        && !request.resource.data.keys().hasAny(['password', 'passwordHash']);
+
+      allow update: if isAdmin()
+        || (
+          isCorporateEmail()
+          && resource.data.uid == request.auth.uid
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.emailLower == resource.data.emailLower
+          && !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['uid', 'email', 'emailLower', 'employeeId'])
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    // Activity entries — owners create; status/validation changes admin-only
+    match /stepEntries/{entryId} {
+      allow read: if isCorporateEmail();
+
+      allow create: if isCorporateEmail()
+        && request.resource.data.userUid == request.auth.uid
+        && request.resource.data.keys().hasAll(['id', 'userUid', 'season', 'status', 'source'])
+        && request.resource.data.status in ['pending', 'approved']
+        && request.resource.data.source in [
+          'gps-counter', 'treadmill-counter', 'manual', 'native'
+        ]
+        && !request.resource.data.keys().hasAny(['password', 'screenshot']);
+
+      allow update: if isAdmin()
+        || (
+          isCorporateEmail()
+          && resource.data.userUid == request.auth.uid
+          && request.resource.data.userUid == resource.data.userUid
+          && !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['status', 'validatedBy', 'validatedAt', 'userUid', 'userId'])
+        );
+
+      allow delete: if isAdmin()
+        || (isCorporateEmail() && resource.data.userUid == request.auth.uid);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
