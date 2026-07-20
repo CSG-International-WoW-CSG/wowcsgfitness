@@ -5,7 +5,13 @@ Firebase web API keys are public identifiers, but they **must** be restricted.
 Project: `wow-csg`  
 Key (from `firebase-config.js`): `AIzaSyCX9JCEu6aHqE9EVXiT4Xfi-iA6kmPCLJI`
 
-## Console steps (required)
+## Status (last verified)
+
+- **Firestore rules:** Deployed to project `wow-csg` (Firebase CLI `firestore:rules`).
+- **Browser API key:** Restricted to GitHub Pages / localhost referrers and limited API targets
+  (Identity Toolkit, Secure Token, Firestore, Firebase Installations, Firebase).
+
+## Console steps (manual fallback)
 
 1. Open [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials?project=wow-csg)
 2. Click the Browser key matching the Firebase web API key (or create an API key used by the Firebase web app).
