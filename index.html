@@ -14,8 +14,8 @@
     <!-- PWA Manifest -->
     <link rel="manifest" href="./manifest.json">
     <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=36">
-    <link rel="apple-touch-icon" href="favicon.svg?v=36">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=37">
+    <link rel="apple-touch-icon" href="favicon.svg?v=37">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="ui-refresh.css?v=39">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
@@ -39,7 +39,7 @@
                 <div class="brand-lockup" aria-label="WOW-CSG Fitness Challenge">
                     <div class="brand-mark-wrap" aria-hidden="true">
                         <span class="brand-mark-orbit"></span>
-                        <img src="brand-mark.svg?v=36" alt="" class="brand-mark-img" width="60" height="60">
+                        <img src="brand-mark.svg?v=37" alt="" class="brand-mark-img" width="60" height="60">
                     </div>
                     <div class="brand-wordmark">
                         <span class="brand-wow">WOW-CSG</span>
@@ -511,7 +511,7 @@
                                         <li><strong>Outdoor (web):</strong> KM uses GPS + step backup</li>
                                         <li><strong>Treadmill:</strong> set speed to match the machine (speed &times; time)</li>
                                         <li>Allow Location + Physical activity permissions when prompted</li>
-                                        <li>iPhone: use this website (native iOS app needs a Mac to build)</li>
+                                        <li>iPhone: use this website</li>
                                     </ul>
                                 </div>
                             </div>
@@ -741,10 +741,10 @@
                 });
                 if (window.caches && caches.keys) {
                     caches.keys().then((keys) => {
-                        keys.filter((k) => k !== 'wowcsg-fitness-v36').forEach((k) => caches.delete(k));
+                        keys.filter((k) => k !== 'wowcsg-fitness-v37').forEach((k) => caches.delete(k));
                     });
                 }
-                navigator.serviceWorker.register('./service-worker.js?v=36')
+                navigator.serviceWorker.register('./service-worker.js?v=37')
                     .then((registration) => {
                         console.log('Service Worker registered:', registration);
                         if (registration.waiting) {
