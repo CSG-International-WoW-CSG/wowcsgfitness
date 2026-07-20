@@ -268,12 +268,11 @@
 
  const app = window.app;
  console.log('Admin page initialized, app available:', app);
- 
- // Check if already logged in as admin
- const savedAdmin = localStorage.getItem('isAdmin');
- if (savedAdmin === 'true') {
- app.isAdmin = true;
- app.showAdminDashboard();
+
+ // Never trust client-side admin flags from older builds
+ localStorage.removeItem('isAdmin');
+ if (app && typeof app.restoreAdminSessionIfAuthorized === 'function') {
+ app.restoreAdminSessionIfAuthorized();
  }
 
  // Admin login form
@@ -378,8 +377,8 @@
  }
  }
 
- // Load script and initialize
- loadScript('script.js')
+ // Load script and initialize (cache-bust so Pages/SW cannot keep old admin/admin123 builds)
+ loadScript('script.js?v=36')
  .then(() => {
  console.log('Script loaded, initializing admin page...');
  initAdminPage();
