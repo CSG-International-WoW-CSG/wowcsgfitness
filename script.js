@@ -1,6 +1,6 @@
 // WOW-CSG 7 Days Fitness Challenge Application
 class StepathonApp {
- constructor() {
+    constructor() {
  // Challenge config: 26 July - 1 August 2026 | Day N = N KM Walk/Run
  this.challengeConfig = {
  name: 'WOW-CSG 7 Days Fitness Challenge',
@@ -24,40 +24,40 @@ class StepathonApp {
  this.stepEntriesCollection = 'stepEntries';
  this.resetLocalUserDataIfNeeded();
 
- this.currentUser = null;
- this.isAdmin = false;
- this.firebaseEnabled = false;
- this.auth = null;
- this.db = null;
- this.isMigratingUsers = false;
- this.initFirebase();
- this.participants = this.loadParticipants();
- 
- // Initialize stepEntries - ensure it's always an array
- this.stepEntries = this.loadStepEntries();
- if (!Array.isArray(this.stepEntries)) {
- console.warn('stepEntries was not an array, initializing as empty array');
- this.stepEntries = [];
- this.saveStepEntries(); // Save empty array to localStorage
- }
- console.log('StepathonApp initialized - stepEntries count:', this.stepEntries.length);
-
- // Bot protection: Rate limiting
- this.registrationAttempts = JSON.parse(localStorage.getItem('registrationAttempts') || '[]');
- this.passwordResetAttempts = JSON.parse(localStorage.getItem('passwordResetAttempts') || '[]');
- this.maxAttemptsPerHour = 5; // Maximum 5 attempts per hour
- this.maxAttemptsPerDay = 10; // Maximum 10 attempts per day
- 
+        this.currentUser = null;
+        this.isAdmin = false;
+        this.firebaseEnabled = false;
+        this.auth = null;
+        this.db = null;
+        this.isMigratingUsers = false;
+        this.initFirebase();
+        this.participants = this.loadParticipants();
+        
+        // Initialize stepEntries - ensure it's always an array
+        this.stepEntries = this.loadStepEntries();
+        if (!Array.isArray(this.stepEntries)) {
+            console.warn('stepEntries was not an array, initializing as empty array');
+            this.stepEntries = [];
+            this.saveStepEntries(); // Save empty array to localStorage
+        }
+        console.log('StepathonApp initialized - stepEntries count:', this.stepEntries.length);
+        
+        // Bot protection: Rate limiting
+        this.registrationAttempts = JSON.parse(localStorage.getItem('registrationAttempts') || '[]');
+        this.passwordResetAttempts = JSON.parse(localStorage.getItem('passwordResetAttempts') || '[]');
+        this.maxAttemptsPerHour = 5; // Maximum 5 attempts per hour
+        this.maxAttemptsPerDay = 10; // Maximum 10 attempts per day
+        
  // Step Counter + GPS map tracking
- this.stepCounter = {
- isRunning: false,
- stepCount: 0,
- lastAcceleration: { x: 0, y: 0, z: 0 },
+        this.stepCounter = {
+            isRunning: false,
+            stepCount: 0,
+            lastAcceleration: { x: 0, y: 0, z: 0 },
  threshold: 1.2,
  minVerticalChange: 0.8,
- stepHistory: [],
+            stepHistory: [],
  accelerationHistory: [],
- startTime: null,
+            startTime: null,
  permissionGranted: false,
  distanceKm: 0,
  path: [],
@@ -88,67 +88,67 @@ class StepathonApp {
  this._lastActivityPersistAt = 0;
  this.keepAliveAudio = null;
  this.swMessageBound = false;
- 
- // Timer properties
- this.timerInterval = null;
- this.timerStartTime = null;
- 
- this.init();
- }
+        
+        // Timer properties
+        this.timerInterval = null;
+        this.timerStartTime = null;
+        
+        this.init();
+    }
 
- init() {
- this.setupEventListeners();
- this.updateStorageNotice();
+    init() {
+        this.setupEventListeners();
+        this.updateStorageNotice();
  this.ensurePrivacyConsentUi();
- // Only run these on main page, not admin page
- // Use requestAnimationFrame for better performance
- if (!window.location.pathname.includes('admin.html')) {
- requestAnimationFrame(() => {
- // Check challenge status immediately on page load
- this.updateDates();
+        // Only run these on main page, not admin page
+        // Use requestAnimationFrame for better performance
+        if (!window.location.pathname.includes('admin.html')) {
+            requestAnimationFrame(() => {
+                // Check challenge status immediately on page load
+                this.updateDates();
  this.setupActivityKeepAlive();
- 
- this.checkCurrentUser();
- // Defer heavy operations
- setTimeout(() => {
- this.updateLeaderboard();
- }, 100);
- });
+                
+                this.checkCurrentUser();
+                // Defer heavy operations
+                setTimeout(() => {
+                    this.updateLeaderboard();
+                }, 100);
+            });
  } else {
  this.restoreAdminSessionIfAuthorized();
- }
+        }
 
- // Keep participant cache fresh for admin/user lists
- this.syncParticipantsFromFirebase();
+        // Keep participant cache fresh for admin/user lists
+        this.syncParticipantsFromFirebase();
 
- if (window.location.pathname.includes('admin.html')) {
- this.syncStepEntriesFromFirebase();
- }
- }
+        if (window.location.pathname.includes('admin.html')) {
+            this.syncStepEntriesFromFirebase();
+        }
+    }
 
- initFirebase() {
- try {
- if (typeof firebase === 'undefined') {
- return;
- }
+    initFirebase() {
+        try {
+            if (typeof firebase === 'undefined') {
+                return;
+            }
 
- if (!window.firebaseConfig || !window.firebaseConfig.apiKey) {
- return;
- }
+            if (!window.firebaseConfig || !window.firebaseConfig.apiKey) {
+                return;
+            }
 
- if (!firebase.apps.length) {
- firebase.initializeApp(window.firebaseConfig);
- }
+            if (!firebase.apps.length) {
+                firebase.initializeApp(window.firebaseConfig);
+            }
 
- this.auth = firebase.auth();
- this.db = firebase.firestore();
- this.firebaseEnabled = true;
+            this.auth = firebase.auth();
+            this.db = firebase.firestore();
+            this.firebaseEnabled = true;
 
- // Keep session in sync
+            // Keep session in sync
  this.auth.onAuthStateChanged(async (user) => {
- if (this.isMigratingUsers) {
- return;
- }
+                if (this.isMigratingUsers) {
+                    return;
+                }
  if (!user) {
  if (this.isAdmin) {
  this.isAdmin = false;
@@ -169,14 +169,14 @@ class StepathonApp {
  return;
  }
  this.loadCurrentUserFromFirebase(user.uid);
- });
- } catch (error) {
- console.warn('Firebase initialization failed:', error);
- this.firebaseEnabled = false;
- this.auth = null;
- this.db = null;
- }
- }
+            });
+        } catch (error) {
+            console.warn('Firebase initialization failed:', error);
+            this.firebaseEnabled = false;
+            this.auth = null;
+            this.db = null;
+        }
+    }
 
  securityCfg() {
  return window.securityConfig || {
@@ -334,239 +334,259 @@ class StepathonApp {
  return (list || []).filter((e) => this.isCurrentSeasonEntry(e));
  }
 
- isEmail(value) {
- return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
- }
+    isEmail(value) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+    }
 
- updateStorageNotice() {
- const notice = document.getElementById('storageNotice');
- if (!notice) {
- return;
- }
- if (this.firebaseEnabled) {
- notice.style.display = 'none';
- return;
- }
- notice.style.display = 'block';
- }
+    updateStorageNotice() {
+        const notice = document.getElementById('storageNotice');
+        if (!notice) {
+            return;
+        }
+        if (this.firebaseEnabled) {
+            notice.style.display = 'none';
+            return;
+        }
+        notice.style.display = 'block';
+    }
 
- getLegacyParticipantsForMigration() {
- try {
- const saved = localStorage.getItem('participants');
- if (!saved) {
- return [];
- }
- const parsed = JSON.parse(saved);
- return Array.isArray(parsed) ? parsed : [];
- } catch (error) {
- console.warn('Failed to read legacy participants from localStorage:', error);
- return [];
- }
- }
+    getLegacyParticipantsForMigration() {
+        try {
+            const saved = localStorage.getItem('participants');
+            if (!saved) {
+                return [];
+            }
+            const parsed = JSON.parse(saved);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+            console.warn('Failed to read legacy participants from localStorage:', error);
+            return [];
+        }
+    }
 
- getLegacyStepEntriesForMigration() {
- try {
- const saved = localStorage.getItem('stepEntries');
- if (!saved) {
- return [];
- }
- const parsed = JSON.parse(saved);
- return Array.isArray(parsed) ? parsed : [];
- } catch (error) {
- console.warn('Failed to read legacy stepEntries from localStorage:', error);
- return [];
- }
- }
+    getLegacyStepEntriesForMigration() {
+        try {
+            const saved = localStorage.getItem('stepEntries');
+            if (!saved) {
+                return [];
+            }
+            const parsed = JSON.parse(saved);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+            console.warn('Failed to read legacy stepEntries from localStorage:', error);
+            return [];
+        }
+    }
 
- generateTempPassword() {
- const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$';
- let password = '';
- for (let i = 0; i < 12; i++) {
- password += chars.charAt(Math.floor(Math.random() * chars.length));
- }
- return password;
- }
+    generateTempPassword() {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$';
+        let password = '';
+        for (let i = 0; i < 12; i++) {
+            password += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return password;
+    }
 
- normalizeLocalParticipant(localUser, uid) {
- const email = localUser.email || localUser.emailId || '';
- const emailLower = email ? email.toLowerCase() : '';
- const username = localUser.username || (email ? email.split('@')[0] : '');
- const usernameLower = username ? username.toLowerCase() : '';
- const employeeId = localUser.employeeId || localUser.id || '';
- const employeeIdLower = employeeId ? employeeId.toLowerCase() : '';
+    normalizeLocalParticipant(localUser, uid) {
+        const email = localUser.email || localUser.emailId || '';
+        const emailLower = email ? email.toLowerCase() : '';
+        const username = localUser.username || (email ? email.split('@')[0] : '');
+        const usernameLower = username ? username.toLowerCase() : '';
+        const employeeId = localUser.employeeId || localUser.id || '';
+        const employeeIdLower = employeeId ? employeeId.toLowerCase() : '';
 
- return {
- uid: uid,
- id: employeeId,
- employeeId: employeeId,
- name: localUser.name || '',
- email: email,
- emailLower: emailLower,
- username: username,
- usernameLower: usernameLower,
- employeeIdLower: employeeIdLower,
- totalSteps: localUser.totalSteps || 0,
- dailySteps: localUser.dailySteps || {},
- streak: localUser.streak || 0,
- lastActivity: localUser.lastActivity || null,
- activities: Array.isArray(localUser.activities) ? localUser.activities : [],
- registeredAt: localUser.registeredAt || new Date().toISOString()
- };
- }
+        return {
+            uid: uid,
+            id: employeeId,
+            employeeId: employeeId,
+            name: localUser.name || '',
+            email: email,
+            emailLower: emailLower,
+            username: username,
+            usernameLower: usernameLower,
+            employeeIdLower: employeeIdLower,
+            totalSteps: localUser.totalSteps || 0,
+            dailySteps: localUser.dailySteps || {},
+            streak: localUser.streak || 0,
+            lastActivity: localUser.lastActivity || null,
+            activities: Array.isArray(localUser.activities) ? localUser.activities : [],
+            registeredAt: localUser.registeredAt || new Date().toISOString()
+        };
+    }
 
- normalizeStepEntry(entry, userUid = null) {
- return {
- id: entry.id,
- userId: entry.userId || '',
- userUid: userUid,
- userName: entry.userName || entry.name || 'Unknown User',
- userEmail: entry.userEmail || entry.email || 'No email',
- steps: entry.steps || 0,
- screenshot: entry.screenshot || null,
- date: entry.date || new Date().toISOString(),
- status: entry.status || 'pending',
- validatedBy: entry.validatedBy || null,
- validatedAt: entry.validatedAt || null,
- lastModifiedBy: entry.lastModifiedBy || null,
- lastModifiedAt: entry.lastModifiedAt || null,
- notes: entry.notes || null,
- source: entry.source || 'manual'
- };
- }
+    normalizeStepEntry(entry, userUid = null) {
+        return {
+            id: entry.id,
+            userId: entry.userId || '',
+            userUid: userUid,
+            userName: entry.userName || entry.name || 'Unknown User',
+            userEmail: entry.userEmail || entry.email || 'No email',
+            steps: entry.steps || 0,
+            screenshot: entry.screenshot || null,
+            date: entry.date || new Date().toISOString(),
+            status: entry.status || 'pending',
+            validatedBy: entry.validatedBy || null,
+            validatedAt: entry.validatedAt || null,
+            lastModifiedBy: entry.lastModifiedBy || null,
+            lastModifiedAt: entry.lastModifiedAt || null,
+            notes: entry.notes || null,
+            source: entry.source || 'manual'
+        };
+    }
 
- setupEventListeners() {
- // Login tabs (only if exists - not on admin page)
- const loginTabs = document.querySelectorAll('.login-tab');
- if (loginTabs.length > 0) {
- loginTabs.forEach(tab => {
- tab.addEventListener('click', (e) => {
- const tabType = e.target.dataset.tab;
- this.switchLoginTab(tabType);
- });
- });
- }
+    setupEventListeners() {
+        // Login tabs (only if exists - not on admin page)
+        const loginTabs = document.querySelectorAll('.login-tab');
+        if (loginTabs.length > 0) {
+            loginTabs.forEach(tab => {
+                tab.addEventListener('click', (e) => {
+                    const tabType = e.target.dataset.tab;
+                    this.switchLoginTab(tabType);
+                });
+            });
+        }
 
- // Registration form (only if exists - not on admin page)
- const registrationForm = document.getElementById('registrationForm');
- if (registrationForm) {
- // Initialize CAPTCHA for registration
- this.generateCaptcha('registration');
- 
- // Refresh CAPTCHA button
- const refreshCaptcha = document.getElementById('refreshCaptcha');
- if (refreshCaptcha) {
- refreshCaptcha.addEventListener('click', () => {
- this.generateCaptcha('registration');
- });
- }
- 
- registrationForm.addEventListener('submit', (e) => {
- e.preventDefault();
- this.handleRegistration();
- });
- }
+        // Registration form (only if exists - not on admin page)
+        const registrationForm = document.getElementById('registrationForm');
+        if (registrationForm) {
+            // Initialize CAPTCHA for registration
+            this.generateCaptcha('registration');
+            
+            // Refresh CAPTCHA button
+            const refreshCaptcha = document.getElementById('refreshCaptcha');
+            if (refreshCaptcha) {
+                refreshCaptcha.addEventListener('click', () => {
+                    this.generateCaptcha('registration');
+                });
+            }
+            
+            registrationForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const submitBtn = registrationForm.querySelector('button[type="submit"]');
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.dataset.originalLabel = submitBtn.textContent;
+                    submitBtn.textContent = 'Creating account…';
+                }
+                Promise.resolve(this.handleRegistration())
+                    .catch((err) => {
+                        console.error('Registration failed:', err);
+                        alert(
+                            'Registration failed. Please try again.\n\n' +
+                            ((err && (err.message || err.code)) || 'Unknown error') +
+                            '\n\nNeed help? ' + this.securityCfg().supportEmail
+                        );
+                    })
+                    .finally(() => {
+                        if (submitBtn) {
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = submitBtn.dataset.originalLabel || 'Create Account & Join Challenge';
+                        }
+                    });
+            });
+        }
 
- // User login form (only if exists - not on admin page)
- const loginForm = document.getElementById('loginForm');
- if (loginForm) {
- loginForm.addEventListener('submit', (e) => {
- e.preventDefault();
- this.handleLogin();
- });
- }
+        // User login form (only if exists - not on admin page)
+        const loginForm = document.getElementById('loginForm');
+        if (loginForm) {
+            loginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.handleLogin();
+            });
+        }
 
- // Switch between registration and login (only if exists)
- const showRegistrationLink = document.getElementById('showRegistrationLink');
- if (showRegistrationLink) {
- showRegistrationLink.addEventListener('click', (e) => {
- e.preventDefault();
- this.switchLoginTab('user');
- });
- }
+        // Switch between registration and login (only if exists)
+        const showRegistrationLink = document.getElementById('showRegistrationLink');
+        if (showRegistrationLink) {
+            showRegistrationLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.switchLoginTab('user');
+            });
+        }
 
- // Forgot password link (only if exists)
- const forgotPasswordLink = document.getElementById('forgotPasswordLink');
- if (forgotPasswordLink) {
- forgotPasswordLink.addEventListener('click', (e) => {
- e.preventDefault();
- this.handleForgotPassword();
- });
- }
+        // Forgot password link (only if exists)
+        const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+        if (forgotPasswordLink) {
+            forgotPasswordLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.handleForgotPassword();
+            });
+        }
 
- // Admin login form (only if exists on page)
- const adminForm = document.getElementById('adminForm');
- if (adminForm) {
- adminForm.addEventListener('submit', (e) => {
- e.preventDefault();
- this.handleAdminLogin();
- });
- }
+        // Admin login form (only if exists on page)
+        const adminForm = document.getElementById('adminForm');
+        if (adminForm) {
+            adminForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.handleAdminLogin();
+            });
+        }
 
- // Add steps form (only if exists - not on admin page)
- const addStepsForm = document.getElementById('addStepsForm');
- if (addStepsForm) {
- addStepsForm.addEventListener('submit', (e) => {
- e.preventDefault();
- this.addSteps();
- });
- }
+        // Add steps form (only if exists - not on admin page)
+        const addStepsForm = document.getElementById('addStepsForm');
+        if (addStepsForm) {
+            addStepsForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.addSteps();
+            });
+        }
 
- // Update screenshot requirement based on step counter usage (only if exists)
- const stepsInput = document.getElementById('stepsInput');
- if (stepsInput) {
- stepsInput.addEventListener('input', () => {
- this.updateScreenshotRequirement();
- });
- }
+        // Update screenshot requirement based on step counter usage (only if exists)
+        const stepsInput = document.getElementById('stepsInput');
+        if (stepsInput) {
+            stepsInput.addEventListener('input', () => {
+                this.updateScreenshotRequirement();
+            });
+        }
 
- // Logout button (only if exists - not on admin page)
- const logoutBtn = document.getElementById('logoutBtn');
- if (logoutBtn) {
- logoutBtn.addEventListener('click', () => {
- this.logout();
- });
- }
+        // Logout button (only if exists - not on admin page)
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => {
+                this.logout();
+            });
+        }
 
- // Help button
- const helpBtn = document.getElementById('helpBtn');
- if (helpBtn) {
- helpBtn.addEventListener('click', () => {
- this.showHelpModal();
- });
- }
+        // Help button
+        const helpBtn = document.getElementById('helpBtn');
+        if (helpBtn) {
+            helpBtn.addEventListener('click', () => {
+                this.showHelpModal();
+            });
+        }
 
- // Footer help link
- const footerHelpLink = document.getElementById('footerHelpLink');
- if (footerHelpLink) {
- footerHelpLink.addEventListener('click', (e) => {
- e.preventDefault();
- this.showHelpModal();
- });
- }
+        // Footer help link
+        const footerHelpLink = document.getElementById('footerHelpLink');
+        if (footerHelpLink) {
+            footerHelpLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.showHelpModal();
+            });
+        }
 
- // Login help button
- const loginHelpBtn = document.getElementById('loginHelpBtn');
- if (loginHelpBtn) {
- loginHelpBtn.addEventListener('click', () => {
- this.showHelpModal();
- });
- }
+        // Login help button
+        const loginHelpBtn = document.getElementById('loginHelpBtn');
+        if (loginHelpBtn) {
+            loginHelpBtn.addEventListener('click', () => {
+                this.showHelpModal();
+            });
+        }
 
- // Admin logout
- const adminLogoutBtn = document.getElementById('adminLogoutBtn');
- if (adminLogoutBtn) {
- adminLogoutBtn.addEventListener('click', () => {
- this.adminLogout();
- });
- }
+        // Admin logout
+        const adminLogoutBtn = document.getElementById('adminLogoutBtn');
+        if (adminLogoutBtn) {
+            adminLogoutBtn.addEventListener('click', () => {
+                this.adminLogout();
+            });
+        }
 
- // Migrate local users to Firebase (admin only)
- const migrateUsersBtn = document.getElementById('migrateUsersBtn');
- if (migrateUsersBtn) {
- migrateUsersBtn.addEventListener('click', () => {
- this.migrateLocalUsersToFirebase();
- });
- }
+        // Migrate local users to Firebase (admin only)
+        const migrateUsersBtn = document.getElementById('migrateUsersBtn');
+        if (migrateUsersBtn) {
+            migrateUsersBtn.addEventListener('click', () => {
+                this.migrateLocalUsersToFirebase();
+            });
+        }
 
  const clearAllUsersBtn = document.getElementById('clearAllUsersBtn');
  if (clearAllUsersBtn) {
@@ -575,76 +595,76 @@ class StepathonApp {
  });
  }
 
- // Manual screenshot upload
- const manualScreenshot = document.getElementById('manualScreenshot');
- if (manualScreenshot) {
- manualScreenshot.addEventListener('change', (e) => {
- this.handleManualScreenshotUpload(e.target.files[0]);
- });
- }
+        // Manual screenshot upload
+        const manualScreenshot = document.getElementById('manualScreenshot');
+        if (manualScreenshot) {
+            manualScreenshot.addEventListener('change', (e) => {
+                this.handleManualScreenshotUpload(e.target.files[0]);
+            });
+        }
 
- const removeManualImageBtn = document.getElementById('removeManualImageBtn');
- if (removeManualImageBtn) {
- removeManualImageBtn.addEventListener('click', () => {
- this.resetManualScreenshot();
- });
- }
+        const removeManualImageBtn = document.getElementById('removeManualImageBtn');
+        if (removeManualImageBtn) {
+            removeManualImageBtn.addEventListener('click', () => {
+                this.resetManualScreenshot();
+            });
+        }
 
- // Admin filters
- const adminFilters = document.querySelectorAll('.admin-filters .filter-btn');
- adminFilters.forEach(btn => {
- btn.addEventListener('click', (e) => {
- const filter = e.target.dataset.filter;
- this.filterAdminEntries(filter);
- });
- });
+        // Admin filters
+        const adminFilters = document.querySelectorAll('.admin-filters .filter-btn');
+        adminFilters.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const filter = e.target.dataset.filter;
+                this.filterAdminEntries(filter);
+            });
+        });
 
- // Step Counter Event Listeners
- // Note: startStepCounterBtn is now handled via tabs, but keeping for backward compatibility
- const startStepCounterBtn = document.getElementById('startStepCounterBtn');
- if (startStepCounterBtn) {
- startStepCounterBtn.addEventListener('click', () => {
- this.switchInputMethod('counter');
- });
- }
+        // Step Counter Event Listeners
+        // Note: startStepCounterBtn is now handled via tabs, but keeping for backward compatibility
+        const startStepCounterBtn = document.getElementById('startStepCounterBtn');
+        if (startStepCounterBtn) {
+            startStepCounterBtn.addEventListener('click', () => {
+                this.switchInputMethod('counter');
+            });
+        }
 
- const closeStepCounterBtn = document.getElementById('closeStepCounterBtn');
- if (closeStepCounterBtn) {
- closeStepCounterBtn.addEventListener('click', () => {
- // Switch back to manual entry when closing
- this.switchInputMethod('manual');
- });
- }
+        const closeStepCounterBtn = document.getElementById('closeStepCounterBtn');
+        if (closeStepCounterBtn) {
+            closeStepCounterBtn.addEventListener('click', () => {
+                // Switch back to manual entry when closing
+                this.switchInputMethod('manual');
+            });
+        }
 
- const startCounterBtn = document.getElementById('startCounterBtn');
- if (startCounterBtn) {
- startCounterBtn.addEventListener('click', () => {
- this.startStepCounter();
- });
- }
+        const startCounterBtn = document.getElementById('startCounterBtn');
+        if (startCounterBtn) {
+            startCounterBtn.addEventListener('click', () => {
+                this.startStepCounter();
+            });
+        }
 
- const stopCounterBtn = document.getElementById('stopCounterBtn');
- if (stopCounterBtn) {
- stopCounterBtn.addEventListener('click', () => {
- this.stopStepCounter();
- });
- }
+        const stopCounterBtn = document.getElementById('stopCounterBtn');
+        if (stopCounterBtn) {
+            stopCounterBtn.addEventListener('click', () => {
+                this.stopStepCounter();
+            });
+        }
 
- const resetCounterBtn = document.getElementById('resetCounterBtn');
- if (resetCounterBtn) {
- resetCounterBtn.addEventListener('click', () => {
- this.resetStepCounter();
- });
- }
+        const resetCounterBtn = document.getElementById('resetCounterBtn');
+        if (resetCounterBtn) {
+            resetCounterBtn.addEventListener('click', () => {
+                this.resetStepCounter();
+            });
+        }
 
- // Button removed - no longer needed
+        // Button removed - no longer needed
 
- const saveCounterStepsBtn = document.getElementById('saveCounterStepsBtn');
- if (saveCounterStepsBtn) {
- saveCounterStepsBtn.addEventListener('click', () => {
- this.saveCounterStepsDirectly();
- });
- }
+        const saveCounterStepsBtn = document.getElementById('saveCounterStepsBtn');
+        if (saveCounterStepsBtn) {
+            saveCounterStepsBtn.addEventListener('click', () => {
+                this.saveCounterStepsDirectly();
+            });
+        }
 
  const bodyWeightInput = document.getElementById('bodyWeightKg');
  if (bodyWeightInput) {
@@ -688,764 +708,764 @@ class StepathonApp {
  this.setTrackingMode('outdoor', true);
  }
 
- // Method tabs (only if exists - not on admin page)
- const methodTabs = document.querySelectorAll('.method-tab');
- if (methodTabs.length > 0) {
- methodTabs.forEach(tab => {
- tab.addEventListener('click', (e) => {
- const method = e.target.dataset.method;
- this.switchInputMethod(method);
- });
- });
- }
+        // Method tabs (only if exists - not on admin page)
+        const methodTabs = document.querySelectorAll('.method-tab');
+        if (methodTabs.length > 0) {
+            methodTabs.forEach(tab => {
+                tab.addEventListener('click', (e) => {
+                    const method = e.target.dataset.method;
+                    this.switchInputMethod(method);
+                });
+            });
+        }
 
- // Screenshot upload (only if exists)
- const screenshotInput = document.getElementById('screenshotInput');
- const uploadArea = document.getElementById('uploadArea');
- 
- if (screenshotInput) {
- screenshotInput.addEventListener('change', (e) => {
- this.handleScreenshotUpload(e.target.files[0]);
- });
- }
+        // Screenshot upload (only if exists)
+        const screenshotInput = document.getElementById('screenshotInput');
+        const uploadArea = document.getElementById('uploadArea');
+        
+        if (screenshotInput) {
+            screenshotInput.addEventListener('change', (e) => {
+                this.handleScreenshotUpload(e.target.files[0]);
+            });
+        }
 
- // Drag and drop (only if exists)
- if (uploadArea) {
- uploadArea.addEventListener('dragover', (e) => {
- e.preventDefault();
- uploadArea.classList.add('dragover');
- });
+        // Drag and drop (only if exists)
+        if (uploadArea) {
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
 
- uploadArea.addEventListener('dragleave', () => {
- uploadArea.classList.remove('dragover');
- });
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
 
- uploadArea.addEventListener('drop', (e) => {
- e.preventDefault();
- uploadArea.classList.remove('dragover');
- const file = e.dataTransfer.files[0];
- if (file && file.type.startsWith('image/')) {
- this.handleScreenshotUpload(file);
- }
- });
- }
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                const file = e.dataTransfer.files[0];
+                if (file && file.type.startsWith('image/')) {
+                    this.handleScreenshotUpload(file);
+                }
+            });
+        }
 
- // Remove image (only if exists)
- const removeImageBtn = document.getElementById('removeImageBtn');
- if (removeImageBtn) {
- removeImageBtn.addEventListener('click', () => {
- this.resetScreenshotForm();
- });
- }
+        // Remove image (only if exists)
+        const removeImageBtn = document.getElementById('removeImageBtn');
+        if (removeImageBtn) {
+            removeImageBtn.addEventListener('click', () => {
+                this.resetScreenshotForm();
+            });
+        }
 
- // Confirm extracted steps (only if exists)
- const confirmStepsBtn = document.getElementById('confirmStepsBtn');
- if (confirmStepsBtn) {
- confirmStepsBtn.addEventListener('click', async () => {
- const steps = parseInt(document.getElementById('extractedSteps').textContent.replace(/,/g, ''));
- if (steps > 0) {
- // Get the screenshot from OCR form
- const screenshotInput = document.getElementById('screenshotInput');
- if (screenshotInput && screenshotInput.files.length > 0) {
- // Store screenshot temporarily for addSteps
- this.tempScreenshotFile = screenshotInput.files[0];
- }
- document.getElementById('stepsInput').value = steps;
- await this.addSteps();
- this.resetScreenshotForm();
- this.tempScreenshotFile = null;
- } else {
- alert('Please edit the steps value before confirming.');
- }
- });
- }
+        // Confirm extracted steps (only if exists)
+        const confirmStepsBtn = document.getElementById('confirmStepsBtn');
+        if (confirmStepsBtn) {
+            confirmStepsBtn.addEventListener('click', async () => {
+            const steps = parseInt(document.getElementById('extractedSteps').textContent.replace(/,/g, ''));
+            if (steps > 0) {
+                // Get the screenshot from OCR form
+                const screenshotInput = document.getElementById('screenshotInput');
+                if (screenshotInput && screenshotInput.files.length > 0) {
+                    // Store screenshot temporarily for addSteps
+                    this.tempScreenshotFile = screenshotInput.files[0];
+                }
+                document.getElementById('stepsInput').value = steps;
+                await this.addSteps();
+                this.resetScreenshotForm();
+                this.tempScreenshotFile = null;
+            } else {
+                alert('Please edit the steps value before confirming.');
+            }
+            });
+        }
 
- // Edit steps (only if exists)
- const editStepsBtn = document.getElementById('editStepsBtn');
- if (editStepsBtn) {
- editStepsBtn.addEventListener('click', () => {
- const editStepsInput = document.getElementById('editStepsInput');
- const extractedSteps = document.getElementById('extractedSteps');
- const editedSteps = document.getElementById('editedSteps');
- if (editStepsInput && extractedSteps && editedSteps) {
- editStepsInput.style.display = 'flex';
- const currentSteps = extractedSteps.textContent.replace(/,/g, '');
- editedSteps.value = currentSteps;
- }
- });
- }
+        // Edit steps (only if exists)
+        const editStepsBtn = document.getElementById('editStepsBtn');
+        if (editStepsBtn) {
+            editStepsBtn.addEventListener('click', () => {
+                const editStepsInput = document.getElementById('editStepsInput');
+                const extractedSteps = document.getElementById('extractedSteps');
+                const editedSteps = document.getElementById('editedSteps');
+                if (editStepsInput && extractedSteps && editedSteps) {
+                    editStepsInput.style.display = 'flex';
+                    const currentSteps = extractedSteps.textContent.replace(/,/g, '');
+                    editedSteps.value = currentSteps;
+                }
+            });
+        }
 
- // Save edited steps (only if exists)
- const saveEditedStepsBtn = document.getElementById('saveEditedStepsBtn');
- if (saveEditedStepsBtn) {
- saveEditedStepsBtn.addEventListener('click', () => {
- const editedSteps = document.getElementById('editedSteps');
- const extractedSteps = document.getElementById('extractedSteps');
- const editStepsInput = document.getElementById('editStepsInput');
- if (editedSteps && extractedSteps && editStepsInput) {
- const steps = parseInt(editedSteps.value);
- if (!isNaN(steps) && steps >= 0) {
- extractedSteps.textContent = steps.toLocaleString();
- editStepsInput.style.display = 'none';
- }
- }
- });
- }
+        // Save edited steps (only if exists)
+        const saveEditedStepsBtn = document.getElementById('saveEditedStepsBtn');
+        if (saveEditedStepsBtn) {
+            saveEditedStepsBtn.addEventListener('click', () => {
+                const editedSteps = document.getElementById('editedSteps');
+                const extractedSteps = document.getElementById('extractedSteps');
+                const editStepsInput = document.getElementById('editStepsInput');
+                if (editedSteps && extractedSteps && editStepsInput) {
+                    const steps = parseInt(editedSteps.value);
+                    if (!isNaN(steps) && steps >= 0) {
+                        extractedSteps.textContent = steps.toLocaleString();
+                        editStepsInput.style.display = 'none';
+                    }
+                }
+            });
+        }
 
- // Refresh motivation button
- const refreshMotivationBtn = document.getElementById('refreshMotivationBtn');
- if (refreshMotivationBtn) {
- refreshMotivationBtn.addEventListener('click', () => {
- this.updateDailyMotivation();
- // Add animation feedback
- refreshMotivationBtn.style.transform = 'scale(0.95)';
- setTimeout(() => {
- refreshMotivationBtn.style.transform = 'scale(1)';
- }, 150);
- });
- }
+        // Refresh motivation button
+        const refreshMotivationBtn = document.getElementById('refreshMotivationBtn');
+        if (refreshMotivationBtn) {
+            refreshMotivationBtn.addEventListener('click', () => {
+                this.updateDailyMotivation();
+                // Add animation feedback
+                refreshMotivationBtn.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                    refreshMotivationBtn.style.transform = 'scale(1)';
+                }, 150);
+            });
+        }
 
  // Leaderboard filters (overall + per-day)
  document.querySelectorAll('.filter-btn, .day-filter-btn').forEach(btn => {
- btn.addEventListener('click', (e) => {
+            btn.addEventListener('click', (e) => {
  const button = e.currentTarget;
  const filter = button.dataset.filter;
  document.querySelectorAll('.filter-btn, .day-filter-btn').forEach(b => b.classList.remove('active'));
  button.classList.add('active');
  this.updateLeaderboard(filter);
- });
- });
- }
+            });
+        });
+    }
 
- switchInputMethod(method) {
+    switchInputMethod(method) {
  // Challenge logging is app counter only
  method = 'counter';
 
- document.querySelectorAll('.method-tab').forEach(tab => {
- tab.classList.remove('active');
- });
- const activeTab = document.querySelector(`[data-method="${method}"]`);
- if (activeTab) {
- activeTab.classList.add('active');
- }
+        document.querySelectorAll('.method-tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        const activeTab = document.querySelector(`[data-method="${method}"]`);
+        if (activeTab) {
+            activeTab.classList.add('active');
+        }
 
- const addStepsForm = document.getElementById('addStepsForm');
- const screenshotForm = document.getElementById('screenshotForm');
- const stepCounterForm = document.getElementById('stepCounterForm');
+        const addStepsForm = document.getElementById('addStepsForm');
+        const screenshotForm = document.getElementById('screenshotForm');
+        const stepCounterForm = document.getElementById('stepCounterForm');
  const methodTabs = document.querySelector('.input-method-tabs');
-
+        
  if (methodTabs) methodTabs.style.display = 'none';
- if (addStepsForm) addStepsForm.style.display = 'none';
- if (screenshotForm) screenshotForm.style.display = 'none';
- if (stepCounterForm) {
- stepCounterForm.style.display = 'block';
- this.requestMotionPermission();
- }
- }
+        if (addStepsForm) addStepsForm.style.display = 'none';
+        if (screenshotForm) screenshotForm.style.display = 'none';
+            if (stepCounterForm) {
+                stepCounterForm.style.display = 'block';
+                this.requestMotionPermission();
+        }
+    }
 
- async handleScreenshotUpload(file) {
- if (!file || !file.type.startsWith('image/')) {
- alert('Please upload a valid image file!');
- return;
- }
+    async handleScreenshotUpload(file) {
+        if (!file || !file.type.startsWith('image/')) {
+            alert('Please upload a valid image file!');
+            return;
+        }
 
- // Show image preview
- const reader = new FileReader();
- reader.onload = (e) => {
- document.getElementById('previewImage').src = e.target.result;
- document.getElementById('imagePreview').style.display = 'block';
- document.getElementById('uploadArea').style.display = 'none';
- 
- // Start OCR processing
- this.processImageWithOCR(e.target.result);
- };
- reader.readAsDataURL(file);
- }
+        // Show image preview
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            document.getElementById('previewImage').src = e.target.result;
+            document.getElementById('imagePreview').style.display = 'block';
+            document.getElementById('uploadArea').style.display = 'none';
+            
+            // Start OCR processing
+            this.processImageWithOCR(e.target.result);
+        };
+        reader.readAsDataURL(file);
+    }
 
- async processImageWithOCR(imageDataUrl) {
- const ocrProcessing = document.getElementById('ocrProcessing');
- const extractedResult = document.getElementById('extractedResult');
- 
- ocrProcessing.style.display = 'block';
- extractedResult.style.display = 'none';
+    async processImageWithOCR(imageDataUrl) {
+        const ocrProcessing = document.getElementById('ocrProcessing');
+        const extractedResult = document.getElementById('extractedResult');
+        
+        ocrProcessing.style.display = 'block';
+        extractedResult.style.display = 'none';
 
- try {
- let steps = 0;
- let ocrText = '';
- let ocrWords = [];
+        try {
+            let steps = 0;
+            let ocrText = '';
+            let ocrWords = [];
 
- // Try OCR with original image first (better for colored/dark backgrounds)
- try {
- const result1 = await Tesseract.recognize(imageDataUrl, 'eng', {
- logger: m => {
- if (m.status === 'recognizing text') {
- // Progress logging
- }
- }
- });
- ocrText = result1.data.text;
- ocrWords = result1.data.words || [];
- console.log('OCR Text (Original):', ocrText);
- console.log('OCR Words (Original):', ocrWords);
- 
- steps = this.extractStepsFromText(ocrText, ocrWords);
- } catch (err) {
- console.log('First OCR attempt failed, trying preprocessed image');
- }
+            // Try OCR with original image first (better for colored/dark backgrounds)
+            try {
+                const result1 = await Tesseract.recognize(imageDataUrl, 'eng', {
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            // Progress logging
+                        }
+                    }
+                });
+                ocrText = result1.data.text;
+                ocrWords = result1.data.words || [];
+                console.log('OCR Text (Original):', ocrText);
+                console.log('OCR Words (Original):', ocrWords);
+                
+                steps = this.extractStepsFromText(ocrText, ocrWords);
+            } catch (err) {
+                console.log('First OCR attempt failed, trying preprocessed image');
+            }
 
- // If no steps found, try with preprocessed image
- if (steps === 0) {
- try {
- const processedImage = await this.preprocessImage(imageDataUrl);
- const result2 = await Tesseract.recognize(processedImage, 'eng', {
- logger: m => {
- if (m.status === 'recognizing text') {
- // Progress logging
- }
- }
- });
- 
- const processedText = result2.data.text;
- const processedWords = result2.data.words || [];
- console.log('OCR Text (Processed):', processedText);
- console.log('OCR Words (Processed):', processedWords);
- 
- const processedSteps = this.extractStepsFromText(processedText, processedWords);
- if (processedSteps > 0) {
- steps = processedSteps;
- ocrText = processedText;
- ocrWords = processedWords;
- }
- } catch (err) {
- console.log('Processed OCR attempt also failed');
- }
- }
+            // If no steps found, try with preprocessed image
+            if (steps === 0) {
+                try {
+                    const processedImage = await this.preprocessImage(imageDataUrl);
+                    const result2 = await Tesseract.recognize(processedImage, 'eng', {
+                        logger: m => {
+                            if (m.status === 'recognizing text') {
+                                // Progress logging
+                            }
+                        }
+                    });
+                    
+                    const processedText = result2.data.text;
+                    const processedWords = result2.data.words || [];
+                    console.log('OCR Text (Processed):', processedText);
+                    console.log('OCR Words (Processed):', processedWords);
+                    
+                    const processedSteps = this.extractStepsFromText(processedText, processedWords);
+                    if (processedSteps > 0) {
+                        steps = processedSteps;
+                        ocrText = processedText;
+                        ocrWords = processedWords;
+                    }
+                } catch (err) {
+                    console.log('Processed OCR attempt also failed');
+                }
+            }
 
- // If still no steps, try with number-only OCR
- if (steps === 0) {
- try {
- const result3 = await Tesseract.recognize(imageDataUrl, 'eng', {
- tessedit_char_whitelist: '0123456789,',
- tessedit_pageseg_mode: '6' // Uniform block of text
- });
- const numbersOnlyText = result3.data.text;
- console.log('OCR Text (Numbers Only):', numbersOnlyText);
- const numbersOnlySteps = this.extractStepsFromText(numbersOnlyText, result3.data.words || []);
- if (numbersOnlySteps > 0) {
- steps = numbersOnlySteps;
- // Combine OCR texts for debug
- if (ocrText) {
- ocrText += '\n\n--- Numbers Only OCR ---\n' + numbersOnlyText;
- } else {
- ocrText = numbersOnlyText;
- }
- }
- } catch (err) {
- console.log('Numbers-only OCR attempt failed');
- }
- }
- 
- // If still no steps, try combining all OCR texts for better extraction
- if (steps === 0 && ocrText) {
- // One more attempt with combined text
- steps = this.extractStepsFromText(ocrText, ocrWords);
- }
- 
- ocrProcessing.style.display = 'none';
- 
- // Always set debug text
- const debugTextEl = document.getElementById('debugOcrText');
- if (debugTextEl) {
- debugTextEl.textContent = ocrText.substring(0, 1000) || 'No text detected by OCR';
- }
- 
- if (steps > 0) {
- document.getElementById('extractedSteps').textContent = steps.toLocaleString();
- document.getElementById('confirmStepsBtn').style.display = 'inline-block';
- extractedResult.style.display = 'block';
- } else {
- // Show debug info but still display result card
- const debugInfo = `OCR detected text: "${ocrText.substring(0, 200)}"\n\nCould not detect steps. Please try:\n1. Ensure the step count is clearly visible\n2. Use a clearer image\n3. Or enter steps manually\n\nCheck the Debug Info section below for full OCR text.`;
- alert(debugInfo);
- // Still show the result card with debug info even if no steps detected
- extractedResult.style.display = 'block';
- document.getElementById('extractedSteps').textContent = '0';
- document.getElementById('confirmStepsBtn').style.display = 'none';
- }
- } catch (error) {
- console.error('OCR Error:', error);
- ocrProcessing.style.display = 'none';
- alert('Error processing image. Please try again or enter steps manually.');
- this.resetScreenshotForm();
- }
- }
+            // If still no steps, try with number-only OCR
+            if (steps === 0) {
+                try {
+                    const result3 = await Tesseract.recognize(imageDataUrl, 'eng', {
+                        tessedit_char_whitelist: '0123456789,',
+                        tessedit_pageseg_mode: '6' // Uniform block of text
+                    });
+                    const numbersOnlyText = result3.data.text;
+                    console.log('OCR Text (Numbers Only):', numbersOnlyText);
+                    const numbersOnlySteps = this.extractStepsFromText(numbersOnlyText, result3.data.words || []);
+                    if (numbersOnlySteps > 0) {
+                        steps = numbersOnlySteps;
+                        // Combine OCR texts for debug
+                        if (ocrText) {
+                            ocrText += '\n\n--- Numbers Only OCR ---\n' + numbersOnlyText;
+                        } else {
+                            ocrText = numbersOnlyText;
+                        }
+                    }
+                } catch (err) {
+                    console.log('Numbers-only OCR attempt failed');
+                }
+            }
+            
+            // If still no steps, try combining all OCR texts for better extraction
+            if (steps === 0 && ocrText) {
+                // One more attempt with combined text
+                steps = this.extractStepsFromText(ocrText, ocrWords);
+            }
+            
+            ocrProcessing.style.display = 'none';
+            
+            // Always set debug text
+            const debugTextEl = document.getElementById('debugOcrText');
+            if (debugTextEl) {
+                debugTextEl.textContent = ocrText.substring(0, 1000) || 'No text detected by OCR';
+            }
+            
+            if (steps > 0) {
+                document.getElementById('extractedSteps').textContent = steps.toLocaleString();
+                document.getElementById('confirmStepsBtn').style.display = 'inline-block';
+                extractedResult.style.display = 'block';
+            } else {
+                // Show debug info but still display result card
+                const debugInfo = `OCR detected text: "${ocrText.substring(0, 200)}"\n\nCould not detect steps. Please try:\n1. Ensure the step count is clearly visible\n2. Use a clearer image\n3. Or enter steps manually\n\nCheck the Debug Info section below for full OCR text.`;
+                alert(debugInfo);
+                // Still show the result card with debug info even if no steps detected
+                extractedResult.style.display = 'block';
+                document.getElementById('extractedSteps').textContent = '0';
+                document.getElementById('confirmStepsBtn').style.display = 'none';
+            }
+        } catch (error) {
+            console.error('OCR Error:', error);
+            ocrProcessing.style.display = 'none';
+            alert('Error processing image. Please try again or enter steps manually.');
+            this.resetScreenshotForm();
+        }
+    }
 
- async preprocessImage(imageDataUrl) {
- return new Promise((resolve) => {
- const img = new Image();
- img.onload = () => {
- const canvas = document.createElement('canvas');
- const ctx = canvas.getContext('2d');
- 
- // Scale up image for better OCR (2x)
- const scale = 2;
- canvas.width = img.width * scale;
- canvas.height = img.height * scale;
- 
- // Use image smoothing
- ctx.imageSmoothingEnabled = true;
- ctx.imageSmoothingQuality = 'high';
- 
- // Draw scaled image
- ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
- 
- // Get image data
- const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
- const data = imageData.data;
- 
- // Enhance contrast and brightness (less aggressive)
- for (let i = 0; i < data.length; i += 4) {
- // Convert to grayscale
- const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
- 
- // Increase contrast moderately
- const contrast = 1.3;
- const factor = (259 * (contrast * 255 + 255)) / (255 * (259 - contrast * 255));
- let newGray = factor * (gray - 128) + 128;
- 
- // Brightness adjustment
- newGray = Math.min(255, Math.max(0, newGray + 20));
- 
- // Soft threshold (not pure black/white)
- const threshold = newGray > 140 ? 255 : (newGray < 100 ? 0 : newGray);
- 
+    async preprocessImage(imageDataUrl) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // Scale up image for better OCR (2x)
+                const scale = 2;
+                canvas.width = img.width * scale;
+                canvas.height = img.height * scale;
+                
+                // Use image smoothing
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                
+                // Draw scaled image
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                
+                // Get image data
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                
+                // Enhance contrast and brightness (less aggressive)
+                for (let i = 0; i < data.length; i += 4) {
+                    // Convert to grayscale
+                    const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+                    
+                    // Increase contrast moderately
+                    const contrast = 1.3;
+                    const factor = (259 * (contrast * 255 + 255)) / (255 * (259 - contrast * 255));
+                    let newGray = factor * (gray - 128) + 128;
+                    
+                    // Brightness adjustment
+                    newGray = Math.min(255, Math.max(0, newGray + 20));
+                    
+                    // Soft threshold (not pure black/white)
+                    const threshold = newGray > 140 ? 255 : (newGray < 100 ? 0 : newGray);
+                    
  data[i] = threshold; // R
- data[i + 1] = threshold; // G
- data[i + 2] = threshold; // B
- // data[i + 3] stays as alpha
- }
- 
- // Put processed image data back
- ctx.putImageData(imageData, 0, 0);
- 
- // Convert back to data URL
- resolve(canvas.toDataURL('image/png'));
- };
- img.src = imageDataUrl;
- });
- }
+                    data[i + 1] = threshold; // G
+                    data[i + 2] = threshold; // B
+                    // data[i + 3] stays as alpha
+                }
+                
+                // Put processed image data back
+                ctx.putImageData(imageData, 0, 0);
+                
+                // Convert back to data URL
+                resolve(canvas.toDataURL('image/png'));
+            };
+            img.src = imageDataUrl;
+        });
+    }
 
- extractStepsFromText(text, words = []) {
- // Clean the text - preserve numbers and commas
- const cleanText = text.replace(/\s+/g, ' ');
- 
- console.log('Processing text:', cleanText);
- 
- // Extract all numbers (with and without commas)
- const allNumbers = [];
- const excludedNumbers = new Set(); // Numbers to exclude (like goal values)
- 
- // First, identify numbers to EXCLUDE (goal values, etc.)
- const goalPatterns = [
- /goal\s*:?\s*(\d{1,3}(?:,\d{3})*|\d{3,6})/gi,
- /target\s*:?\s*(\d{1,3}(?:,\d{3})*|\d{3,6})/gi,
- /(\d{1,3}(?:,\d{3})*|\d{3,6})\s*goal/gi,
- ];
- 
- goalPatterns.forEach(pattern => {
- const matches = [...cleanText.matchAll(pattern)];
- matches.forEach(match => {
- const numStr = match[1] || match[0].replace(/\D/g, '');
- const parsed = parseInt(numStr.replace(/,/g, ''));
- if (parsed >= 1000) {
- excludedNumbers.add(parsed);
- console.log('Excluding goal/target number:', parsed);
- }
- });
- });
- 
- // Pattern 1: Numbers with commas (e.g., "6,162", "10,000")
- const commaNumbers = cleanText.match(/\d{1,3}(?:,\d{3})+/g);
- if (commaNumbers) {
- commaNumbers.forEach(num => {
- const parsed = parseInt(num.replace(/,/g, ''));
- if (parsed >= 100 && parsed <= 1000000 && !excludedNumbers.has(parsed)) {
- // Much lower confidence if it's a round number (likely goal)
- // Round numbers like 10,000, 5,000, 8,000 are almost always goals
- let confidence = 0.9;
- if (parsed % 1000 === 0) {
- confidence = 0.2; // Very low confidence for round numbers
- } else if (parsed % 100 === 0) {
- confidence = 0.7; // Medium confidence for numbers ending in 00
- }
- allNumbers.push({ value: parsed, original: num, confidence: confidence });
- }
- });
- }
- 
- // Pattern 2: Look for "TOTAL" keyword (HIGHEST PRIORITY - fitness apps often use "TOTAL X steps")
- const totalPatterns = [
- /total\s+(\d{1,3}(?:,\d{3})*|\d{3,6})\s+steps?/gi,
- /total\s+steps?\s*:?\s*(\d{1,3}(?:,\d{3})*|\d{3,6})/gi,
- /(\d{1,3}(?:,\d{3})*|\d{3,6})\s+steps?\s+total/gi,
- ];
- 
- totalPatterns.forEach(pattern => {
- const matches = [...cleanText.matchAll(pattern)];
- matches.forEach(match => {
- const numStr = match[1] || match[0].replace(/\D/g, '');
- const parsed = parseInt(numStr.replace(/,/g, ''));
- if (parsed >= 100 && parsed <= 1000000 && !excludedNumbers.has(parsed)) {
- allNumbers.push({ value: parsed, original: numStr, confidence: 0.99 });
- console.log('Found TOTAL pattern:', parsed);
- }
- });
- });
- 
- // Pattern 2b: Look for "steps" keyword and nearby numbers (HIGH PRIORITY)
- const stepPatterns = [
- /(\d{1,3}(?:,\d{3})*|\d{3,6})\s+steps?/gi,
- /steps?\s*:?\s*(\d{1,3}(?:,\d{3})*|\d{3,6})/gi,
- /(\d{1,3}(?:,\d{3})*|\d{3,6})\s+st\b/gi,
- ];
- 
- stepPatterns.forEach(pattern => {
- const matches = [...cleanText.matchAll(pattern)];
- matches.forEach(match => {
- const numStr = match[1] || match[0].replace(/\D/g, '');
- const parsed = parseInt(numStr.replace(/,/g, ''));
- if (parsed >= 100 && parsed <= 1000000 && !excludedNumbers.has(parsed)) {
- allNumbers.push({ value: parsed, original: numStr, confidence: 0.98 });
- }
- });
- });
- 
- // Pattern 2c: "today" keyword (HIGH PRIORITY - step count is usually shown with "today")
- const todayPatterns = [
- /today\s*:?\s*(\d{1,3}(?:,\d{3})*|\d{3,6})/gi,
- /(\d{1,3}(?:,\d{3})*|\d{3,6})\s+today/gi,
- /(\d{1,3}(?:,\d{3})*|\d{3,6})\s+steps?\s+today/gi,
- /today\s+(\d{1,3}(?:,\d{3})*|\d{3,6})\s+steps?/gi,
- ];
- 
- todayPatterns.forEach(pattern => {
- const matches = [...cleanText.matchAll(pattern)];
- matches.forEach(match => {
- const numStr = match[1] || match[0].replace(/\D/g, '');
- const parsed = parseInt(numStr.replace(/,/g, ''));
- if (parsed >= 100 && parsed <= 1000000 && !excludedNumbers.has(parsed)) {
- allNumbers.push({ value: parsed, original: numStr, confidence: 0.97 });
- }
- });
- });
- 
- // Pattern 3: 3-digit numbers (common for early day step counts like 981, 987)
- const threeDigitNumbers = cleanText.match(/\b\d{3}\b/g);
- if (threeDigitNumbers) {
- threeDigitNumbers.forEach(num => {
- const parsed = parseInt(num);
- // 3-digit numbers are valid step counts (especially early in the day)
- if (parsed >= 100 && parsed <= 999 && !excludedNumbers.has(parsed)) {
- // Check if it's near "TOTAL" or "steps" for higher confidence
- const numIndex = cleanText.indexOf(num);
- const context = cleanText.substring(
- Math.max(0, numIndex - 30),
- Math.min(cleanText.length, numIndex + 30)
- ).toLowerCase();
- const confidence = (context.includes('total') || context.includes('step')) ? 0.95 : 0.7;
- allNumbers.push({ value: parsed, original: num, confidence: confidence });
- }
- });
- }
- 
- // Pattern 3b: Large standalone numbers (4-6 digits, likely step counts)
- // Also match numbers with commas that might be split by OCR
- const largeNumbers = cleanText.match(/\b\d{4,6}\b/g);
- if (largeNumbers) {
- largeNumbers.forEach(num => {
- const parsed = parseInt(num);
- if (parsed >= 1000 && parsed <= 100000 && !excludedNumbers.has(parsed)) {
- const confidence = (parsed % 1000 === 0) ? 0.3 : 0.7;
- allNumbers.push({ value: parsed, original: num, confidence: confidence });
- }
- });
- }
- 
- // Pattern 3c: Numbers that might be split (e.g., "6,162" read as "6 162" or "6162")
- const splitNumbers = cleanText.match(/\d{1,2}\s+\d{3,4}\b/g);
- if (splitNumbers) {
- splitNumbers.forEach(num => {
- const combined = num.replace(/\s+/g, '');
- const parsed = parseInt(combined);
- if (parsed >= 1000 && parsed <= 100000 && !excludedNumbers.has(parsed)) {
- allNumbers.push({ value: parsed, original: num, confidence: 0.75 });
- }
- });
- }
- 
- // Pattern 3d: Look for 4-digit numbers that could be step counts (e.g., 6162)
- const fourDigitNumbers = cleanText.match(/\b\d{4}\b/g);
- if (fourDigitNumbers) {
- fourDigitNumbers.forEach(num => {
- const parsed = parseInt(num);
- // Prefer numbers in typical step range, exclude round numbers
- if (parsed >= 1000 && parsed <= 50000 && !excludedNumbers.has(parsed)) {
- // Higher confidence for non-round 4-digit numbers
- const confidence = (parsed % 1000 === 0) ? 0.3 : 0.85;
- allNumbers.push({ value: parsed, original: num, confidence: confidence });
- }
- });
- }
- 
- // Pattern 4: Use word data if available (better position info)
- if (words && words.length > 0) {
- // Find words that look like step counts (large numbers)
- // Sort by bounding box size (larger = more prominent = likely step count)
- const numberWords = words
- .map(word => {
- const wordText = word.text.replace(/[,\s]/g, '');
- const parsed = parseInt(wordText);
- if (!isNaN(parsed) && parsed >= 1000 && parsed <= 100000 && !excludedNumbers.has(parsed)) {
- const bbox = word.bbox || {};
- const area = (bbox.x1 - bbox.x0) * (bbox.y1 - bbox.y0);
- return {
- value: parsed,
- original: word.text,
- area: area,
- bbox: bbox
- };
- }
- return null;
- })
- .filter(w => w !== null)
- .sort((a, b) => b.area - a.area); // Largest first
- 
- numberWords.forEach((word, index) => {
- // Higher confidence for larger/prominent numbers
- let confidence = 0.6;
- 
- // Accept 3-digit numbers (like 981, 987) - common for early day step counts
- if (word.value >= 100 && word.value <= 999) {
- confidence = 0.85; // Good confidence for 3-digit numbers
- }
- // Prefer numbers in typical step range (not round numbers like 10,000)
- else if (word.value >= 1000 && word.value <= 50000) {
- // Round numbers (multiples of 1000) are likely goals, not step counts
- if (word.value % 1000 === 0) {
- confidence = 0.15; // Very low confidence for round numbers (likely goals)
- } else {
- confidence = 0.92; // Very high confidence for non-round numbers in step range
- }
- } else if (word.value > 50000) {
- confidence = 0.7;
- }
- 
- // MAJOR boost for largest bounding box (most prominent number)
- // The step count is ALWAYS the largest/most prominent number on screen
- if (index === 0 && word.area > 1000) {
- confidence += 0.2; // Extra boost for most prominent number
- // If it's also non-round, boost even more
- if (word.value % 1000 !== 0) {
- confidence += 0.1;
- }
- }
- 
- // Heavy penalty for common goal values
- if (word.value === 10000 || word.value === 5000 || word.value === 8000 || word.value === 12000) {
- confidence = 0.1; // Almost zero confidence for common goal values
- }
- 
- // Additional penalty if excluded
- if (excludedNumbers.has(word.value)) {
- confidence = 0.05; // Almost zero if explicitly excluded
- }
- 
- allNumbers.push({
- value: word.value,
- original: word.original,
- confidence: Math.min(1.0, confidence),
- bbox: word.bbox,
- area: word.area
- });
- });
- }
- 
- // Pattern 5: Look for numbers near "TOTAL" keyword (HIGHEST PRIORITY)
- const totalIndex = cleanText.toLowerCase().indexOf('total');
- if (totalIndex !== -1) {
- // Extract numbers near "total" (within 40 characters - "TOTAL 981 steps Today")
- const context = cleanText.substring(
- Math.max(0, totalIndex - 10), 
- Math.min(cleanText.length, totalIndex + 40)
- );
- const nearbyNumbers = context.match(/\d{1,3}(?:,\d{3})*|\d{3,6}/g);
- if (nearbyNumbers) {
- nearbyNumbers.forEach(num => {
- const parsed = parseInt(num.replace(/,/g, ''));
- // Accept 3-digit numbers too (like 981)
- if (parsed >= 100 && parsed <= 100000 && !excludedNumbers.has(parsed)) {
- // Very high confidence for numbers near "TOTAL"
- allNumbers.push({ value: parsed, original: num, confidence: 0.995 });
- console.log('Found number near TOTAL:', parsed);
- }
- });
- }
- }
- 
- // Pattern 5b: Look for numbers near "today" keyword (HIGH PRIORITY - step count is usually with "today")
- const todayIndex = cleanText.toLowerCase().indexOf('today');
- if (todayIndex !== -1) {
- // Extract numbers near "today" (within 30 characters)
- const context = cleanText.substring(
- Math.max(0, todayIndex - 30), 
- Math.min(cleanText.length, todayIndex + 30)
- );
- const nearbyNumbers = context.match(/\d{1,3}(?:,\d{3})*|\d{3,6}/g);
- if (nearbyNumbers) {
- nearbyNumbers.forEach(num => {
- const parsed = parseInt(num.replace(/,/g, ''));
- // Accept 3-digit numbers too
- if (parsed >= 100 && parsed <= 100000 && !excludedNumbers.has(parsed)) {
- // Very high confidence for numbers near "today"
- allNumbers.push({ value: parsed, original: num, confidence: 0.99 });
- }
- });
- }
- }
- 
- // Pattern 5c: Look for numbers near "step" keyword (but not "goal")
- const stepIndex = cleanText.toLowerCase().indexOf('step');
- if (stepIndex !== -1) {
- // Check if "goal" is nearby - if so, skip this context
- const goalNearby = cleanText.toLowerCase().substring(
- Math.max(0, stepIndex - 20),
- Math.min(cleanText.length, stepIndex + 20)
- ).includes('goal');
- 
- if (!goalNearby) {
- const context = cleanText.substring(
- Math.max(0, stepIndex - 30), 
- Math.min(cleanText.length, stepIndex + 30)
- );
- const nearbyNumbers = context.match(/\d{1,3}(?:,\d{3})*|\d{3,6}/g);
- if (nearbyNumbers) {
- nearbyNumbers.forEach(num => {
- const parsed = parseInt(num.replace(/,/g, ''));
- // Accept 3-digit numbers too
- if (parsed >= 100 && parsed <= 100000 && !excludedNumbers.has(parsed)) {
- allNumbers.push({ value: parsed, original: num, confidence: 0.95 });
- }
- });
- }
- }
- }
- 
- // Remove duplicates and sort by confidence and value
- const uniqueNumbers = [];
- const seen = new Set();
- 
- allNumbers.forEach(item => {
- if (!seen.has(item.value)) {
- seen.add(item.value);
- uniqueNumbers.push(item);
- }
- });
- 
- // Sort by confidence (highest first), then by area (largest first if available), then by value
- uniqueNumbers.sort((a, b) => {
- // First priority: confidence
- if (Math.abs(a.confidence - b.confidence) > 0.1) {
- return b.confidence - a.confidence;
- }
- // Second priority: bounding box area (larger = more prominent)
- if (a.area && b.area && Math.abs(a.area - b.area) > 100) {
- return b.area - a.area;
- }
- // Third priority: prefer non-round numbers (not multiples of 1000)
- const aIsRound = a.value % 1000 === 0;
- const bIsRound = b.value % 1000 === 0;
- if (aIsRound !== bIsRound) {
- return aIsRound ? 1 : -1; // Non-round numbers first
- }
- // Fourth priority: value (larger first, but within reasonable range)
- return b.value - a.value;
- });
- 
- console.log('Extracted numbers:', uniqueNumbers);
- 
- // Return the best match with aggressive filtering
- if (uniqueNumbers.length > 0) {
- // Strategy 1: Highest confidence number (likely from "TOTAL" pattern - 0.995 confidence)
- const highestConfidence = uniqueNumbers.find(n => 
- n.confidence >= 0.99 && 
- !excludedNumbers.has(n.value)
- );
- if (highestConfidence) {
- console.log('Selected highest confidence number (TOTAL pattern):', highestConfidence.value, 'Confidence:', highestConfidence.confidence);
- return highestConfidence.value;
- }
- 
- // Strategy 2: Prefer the number with largest bounding box (most prominent) that's not excluded
- // This is the MOST IMPORTANT - step count is always the most prominent number
- const largestArea = uniqueNumbers.find(n => 
- n.area && 
- n.area > 1000 && 
- !excludedNumbers.has(n.value) &&
+    extractStepsFromText(text, words = []) {
+        // Clean the text - preserve numbers and commas
+        const cleanText = text.replace(/\s+/g, ' ');
+        
+        console.log('Processing text:', cleanText);
+        
+        // Extract all numbers (with and without commas)
+        const allNumbers = [];
+        const excludedNumbers = new Set(); // Numbers to exclude (like goal values)
+        
+        // First, identify numbers to EXCLUDE (goal values, etc.)
+        const goalPatterns = [
+            /goal\s*:?\s*(\d{1,3}(?:,\d{3})*|\d{3,6})/gi,
+            /target\s*:?\s*(\d{1,3}(?:,\d{3})*|\d{3,6})/gi,
+            /(\d{1,3}(?:,\d{3})*|\d{3,6})\s*goal/gi,
+        ];
+        
+        goalPatterns.forEach(pattern => {
+            const matches = [...cleanText.matchAll(pattern)];
+            matches.forEach(match => {
+                const numStr = match[1] || match[0].replace(/\D/g, '');
+                const parsed = parseInt(numStr.replace(/,/g, ''));
+                if (parsed >= 1000) {
+                    excludedNumbers.add(parsed);
+                    console.log('Excluding goal/target number:', parsed);
+                }
+            });
+        });
+        
+        // Pattern 1: Numbers with commas (e.g., "6,162", "10,000")
+        const commaNumbers = cleanText.match(/\d{1,3}(?:,\d{3})+/g);
+        if (commaNumbers) {
+            commaNumbers.forEach(num => {
+                const parsed = parseInt(num.replace(/,/g, ''));
+                if (parsed >= 100 && parsed <= 1000000 && !excludedNumbers.has(parsed)) {
+                    // Much lower confidence if it's a round number (likely goal)
+                    // Round numbers like 10,000, 5,000, 8,000 are almost always goals
+                    let confidence = 0.9;
+                    if (parsed % 1000 === 0) {
+                        confidence = 0.2; // Very low confidence for round numbers
+                    } else if (parsed % 100 === 0) {
+                        confidence = 0.7; // Medium confidence for numbers ending in 00
+                    }
+                    allNumbers.push({ value: parsed, original: num, confidence: confidence });
+                }
+            });
+        }
+        
+        // Pattern 2: Look for "TOTAL" keyword (HIGHEST PRIORITY - fitness apps often use "TOTAL X steps")
+        const totalPatterns = [
+            /total\s+(\d{1,3}(?:,\d{3})*|\d{3,6})\s+steps?/gi,
+            /total\s+steps?\s*:?\s*(\d{1,3}(?:,\d{3})*|\d{3,6})/gi,
+            /(\d{1,3}(?:,\d{3})*|\d{3,6})\s+steps?\s+total/gi,
+        ];
+        
+        totalPatterns.forEach(pattern => {
+            const matches = [...cleanText.matchAll(pattern)];
+            matches.forEach(match => {
+                const numStr = match[1] || match[0].replace(/\D/g, '');
+                const parsed = parseInt(numStr.replace(/,/g, ''));
+                if (parsed >= 100 && parsed <= 1000000 && !excludedNumbers.has(parsed)) {
+                    allNumbers.push({ value: parsed, original: numStr, confidence: 0.99 });
+                    console.log('Found TOTAL pattern:', parsed);
+                }
+            });
+        });
+        
+        // Pattern 2b: Look for "steps" keyword and nearby numbers (HIGH PRIORITY)
+        const stepPatterns = [
+            /(\d{1,3}(?:,\d{3})*|\d{3,6})\s+steps?/gi,
+            /steps?\s*:?\s*(\d{1,3}(?:,\d{3})*|\d{3,6})/gi,
+            /(\d{1,3}(?:,\d{3})*|\d{3,6})\s+st\b/gi,
+        ];
+        
+        stepPatterns.forEach(pattern => {
+            const matches = [...cleanText.matchAll(pattern)];
+            matches.forEach(match => {
+                const numStr = match[1] || match[0].replace(/\D/g, '');
+                const parsed = parseInt(numStr.replace(/,/g, ''));
+                if (parsed >= 100 && parsed <= 1000000 && !excludedNumbers.has(parsed)) {
+                    allNumbers.push({ value: parsed, original: numStr, confidence: 0.98 });
+                }
+            });
+        });
+        
+        // Pattern 2c: "today" keyword (HIGH PRIORITY - step count is usually shown with "today")
+        const todayPatterns = [
+            /today\s*:?\s*(\d{1,3}(?:,\d{3})*|\d{3,6})/gi,
+            /(\d{1,3}(?:,\d{3})*|\d{3,6})\s+today/gi,
+            /(\d{1,3}(?:,\d{3})*|\d{3,6})\s+steps?\s+today/gi,
+            /today\s+(\d{1,3}(?:,\d{3})*|\d{3,6})\s+steps?/gi,
+        ];
+        
+        todayPatterns.forEach(pattern => {
+            const matches = [...cleanText.matchAll(pattern)];
+            matches.forEach(match => {
+                const numStr = match[1] || match[0].replace(/\D/g, '');
+                const parsed = parseInt(numStr.replace(/,/g, ''));
+                if (parsed >= 100 && parsed <= 1000000 && !excludedNumbers.has(parsed)) {
+                    allNumbers.push({ value: parsed, original: numStr, confidence: 0.97 });
+                }
+            });
+        });
+        
+        // Pattern 3: 3-digit numbers (common for early day step counts like 981, 987)
+        const threeDigitNumbers = cleanText.match(/\b\d{3}\b/g);
+        if (threeDigitNumbers) {
+            threeDigitNumbers.forEach(num => {
+                const parsed = parseInt(num);
+                // 3-digit numbers are valid step counts (especially early in the day)
+                if (parsed >= 100 && parsed <= 999 && !excludedNumbers.has(parsed)) {
+                    // Check if it's near "TOTAL" or "steps" for higher confidence
+                    const numIndex = cleanText.indexOf(num);
+                    const context = cleanText.substring(
+                        Math.max(0, numIndex - 30),
+                        Math.min(cleanText.length, numIndex + 30)
+                    ).toLowerCase();
+                    const confidence = (context.includes('total') || context.includes('step')) ? 0.95 : 0.7;
+                    allNumbers.push({ value: parsed, original: num, confidence: confidence });
+                }
+            });
+        }
+        
+        // Pattern 3b: Large standalone numbers (4-6 digits, likely step counts)
+        // Also match numbers with commas that might be split by OCR
+        const largeNumbers = cleanText.match(/\b\d{4,6}\b/g);
+        if (largeNumbers) {
+            largeNumbers.forEach(num => {
+                const parsed = parseInt(num);
+                if (parsed >= 1000 && parsed <= 100000 && !excludedNumbers.has(parsed)) {
+                    const confidence = (parsed % 1000 === 0) ? 0.3 : 0.7;
+                    allNumbers.push({ value: parsed, original: num, confidence: confidence });
+                }
+            });
+        }
+        
+        // Pattern 3c: Numbers that might be split (e.g., "6,162" read as "6 162" or "6162")
+        const splitNumbers = cleanText.match(/\d{1,2}\s+\d{3,4}\b/g);
+        if (splitNumbers) {
+            splitNumbers.forEach(num => {
+                const combined = num.replace(/\s+/g, '');
+                const parsed = parseInt(combined);
+                if (parsed >= 1000 && parsed <= 100000 && !excludedNumbers.has(parsed)) {
+                    allNumbers.push({ value: parsed, original: num, confidence: 0.75 });
+                }
+            });
+        }
+        
+        // Pattern 3d: Look for 4-digit numbers that could be step counts (e.g., 6162)
+        const fourDigitNumbers = cleanText.match(/\b\d{4}\b/g);
+        if (fourDigitNumbers) {
+            fourDigitNumbers.forEach(num => {
+                const parsed = parseInt(num);
+                // Prefer numbers in typical step range, exclude round numbers
+                if (parsed >= 1000 && parsed <= 50000 && !excludedNumbers.has(parsed)) {
+                    // Higher confidence for non-round 4-digit numbers
+                    const confidence = (parsed % 1000 === 0) ? 0.3 : 0.85;
+                    allNumbers.push({ value: parsed, original: num, confidence: confidence });
+                }
+            });
+        }
+        
+        // Pattern 4: Use word data if available (better position info)
+        if (words && words.length > 0) {
+            // Find words that look like step counts (large numbers)
+            // Sort by bounding box size (larger = more prominent = likely step count)
+            const numberWords = words
+                .map(word => {
+                    const wordText = word.text.replace(/[,\s]/g, '');
+                    const parsed = parseInt(wordText);
+                    if (!isNaN(parsed) && parsed >= 1000 && parsed <= 100000 && !excludedNumbers.has(parsed)) {
+                        const bbox = word.bbox || {};
+                        const area = (bbox.x1 - bbox.x0) * (bbox.y1 - bbox.y0);
+                        return {
+                            value: parsed,
+                            original: word.text,
+                            area: area,
+                            bbox: bbox
+                        };
+                    }
+                    return null;
+                })
+                .filter(w => w !== null)
+                .sort((a, b) => b.area - a.area); // Largest first
+            
+            numberWords.forEach((word, index) => {
+                // Higher confidence for larger/prominent numbers
+                let confidence = 0.6;
+                
+                // Accept 3-digit numbers (like 981, 987) - common for early day step counts
+                if (word.value >= 100 && word.value <= 999) {
+                    confidence = 0.85; // Good confidence for 3-digit numbers
+                }
+                // Prefer numbers in typical step range (not round numbers like 10,000)
+                else if (word.value >= 1000 && word.value <= 50000) {
+                    // Round numbers (multiples of 1000) are likely goals, not step counts
+                    if (word.value % 1000 === 0) {
+                        confidence = 0.15; // Very low confidence for round numbers (likely goals)
+                    } else {
+                        confidence = 0.92; // Very high confidence for non-round numbers in step range
+                    }
+                } else if (word.value > 50000) {
+                    confidence = 0.7;
+                }
+                
+                // MAJOR boost for largest bounding box (most prominent number)
+                // The step count is ALWAYS the largest/most prominent number on screen
+                if (index === 0 && word.area > 1000) {
+                    confidence += 0.2; // Extra boost for most prominent number
+                    // If it's also non-round, boost even more
+                    if (word.value % 1000 !== 0) {
+                        confidence += 0.1;
+                    }
+                }
+                
+                // Heavy penalty for common goal values
+                if (word.value === 10000 || word.value === 5000 || word.value === 8000 || word.value === 12000) {
+                    confidence = 0.1; // Almost zero confidence for common goal values
+                }
+                
+                // Additional penalty if excluded
+                if (excludedNumbers.has(word.value)) {
+                    confidence = 0.05; // Almost zero if explicitly excluded
+                }
+                
+                allNumbers.push({
+                    value: word.value,
+                    original: word.original,
+                    confidence: Math.min(1.0, confidence),
+                    bbox: word.bbox,
+                    area: word.area
+                });
+            });
+        }
+        
+        // Pattern 5: Look for numbers near "TOTAL" keyword (HIGHEST PRIORITY)
+        const totalIndex = cleanText.toLowerCase().indexOf('total');
+        if (totalIndex !== -1) {
+            // Extract numbers near "total" (within 40 characters - "TOTAL 981 steps Today")
+            const context = cleanText.substring(
+                Math.max(0, totalIndex - 10), 
+                Math.min(cleanText.length, totalIndex + 40)
+            );
+            const nearbyNumbers = context.match(/\d{1,3}(?:,\d{3})*|\d{3,6}/g);
+            if (nearbyNumbers) {
+                nearbyNumbers.forEach(num => {
+                    const parsed = parseInt(num.replace(/,/g, ''));
+                    // Accept 3-digit numbers too (like 981)
+                    if (parsed >= 100 && parsed <= 100000 && !excludedNumbers.has(parsed)) {
+                        // Very high confidence for numbers near "TOTAL"
+                        allNumbers.push({ value: parsed, original: num, confidence: 0.995 });
+                        console.log('Found number near TOTAL:', parsed);
+                    }
+                });
+            }
+        }
+        
+        // Pattern 5b: Look for numbers near "today" keyword (HIGH PRIORITY - step count is usually with "today")
+        const todayIndex = cleanText.toLowerCase().indexOf('today');
+        if (todayIndex !== -1) {
+            // Extract numbers near "today" (within 30 characters)
+            const context = cleanText.substring(
+                Math.max(0, todayIndex - 30), 
+                Math.min(cleanText.length, todayIndex + 30)
+            );
+            const nearbyNumbers = context.match(/\d{1,3}(?:,\d{3})*|\d{3,6}/g);
+            if (nearbyNumbers) {
+                nearbyNumbers.forEach(num => {
+                    const parsed = parseInt(num.replace(/,/g, ''));
+                    // Accept 3-digit numbers too
+                    if (parsed >= 100 && parsed <= 100000 && !excludedNumbers.has(parsed)) {
+                        // Very high confidence for numbers near "today"
+                        allNumbers.push({ value: parsed, original: num, confidence: 0.99 });
+                    }
+                });
+            }
+        }
+        
+        // Pattern 5c: Look for numbers near "step" keyword (but not "goal")
+        const stepIndex = cleanText.toLowerCase().indexOf('step');
+        if (stepIndex !== -1) {
+            // Check if "goal" is nearby - if so, skip this context
+            const goalNearby = cleanText.toLowerCase().substring(
+                Math.max(0, stepIndex - 20),
+                Math.min(cleanText.length, stepIndex + 20)
+            ).includes('goal');
+            
+            if (!goalNearby) {
+                const context = cleanText.substring(
+                    Math.max(0, stepIndex - 30), 
+                    Math.min(cleanText.length, stepIndex + 30)
+                );
+                const nearbyNumbers = context.match(/\d{1,3}(?:,\d{3})*|\d{3,6}/g);
+                if (nearbyNumbers) {
+                    nearbyNumbers.forEach(num => {
+                        const parsed = parseInt(num.replace(/,/g, ''));
+                        // Accept 3-digit numbers too
+                        if (parsed >= 100 && parsed <= 100000 && !excludedNumbers.has(parsed)) {
+                            allNumbers.push({ value: parsed, original: num, confidence: 0.95 });
+                        }
+                    });
+                }
+            }
+        }
+        
+        // Remove duplicates and sort by confidence and value
+        const uniqueNumbers = [];
+        const seen = new Set();
+        
+        allNumbers.forEach(item => {
+            if (!seen.has(item.value)) {
+                seen.add(item.value);
+                uniqueNumbers.push(item);
+            }
+        });
+        
+        // Sort by confidence (highest first), then by area (largest first if available), then by value
+        uniqueNumbers.sort((a, b) => {
+            // First priority: confidence
+            if (Math.abs(a.confidence - b.confidence) > 0.1) {
+                return b.confidence - a.confidence;
+            }
+            // Second priority: bounding box area (larger = more prominent)
+            if (a.area && b.area && Math.abs(a.area - b.area) > 100) {
+                return b.area - a.area;
+            }
+            // Third priority: prefer non-round numbers (not multiples of 1000)
+            const aIsRound = a.value % 1000 === 0;
+            const bIsRound = b.value % 1000 === 0;
+            if (aIsRound !== bIsRound) {
+                return aIsRound ? 1 : -1; // Non-round numbers first
+            }
+            // Fourth priority: value (larger first, but within reasonable range)
+            return b.value - a.value;
+        });
+        
+        console.log('Extracted numbers:', uniqueNumbers);
+        
+        // Return the best match with aggressive filtering
+        if (uniqueNumbers.length > 0) {
+            // Strategy 1: Highest confidence number (likely from "TOTAL" pattern - 0.995 confidence)
+            const highestConfidence = uniqueNumbers.find(n => 
+                n.confidence >= 0.99 && 
+                !excludedNumbers.has(n.value)
+            );
+            if (highestConfidence) {
+                console.log('Selected highest confidence number (TOTAL pattern):', highestConfidence.value, 'Confidence:', highestConfidence.confidence);
+                return highestConfidence.value;
+            }
+            
+            // Strategy 2: Prefer the number with largest bounding box (most prominent) that's not excluded
+            // This is the MOST IMPORTANT - step count is always the most prominent number
+            const largestArea = uniqueNumbers.find(n => 
+                n.area && 
+                n.area > 1000 && 
+                !excludedNumbers.has(n.value) &&
  n.value % 1000 !== 0 // Not a round number
- );
- if (largestArea) {
- console.log('Selected largest area number (most prominent):', largestArea.value, 'Area:', largestArea.area);
- return largestArea.value;
- }
- 
- // Strategy 3: Prefer numbers in the 100-50,000 range that are NOT round numbers
- // Include 3-digit numbers (like 981)
- const typicalNonRound = uniqueNumbers.find(n => 
- n.value >= 100 && 
- n.value <= 50000 && 
- n.value % 1000 !== 0 &&
- !excludedNumbers.has(n.value)
- );
- if (typicalNonRound) {
- console.log('Selected typical non-round number:', typicalNonRound.value);
- return typicalNonRound.value;
- }
- 
- // Strategy 4: Highest confidence that's not excluded and not round
- const bestConfidence = uniqueNumbers.find(n => 
- !excludedNumbers.has(n.value) && 
- n.value % 1000 !== 0 &&
- n.confidence > 0.5
- );
- if (bestConfidence) {
- console.log('Selected highest confidence number:', bestConfidence.value, 'Confidence:', bestConfidence.confidence);
- return bestConfidence.value;
- }
- 
- // Strategy 5: Any number that's not excluded (even if round)
- const notExcluded = uniqueNumbers.find(n => !excludedNumbers.has(n.value));
- if (notExcluded) {
- console.log('Selected non-excluded number:', notExcluded.value);
- return notExcluded.value;
- }
- 
- // Last resort: highest confidence match (but log warning)
- console.warn('WARNING: Using fallback number, may be incorrect:', uniqueNumbers[0].value);
- return uniqueNumbers[0].value;
- }
- 
- return 0;
- }
+            );
+            if (largestArea) {
+                console.log('Selected largest area number (most prominent):', largestArea.value, 'Area:', largestArea.area);
+                return largestArea.value;
+            }
+            
+            // Strategy 3: Prefer numbers in the 100-50,000 range that are NOT round numbers
+            // Include 3-digit numbers (like 981)
+            const typicalNonRound = uniqueNumbers.find(n => 
+                n.value >= 100 && 
+                n.value <= 50000 && 
+                n.value % 1000 !== 0 &&
+                !excludedNumbers.has(n.value)
+            );
+            if (typicalNonRound) {
+                console.log('Selected typical non-round number:', typicalNonRound.value);
+                return typicalNonRound.value;
+            }
+            
+            // Strategy 4: Highest confidence that's not excluded and not round
+            const bestConfidence = uniqueNumbers.find(n => 
+                !excludedNumbers.has(n.value) && 
+                n.value % 1000 !== 0 &&
+                n.confidence > 0.5
+            );
+            if (bestConfidence) {
+                console.log('Selected highest confidence number:', bestConfidence.value, 'Confidence:', bestConfidence.confidence);
+                return bestConfidence.value;
+            }
+            
+            // Strategy 5: Any number that's not excluded (even if round)
+            const notExcluded = uniqueNumbers.find(n => !excludedNumbers.has(n.value));
+            if (notExcluded) {
+                console.log('Selected non-excluded number:', notExcluded.value);
+                return notExcluded.value;
+            }
+            
+            // Last resort: highest confidence match (but log warning)
+            console.warn('WARNING: Using fallback number, may be incorrect:', uniqueNumbers[0].value);
+            return uniqueNumbers[0].value;
+        }
+        
+        return 0;
+    }
 
- resetScreenshotForm() {
- document.getElementById('screenshotInput').value = '';
- document.getElementById('imagePreview').style.display = 'none';
- document.getElementById('uploadArea').style.display = 'block';
- document.getElementById('ocrProcessing').style.display = 'none';
- document.getElementById('extractedResult').style.display = 'none';
- document.getElementById('editStepsInput').style.display = 'none';
- document.getElementById('previewImage').src = '';
- }
+    resetScreenshotForm() {
+        document.getElementById('screenshotInput').value = '';
+        document.getElementById('imagePreview').style.display = 'none';
+        document.getElementById('uploadArea').style.display = 'block';
+        document.getElementById('ocrProcessing').style.display = 'none';
+        document.getElementById('extractedResult').style.display = 'none';
+        document.getElementById('editStepsInput').style.display = 'none';
+        document.getElementById('previewImage').src = '';
+    }
 
  getChallengeBounds() {
  const cfg = this.challengeConfig;
@@ -1483,11 +1503,11 @@ class StepathonApp {
  updateDates() {
  const { startDate, endDate } = this.getChallengeBounds();
 
- const startDateElement = document.getElementById('startDate');
- const endDateElement = document.getElementById('endDate');
+        const startDateElement = document.getElementById('startDate');
+        const endDateElement = document.getElementById('endDate');
  const durationEl = document.getElementById('challengeDuration');
  const infoDailyGoal = document.getElementById('infoDailyGoal');
- 
+        
         if (startDateElement) {
             startDateElement.textContent = this.formatDate(startDate);
         }
@@ -1520,7 +1540,7 @@ class StepathonApp {
 
         this.updateDailyPlanHighlight();
         this.checkChallengeStatus(startDate, endDate);
- }
+    }
 
  updateDailyPlanHighlight() {
  const day = this.getChallengeDayNumber();
@@ -1533,9 +1553,9 @@ class StepathonApp {
 
  isChallengeActive() {
  const { startDate, endDate } = this.getChallengeBounds();
- const now = new Date();
- return now >= startDate && now <= endDate;
- }
+        const now = new Date();
+        return now >= startDate && now <= endDate;
+    }
 
  /** Allow logging from now until challenge end (includes pre-start practice) */
  canLogSteps() {
@@ -1543,15 +1563,15 @@ class StepathonApp {
  return new Date() <= endDate;
  }
 
- checkChallengeStatus(startDate, endDate) {
- const now = new Date();
- const isActive = now >= startDate && now <= endDate;
+    checkChallengeStatus(startDate, endDate) {
+        const now = new Date();
+        const isActive = now >= startDate && now <= endDate;
  const notStarted = now < startDate;
  const hasEnded = now > endDate;
- 
+        
  // Show/hide challenge status message on main page (before login)
- const mainPageMsg = document.getElementById('mainPageChallengeOverMessage');
- if (mainPageMsg) {
+        const mainPageMsg = document.getElementById('mainPageChallengeOverMessage');
+        if (mainPageMsg) {
  if (isActive) {
  mainPageMsg.style.display = 'none';
  } else if (notStarted) {
@@ -1581,36 +1601,36 @@ class StepathonApp {
  </p>
  </div>`;
  }
- }
- 
- // Show/hide challenge over message in dashboard (after login)
- let challengeOverMsg = document.getElementById('challengeOverMessage');
- if (!challengeOverMsg) {
- challengeOverMsg = document.createElement('div');
- challengeOverMsg.id = 'challengeOverMessage';
- challengeOverMsg.className = 'challenge-over-message';
- 
- const mainContent = document.querySelector('.main-content');
- if (mainContent) {
- mainContent.insertBefore(challengeOverMsg, mainContent.firstChild);
- }
- }
- 
+        }
+        
+        // Show/hide challenge over message in dashboard (after login)
+        let challengeOverMsg = document.getElementById('challengeOverMessage');
+        if (!challengeOverMsg) {
+            challengeOverMsg = document.createElement('div');
+            challengeOverMsg.id = 'challengeOverMessage';
+            challengeOverMsg.className = 'challenge-over-message';
+            
+            const mainContent = document.querySelector('.main-content');
+            if (mainContent) {
+                mainContent.insertBefore(challengeOverMsg, mainContent.firstChild);
+            }
+        }
+        
  if (hasEnded) {
- const formattedEnd = this.formatDate(endDate);
- challengeOverMsg.innerHTML = `
- <div style="background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); color: white; padding: 25px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(244, 67, 54, 0.3); text-align: center;">
+            const formattedEnd = this.formatDate(endDate);
+            challengeOverMsg.innerHTML = `
+                <div style="background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); color: white; padding: 25px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(244, 67, 54, 0.3); text-align: center;">
  <div style="font-size: 2.5rem; margin-bottom: 15px;"></div>
- <h2 style="margin: 0 0 10px 0; font-size: 1.8rem; font-weight: bold;">Challenge Has Ended</h2>
- <p style="margin: 0 0 15px 0; font-size: 1.1rem; opacity: 0.95;">
+                    <h2 style="margin: 0 0 10px 0; font-size: 1.8rem; font-weight: bold;">Challenge Has Ended</h2>
+                    <p style="margin: 0 0 15px 0; font-size: 1.1rem; opacity: 0.95;">
  The WOW-CSG 7 Days Fitness Challenge ended on <strong>${formattedEnd}</strong>.
- </p>
- <p style="margin: 0; font-size: 1rem; opacity: 0.9;">
- Thank you for participating! You can still view your progress and the leaderboard below.
- </p>
- </div>
- `;
- challengeOverMsg.style.display = 'block';
+                    </p>
+                    <p style="margin: 0; font-size: 1rem; opacity: 0.9;">
+                        Thank you for participating! You can still view your progress and the leaderboard below.
+                    </p>
+                </div>
+            `;
+            challengeOverMsg.style.display = 'block';
  this.disableAddStepsSection('ended');
  } else if (notStarted) {
  challengeOverMsg.innerHTML = `
@@ -1628,46 +1648,46 @@ class StepathonApp {
  challengeOverMsg.style.display = 'block';
  // Keep counter usable before the official start
  this.enableAddStepsSection();
- } else {
- challengeOverMsg.style.display = 'none';
- this.enableAddStepsSection();
- }
- }
+        } else {
+            challengeOverMsg.style.display = 'none';
+            this.enableAddStepsSection();
+        }
+    }
 
  disableAddStepsSection(reason = 'ended') {
- // Disable the entire add steps section
- const addStepsSection = document.querySelector('.add-steps-section');
+        // Disable the entire add steps section
+        const addStepsSection = document.querySelector('.add-steps-section');
  const { endDate, startDate } = this.getChallengeBounds();
- if (addStepsSection) {
- addStepsSection.style.opacity = '0.6';
- addStepsSection.style.pointerEvents = 'none';
- addStepsSection.style.position = 'relative';
- 
- // Add overlay message
- let overlay = addStepsSection.querySelector('.challenge-disabled-overlay');
- if (!overlay) {
- overlay = document.createElement('div');
- overlay.className = 'challenge-disabled-overlay';
- overlay.style.cssText = `
- position: absolute;
- top: 0;
- left: 0;
- right: 0;
- bottom: 0;
- background: rgba(255, 255, 255, 0.95);
- display: flex;
- align-items: center;
- justify-content: center;
- border-radius: 12px;
- z-index: 100;
- flex-direction: column;
- padding: 20px;
- `;
+        if (addStepsSection) {
+            addStepsSection.style.opacity = '0.6';
+            addStepsSection.style.pointerEvents = 'none';
+            addStepsSection.style.position = 'relative';
+            
+            // Add overlay message
+            let overlay = addStepsSection.querySelector('.challenge-disabled-overlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.className = 'challenge-disabled-overlay';
+                overlay.style.cssText = `
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(255, 255, 255, 0.95);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: 12px;
+                    z-index: 100;
+                    flex-direction: column;
+                    padding: 20px;
+                `;
  addStepsSection.appendChild(overlay);
  }
 
  if (reason === 'not-started') {
- overlay.innerHTML = `
+                overlay.innerHTML = `
  <div style="font-size: 3rem; margin-bottom: 15px;"></div>
  <h3 style="margin: 0 0 10px 0; color: #0b3d66; font-size: 1.5rem;">Challenge Starts Soon</h3>
  <p style="margin: 0; color: #666; text-align: center; max-width: 400px;">
@@ -1677,127 +1697,127 @@ class StepathonApp {
  } else {
  overlay.innerHTML = `
  <div style="font-size: 3rem; margin-bottom: 15px;"></div>
- <h3 style="margin: 0 0 10px 0; color: #f44336; font-size: 1.5rem;">Challenge Has Ended</h3>
- <p style="margin: 0; color: #666; text-align: center; max-width: 400px;">
+                    <h3 style="margin: 0 0 10px 0; color: #f44336; font-size: 1.5rem;">Challenge Has Ended</h3>
+                    <p style="margin: 0; color: #666; text-align: center; max-width: 400px;">
  New step entries are no longer being accepted. The challenge ended on <strong>${this.formatDate(endDate)}</strong>.
- </p>
- `;
- }
- }
- 
- // Disable all input methods
- const methodTabs = document.querySelectorAll('.method-tab');
- methodTabs.forEach(tab => {
- tab.disabled = true;
- tab.style.opacity = '0.5';
- tab.style.cursor = 'not-allowed';
- });
- 
- // Disable forms
- const addStepsForm = document.getElementById('addStepsForm');
- if (addStepsForm) {
- const inputs = addStepsForm.querySelectorAll('input, button');
- inputs.forEach(input => input.disabled = true);
- }
- 
- const screenshotForm = document.getElementById('screenshotForm');
- if (screenshotForm) {
- const inputs = screenshotForm.querySelectorAll('input, button');
- inputs.forEach(input => input.disabled = true);
- }
- 
- const stepCounterForm = document.getElementById('stepCounterForm');
- if (stepCounterForm) {
- const buttons = stepCounterForm.querySelectorAll('button');
- buttons.forEach(btn => btn.disabled = true);
- }
- }
+                    </p>
+                `;
+            }
+        }
+        
+        // Disable all input methods
+        const methodTabs = document.querySelectorAll('.method-tab');
+        methodTabs.forEach(tab => {
+            tab.disabled = true;
+            tab.style.opacity = '0.5';
+            tab.style.cursor = 'not-allowed';
+        });
+        
+        // Disable forms
+        const addStepsForm = document.getElementById('addStepsForm');
+        if (addStepsForm) {
+            const inputs = addStepsForm.querySelectorAll('input, button');
+            inputs.forEach(input => input.disabled = true);
+        }
+        
+        const screenshotForm = document.getElementById('screenshotForm');
+        if (screenshotForm) {
+            const inputs = screenshotForm.querySelectorAll('input, button');
+            inputs.forEach(input => input.disabled = true);
+        }
+        
+        const stepCounterForm = document.getElementById('stepCounterForm');
+        if (stepCounterForm) {
+            const buttons = stepCounterForm.querySelectorAll('button');
+            buttons.forEach(btn => btn.disabled = true);
+        }
+    }
 
- enableAddStepsSection() {
- const addStepsSection = document.querySelector('.add-steps-section');
- if (addStepsSection) {
- addStepsSection.style.opacity = '1';
- addStepsSection.style.pointerEvents = 'auto';
- 
- const overlay = addStepsSection.querySelector('.challenge-disabled-overlay');
- if (overlay) {
- overlay.remove();
- }
- }
- 
- const methodTabs = document.querySelectorAll('.method-tab');
- methodTabs.forEach(tab => {
- tab.disabled = false;
- tab.style.opacity = '1';
- tab.style.cursor = 'pointer';
- });
- }
+    enableAddStepsSection() {
+        const addStepsSection = document.querySelector('.add-steps-section');
+        if (addStepsSection) {
+            addStepsSection.style.opacity = '1';
+            addStepsSection.style.pointerEvents = 'auto';
+            
+            const overlay = addStepsSection.querySelector('.challenge-disabled-overlay');
+            if (overlay) {
+                overlay.remove();
+            }
+        }
+        
+        const methodTabs = document.querySelectorAll('.method-tab');
+        methodTabs.forEach(tab => {
+            tab.disabled = false;
+            tab.style.opacity = '1';
+            tab.style.cursor = 'pointer';
+        });
+    }
 
- formatDate(date) {
- // Ensure date is valid
- if (!date || isNaN(date.getTime())) {
- console.error('Invalid date provided to formatDate');
- return 'Invalid Date';
- }
- 
- // Use explicit formatting to avoid locale issues
- const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
- const month = months[date.getMonth()];
- const day = date.getDate();
- const year = date.getFullYear();
- 
- return `${month} ${day}, ${year}`;
- }
+    formatDate(date) {
+        // Ensure date is valid
+        if (!date || isNaN(date.getTime())) {
+            console.error('Invalid date provided to formatDate');
+            return 'Invalid Date';
+        }
+        
+        // Use explicit formatting to avoid locale issues
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const month = months[date.getMonth()];
+        const day = date.getDate();
+        const year = date.getFullYear();
+        
+        return `${month} ${day}, ${year}`;
+    }
 
- checkCurrentUser() {
+    checkCurrentUser() {
  localStorage.removeItem('isAdmin');
- const savedUser = localStorage.getItem('currentUser');
-
+        const savedUser = localStorage.getItem('currentUser');
+        
  if (this.firebaseEnabled && this.auth && this.auth.currentUser) {
- this.loadCurrentUserFromFirebase(this.auth.currentUser.uid).then((participant) => {
- if (participant) {
- this.showDashboard();
- }
- });
- } else if (savedUser) {
+            this.loadCurrentUserFromFirebase(this.auth.currentUser.uid).then((participant) => {
+                if (participant) {
+                    this.showDashboard();
+                }
+            });
+        } else if (savedUser) {
  try {
  this.currentUser = this.stripSecretsFromParticipant(JSON.parse(savedUser));
  localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
- this.showDashboard();
+            this.showDashboard();
  } catch (e) {
  localStorage.removeItem('currentUser');
  }
- }
- }
+        }
+    }
 
- switchLoginTab(tabType) {
- document.querySelectorAll('.login-tab').forEach(tab => tab.classList.remove('active'));
- document.querySelectorAll('.login-form').forEach(form => {
- form.classList.remove('active');
- if (form.id !== 'adminLoginForm') {
- form.style.display = 'none';
- }
- });
- 
- if (tabType === 'user') {
- document.querySelector('[data-tab="user"]').classList.add('active');
- document.getElementById('userLoginForm').style.display = 'block';
- document.getElementById('userLoginForm').classList.add('active');
- document.getElementById('userLoginFormExisting').style.display = 'none';
- } else if (tabType === 'user-login') {
- document.querySelector('[data-tab="user-login"]').classList.add('active');
- document.getElementById('userLoginFormExisting').style.display = 'block';
- document.getElementById('userLoginFormExisting').classList.add('active');
- document.getElementById('userLoginForm').style.display = 'none';
- } else {
- document.querySelector('[data-tab="admin"]').classList.add('active');
- document.getElementById('adminLoginForm').classList.add('active');
- document.getElementById('userLoginForm').style.display = 'none';
- document.getElementById('userLoginFormExisting').style.display = 'none';
- }
- }
+    switchLoginTab(tabType) {
+        document.querySelectorAll('.login-tab').forEach(tab => tab.classList.remove('active'));
+        document.querySelectorAll('.login-form').forEach(form => {
+            form.classList.remove('active');
+            if (form.id !== 'adminLoginForm') {
+                form.style.display = 'none';
+            }
+        });
+        
+        if (tabType === 'user') {
+            document.querySelector('[data-tab="user"]').classList.add('active');
+            document.getElementById('userLoginForm').style.display = 'block';
+            document.getElementById('userLoginForm').classList.add('active');
+            document.getElementById('userLoginFormExisting').style.display = 'none';
+        } else if (tabType === 'user-login') {
+            document.querySelector('[data-tab="user-login"]').classList.add('active');
+            document.getElementById('userLoginFormExisting').style.display = 'block';
+            document.getElementById('userLoginFormExisting').classList.add('active');
+            document.getElementById('userLoginForm').style.display = 'none';
+        } else {
+            document.querySelector('[data-tab="admin"]').classList.add('active');
+            document.getElementById('adminLoginForm').classList.add('active');
+            document.getElementById('userLoginForm').style.display = 'none';
+            document.getElementById('userLoginFormExisting').style.display = 'none';
+        }
+    }
 
- handleAdminLogin() {
+    handleAdminLogin() {
  this.handleAdminLoginAsync();
  }
 
@@ -1808,8 +1828,8 @@ class StepathonApp {
 
  if (!usernameInput || !passwordInput) {
  alert('Error: Admin login form elements not found. Please refresh the page.');
- return;
- }
+            return;
+        }
 
  const email = usernameInput.value.trim().toLowerCase();
  const password = passwordInput.value;
@@ -1842,11 +1862,11 @@ class StepathonApp {
  }
  this.isAdmin = true;
  localStorage.removeItem('isAdmin');
- if (!window.location.pathname.includes('admin.html')) {
- window.location.href = 'admin.html';
- } else {
- this.showAdminDashboard();
- }
+            if (!window.location.pathname.includes('admin.html')) {
+                window.location.href = 'admin.html';
+            } else {
+                this.showAdminDashboard();
+            }
  } catch (error) {
  console.warn('Admin login failed');
  alert('Invalid admin credentials or Firebase error. Contact ' + this.securityCfg().supportEmail);
@@ -1855,143 +1875,143 @@ class StepathonApp {
  } catch (error) {
  console.error('Admin login error:', error);
  alert('An error occurred during admin login.');
- }
- }
+        }
+    }
 
- adminLogout() {
- this.isAdmin = false;
- localStorage.removeItem('isAdmin');
+    adminLogout() {
+        this.isAdmin = false;
+        localStorage.removeItem('isAdmin');
  if (this.firebaseEnabled && this.auth) {
  this.auth.signOut().catch(() => {});
  }
+        
+        // Check if we're on admin page
+        if (window.location.pathname.includes('admin.html')) {
+            document.getElementById('adminLoginCard').style.display = 'block';
+            document.getElementById('adminDashboard').style.display = 'none';
+            const adminForm = document.getElementById('adminForm');
+            if (adminForm) {
+                adminForm.reset();
+            }
+        } else {
+            // On main page
+            document.getElementById('loginCard').style.display = 'block';
+            const adminDashboard = document.getElementById('adminDashboard');
+            if (adminDashboard) {
+                adminDashboard.style.display = 'none';
+            }
+            document.getElementById('dashboardCard').style.display = 'none';
+        }
+    }
 
- // Check if we're on admin page
- if (window.location.pathname.includes('admin.html')) {
- document.getElementById('adminLoginCard').style.display = 'block';
- document.getElementById('adminDashboard').style.display = 'none';
- const adminForm = document.getElementById('adminForm');
- if (adminForm) {
- adminForm.reset();
- }
- } else {
- // On main page
- document.getElementById('loginCard').style.display = 'block';
- const adminDashboard = document.getElementById('adminDashboard');
- if (adminDashboard) {
- adminDashboard.style.display = 'none';
- }
- document.getElementById('dashboardCard').style.display = 'none';
- }
- }
+    loadStepEntries() {
+        try {
+            const storageKey = this.firebaseEnabled ? 'stepEntries_cache' : 'stepEntries';
+            const saved = localStorage.getItem(storageKey);
+            console.log('loadStepEntries - Raw localStorage value:', saved);
+            
+            if (!saved || saved === 'null' || saved === 'undefined') {
+                console.log('No stepEntries found in localStorage (or null/undefined)');
+                return [];
+            }
+            
+            const entries = JSON.parse(saved);
+            console.log('loadStepEntries - Parsed entries:', entries);
+            console.log('loadStepEntries - Is array?', Array.isArray(entries));
+            console.log('loadStepEntries - Type:', typeof entries);
+            
+            if (!Array.isArray(entries)) {
+                console.error('stepEntries is not an array! Type:', typeof entries, 'Value:', entries);
+                return [];
+            }
+            
+            console.log('Loaded stepEntries from localStorage:', entries.length, 'entries');
+            return entries;
+        } catch (error) {
+            console.error('Error loading stepEntries from localStorage:', error);
+            console.error('Error stack:', error.stack);
+            return [];
+        }
+    }
 
- loadStepEntries() {
- try {
- const storageKey = this.firebaseEnabled ? 'stepEntries_cache' : 'stepEntries';
- const saved = localStorage.getItem(storageKey);
- console.log('loadStepEntries - Raw localStorage value:', saved);
- 
- if (!saved || saved === 'null' || saved === 'undefined') {
- console.log('No stepEntries found in localStorage (or null/undefined)');
- return [];
- }
- 
- const entries = JSON.parse(saved);
- console.log('loadStepEntries - Parsed entries:', entries);
- console.log('loadStepEntries - Is array?', Array.isArray(entries));
- console.log('loadStepEntries - Type:', typeof entries);
- 
- if (!Array.isArray(entries)) {
- console.error('stepEntries is not an array! Type:', typeof entries, 'Value:', entries);
- return [];
- }
- 
- console.log('Loaded stepEntries from localStorage:', entries.length, 'entries');
- return entries;
- } catch (error) {
- console.error('Error loading stepEntries from localStorage:', error);
- console.error('Error stack:', error.stack);
- return [];
- }
- }
+    saveStepEntries() {
+        try {
+            if (!Array.isArray(this.stepEntries)) {
+                console.error('Cannot save stepEntries - not an array!', typeof this.stepEntries, this.stepEntries);
+                this.stepEntries = [];
+            }
+            const jsonString = JSON.stringify(this.stepEntries);
+            const storageKey = this.firebaseEnabled ? 'stepEntries_cache' : 'stepEntries';
+            localStorage.setItem(storageKey, jsonString);
+            console.log('Saved stepEntries to localStorage:', this.stepEntries.length, 'entries');
+            console.log('Saved data size:', jsonString.length, 'characters');
+            
+            // Verify save
+            const verify = localStorage.getItem(storageKey);
+            if (verify !== jsonString) {
+                console.error('Save verification failed! Data mismatch.');
+            } else {
+                console.log('Save verification successful');
+            }
+        } catch (error) {
+            console.error('Error saving stepEntries to localStorage:', error);
+            console.error('Error stack:', error.stack);
+        }
+    }
 
- saveStepEntries() {
- try {
- if (!Array.isArray(this.stepEntries)) {
- console.error('Cannot save stepEntries - not an array!', typeof this.stepEntries, this.stepEntries);
- this.stepEntries = [];
- }
- const jsonString = JSON.stringify(this.stepEntries);
- const storageKey = this.firebaseEnabled ? 'stepEntries_cache' : 'stepEntries';
- localStorage.setItem(storageKey, jsonString);
- console.log('Saved stepEntries to localStorage:', this.stepEntries.length, 'entries');
- console.log('Saved data size:', jsonString.length, 'characters');
- 
- // Verify save
- const verify = localStorage.getItem(storageKey);
- if (verify !== jsonString) {
- console.error('Save verification failed! Data mismatch.');
- } else {
- console.log('Save verification successful');
- }
- } catch (error) {
- console.error('Error saving stepEntries to localStorage:', error);
- console.error('Error stack:', error.stack);
- }
- }
+    async handleRegistration() {
+        // Bot protection: Check honeypot field
+        const honeypot = document.getElementById('website');
+        if (honeypot && honeypot.value.trim() !== '') {
+            console.warn('Bot detected: Honeypot field was filled');
+            alert('Bot activity detected. Registration blocked.');
+            return;
+        }
 
- async handleRegistration() {
- // Bot protection: Check honeypot field
- const honeypot = document.getElementById('website');
- if (honeypot && honeypot.value.trim() !== '') {
- console.warn('Bot detected: Honeypot field was filled');
- alert('Bot activity detected. Registration blocked.');
- return;
- }
+        // Bot protection: Rate limiting check
+        if (!this.checkRateLimit('registration')) {
+            this.recordAttempt('registration', false); // Record failed attempt
+            alert('Too many registration attempts. Please try again later.\n\nMaximum 5 attempts per hour and 10 attempts per day.');
+            return;
+        }
 
- // Bot protection: Rate limiting check
- if (!this.checkRateLimit('registration')) {
- this.recordAttempt('registration', false); // Record failed attempt
- alert('Too many registration attempts. Please try again later.\n\nMaximum 5 attempts per hour and 10 attempts per day.');
- return;
- }
+        // Bot protection: Verify CAPTCHA
+        if (!this.verifyCaptcha('registration')) {
+            this.recordAttempt('registration', false); // Record failed attempt
+            alert('Security check failed. Please solve the math problem correctly.');
+            this.generateCaptcha('registration'); // Generate new CAPTCHA
+            return;
+        }
 
- // Bot protection: Verify CAPTCHA
- if (!this.verifyCaptcha('registration')) {
- this.recordAttempt('registration', false); // Record failed attempt
- alert('Security check failed. Please solve the math problem correctly.');
- this.generateCaptcha('registration'); // Generate new CAPTCHA
- return;
- }
+        const name = document.getElementById('employeeName').value.trim();
+        const id = document.getElementById('employeeId').value.trim();
+        const email = document.getElementById('emailId').value.trim();
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+        const confirmPassword = document.getElementById('confirmPassword').value;
 
- const name = document.getElementById('employeeName').value.trim();
- const id = document.getElementById('employeeId').value.trim();
- const email = document.getElementById('emailId').value.trim();
- const username = document.getElementById('username').value.trim();
- const password = document.getElementById('password').value;
- const confirmPassword = document.getElementById('confirmPassword').value;
+        // Validation
+        if (!name) {
+            alert('Please enter your name!');
+            return;
+        }
 
- // Validation
- if (!name) {
- alert('Please enter your name!');
- return;
- }
+        if (!id) {
+            alert('Please enter your Employee ID!');
+            return;
+        }
 
- if (!id) {
- alert('Please enter your Employee ID!');
- return;
- }
+        if (!email) {
+            alert('Please enter your Email ID!');
+            return;
+        }
 
- if (!email) {
- alert('Please enter your Email ID!');
- return;
- }
-
- // Email validation
- const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
- if (!emailRegex.test(email)) {
- alert('Please enter a valid email address!');
- return;
- }
+        // Email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            alert('Please enter a valid email address!');
+            return;
+        }
 
  if (!this.isCorporateEmail(email)) {
  const domains = this.securityCfg().allowedEmailDomains.join(', @');
@@ -2007,43 +2027,29 @@ class StepathonApp {
  return;
  }
 
- if (!username || username.length < 3) {
- alert('Please enter a username with at least 3 characters!');
- return;
- }
+        if (!username || username.length < 3) {
+            alert('Please enter a username with at least 3 characters!');
+            return;
+        }
 
  const minPw = this.securityCfg().minPasswordLength || 8;
  if (!password || password.length < minPw) {
  alert('Please enter a password with at least ' + minPw + ' characters!');
- return;
- }
+            return;
+        }
 
- if (password !== confirmPassword) {
- alert('Passwords do not match!');
- return;
- }
+        if (password !== confirmPassword) {
+            alert('Passwords do not match!');
+            return;
+        }
 
- if (this.firebaseEnabled) {
- const usernameLower = username.toLowerCase();
- const employeeIdLower = id.toLowerCase();
+        if (this.firebaseEnabled) {
+            const usernameLower = username.toLowerCase();
+            const employeeIdLower = id.toLowerCase();
 
- // Check duplicates in Firebase
- const usernameTaken = await this.isFirebaseFieldTaken('usernameLower', usernameLower);
- if (usernameTaken) {
- alert('Username already exists! Please choose a different username.');
- document.getElementById('username').focus();
- return;
- }
-
- const employeeIdTaken = await this.isFirebaseFieldTaken('employeeIdLower', employeeIdLower);
- if (employeeIdTaken) {
- alert('This Employee ID is already registered! Please login instead or contact support if you believe this is an error.');
- document.getElementById('employeeId').focus();
- this.switchLoginTab('user-login');
- return;
- }
-
- try {
+            // Note: username/employeeId uniqueness cannot be queried while signed out
+            // (Firestore rules). Firebase Auth enforces unique email; proceed to create.
+            try {
  let credential;
  let reclaimed = false;
  try {
@@ -2081,21 +2087,21 @@ class StepathonApp {
  }
  }
 
- const participant = {
- uid: credential.user.uid,
- id: id,
- employeeId: id,
- name: name,
- email: email,
- emailLower: email.toLowerCase(),
- username: username,
- usernameLower: usernameLower,
- employeeIdLower: employeeIdLower,
- totalSteps: 0,
- dailySteps: {},
- streak: 0,
- lastActivity: null,
- activities: [],
+                const participant = {
+                    uid: credential.user.uid,
+                    id: id,
+                    employeeId: id,
+                    name: name,
+                    email: email,
+                    emailLower: email.toLowerCase(),
+                    username: username,
+                    usernameLower: usernameLower,
+                    employeeIdLower: employeeIdLower,
+                    totalSteps: 0,
+                    dailySteps: {},
+                    streak: 0,
+                    lastActivity: null,
+                    activities: [],
  registeredAt: new Date().toISOString(),
  season: this.dataSeason
  };
@@ -2104,22 +2110,22 @@ class StepathonApp {
  this.participants = this.filterCurrentSeasonParticipants(
  this.participants.filter((p) => p.uid !== participant.uid).concat([participant])
  );
- this.saveParticipantsCache();
+                this.saveParticipantsCache();
  this.syncParticipantsFromFirebase().catch(() => {});
 
  this.currentUser = this.stripSecretsFromParticipant(participant);
  localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
 
- this.recordAttempt('registration', true);
- this.generateCaptcha('registration');
+                this.recordAttempt('registration', true);
+                this.generateCaptcha('registration');
 
- document.getElementById('registrationForm').reset();
+                document.getElementById('registrationForm').reset();
  try {
  this.showDashboard();
  this.updateLeaderboard();
  } catch (uiError) {
  console.warn('Dashboard open after registration failed:', uiError);
- this.switchLoginTab('user-login');
+                this.switchLoginTab('user-login');
  }
 
  alert(
@@ -2127,23 +2133,23 @@ class StepathonApp {
  ? 'Welcome back! Your previous challenge data was cleared. A fresh profile is ready.'
  : 'Account created successfully!\n\nYou can now login with your email and password from any device.'
  );
- } catch (error) {
+            } catch (error) {
  if (error.code === 'auth/invalid-email') {
- alert('Please enter a valid email address!');
- document.getElementById('emailId').focus();
- } else if (error.code === 'auth/weak-password') {
- alert('Password is too weak. Please use at least 6 characters.');
- document.getElementById('password').focus();
+                    alert('Please enter a valid email address!');
+                    document.getElementById('emailId').focus();
+                } else if (error.code === 'auth/weak-password') {
+                    alert('Password is too weak. Please use at least 6 characters.');
+                    document.getElementById('password').focus();
  } else if (error.code === 'permission-denied') {
  console.error('Firebase registration permission error:', error);
  alert('Registration failed due to a permissions issue. Please try again or contact support.');
- } else {
- console.error('Firebase registration error:', error);
+                } else {
+                    console.error('Firebase registration error:', error);
  alert('Registration failed. Please try again.\n\n' + (error.code || '') + ' ' + (error.message || ''));
- }
- }
- return;
- }
+                }
+            }
+            return;
+        }
 
  // CSG compliance: local-only accounts disabled (insecure password storage).
  alert(
@@ -2151,24 +2157,24 @@ class StepathonApp {
  'If you see this message, Firebase is not configured. Contact ' +
  this.securityCfg().supportEmail
  );
- }
+    }
 
- async handleLogin() {
- // Reload participants to avoid stale data across tabs or sessions
- this.participants = this.loadParticipants();
+    async handleLogin() {
+        // Reload participants to avoid stale data across tabs or sessions
+        this.participants = this.loadParticipants();
 
- const identifier = document.getElementById('loginUsername').value.trim();
- const password = document.getElementById('loginPassword').value;
+        const identifier = document.getElementById('loginUsername').value.trim();
+        const password = document.getElementById('loginPassword').value;
 
- if (!identifier || !password) {
- alert('Please enter your username/email/Employee ID and password!');
- return;
- }
+        if (!identifier || !password) {
+            alert('Please enter your username/email/Employee ID and password!');
+            return;
+        }
 
- if (this.firebaseEnabled) {
- await this.handleFirebaseLogin(identifier, password);
- return;
- }
+        if (this.firebaseEnabled) {
+            await this.handleFirebaseLogin(identifier, password);
+            return;
+        }
 
  alert(
  'Firebase is required for CSG-compliant login.\n\n' +
@@ -2186,77 +2192,77 @@ class StepathonApp {
  delete clean.passwordHash;
  delete clean.passwordResetAt;
  return clean;
- }
+    }
 
- initializeEmailJS() {
- // Check if EmailJS is available
- if (typeof emailjs !== 'undefined') {
- // Initialize EmailJS with public key (user needs to configure this)
- // Get from localStorage or use default
- const emailjsPublicKey = localStorage.getItem('emailjs_public_key') || '';
- if (emailjsPublicKey) {
- emailjs.init(emailjsPublicKey);
- }
- }
- }
+    initializeEmailJS() {
+        // Check if EmailJS is available
+        if (typeof emailjs !== 'undefined') {
+            // Initialize EmailJS with public key (user needs to configure this)
+            // Get from localStorage or use default
+            const emailjsPublicKey = localStorage.getItem('emailjs_public_key') || '';
+            if (emailjsPublicKey) {
+                emailjs.init(emailjsPublicKey);
+            }
+        }
+    }
 
- async sendPasswordEmail(email, password, username) {
+    async sendPasswordEmail(email, password, username) {
  // CSG policy: never email or persist plaintext passwords.
  return false;
- }
+    }
 
- async sendEmailViaEmailJS(email, username, password) {
+    async sendEmailViaEmailJS(email, username, password) {
  // Disabled — passwords must not leave the device via client email APIs.
- return false;
- }
+            return false;
+    }
 
- showEmailModal(email, username, password, subject, body, emailSent = false) {
- const modal = document.createElement('div');
- modal.className = 'email-modal-overlay';
+    showEmailModal(email, username, password, subject, body, emailSent = false) {
+        const modal = document.createElement('div');
+        modal.className = 'email-modal-overlay';
  const safeEmail = this.escapeHtml(email || '');
  const safeUser = this.escapeHtml(username || '');
- modal.innerHTML = `
- <div class="email-modal">
- <div class="email-modal-header">
+        modal.innerHTML = `
+            <div class="email-modal">
+                <div class="email-modal-header">
  <h3>Account ready</h3>
  <button type="button" class="email-modal-close" id="emailModalCloseBtn">&times;</button>
- </div>
- <div class="email-modal-content">
+                </div>
+                <div class="email-modal-content">
  <p>Your account was created. Use the password you chose at registration — it is not stored or emailed by this app.</p>
  <p><strong>Email:</strong> ${safeEmail}</p>
  <p><strong>Username:</strong> <span id="copyUsername">${safeUser}</span>
  <button type="button" class="btn-copy" id="copyUsernameBtn">Copy</button></p>
  <button type="button" class="btn btn-primary" id="emailModalDoneBtn">Continue</button>
- </div>
+                    </div>
  </div>`;
- document.body.appendChild(modal);
+        document.body.appendChild(modal);
  const close = () => modal.remove();
  modal.querySelector('#emailModalCloseBtn').addEventListener('click', close);
  modal.querySelector('#emailModalDoneBtn').addEventListener('click', close);
  modal.querySelector('#copyUsernameBtn').addEventListener('click', () => this.copyToClipboard(username, 'Username'));
  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
- }
+    }
 
- copyToClipboard(text, label) {
- navigator.clipboard.writeText(text).then(() => {
- this.showToast(`${label} copied to clipboard!`);
- }).catch(() => {
- // Fallback for older browsers
- const textarea = document.createElement('textarea');
- textarea.value = text;
- textarea.style.position = 'fixed';
- textarea.style.opacity = '0';
- document.body.appendChild(textarea);
- textarea.select();
- try {
- document.execCommand('copy');
- this.showToast(`${label} copied to clipboard!`);
- } catch (err) {
- this.showToast('Failed to copy. Please copy manually.');
- }
- document.body.removeChild(textarea);
- });
- }
+    copyToClipboard(text, label) {
+        navigator.clipboard.writeText(text).then(() => {
+            this.showToast(`${label} copied to clipboard!`);
+        }).catch(() => {
+            // Fallback for older browsers
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                this.showToast(`${label} copied to clipboard!`);
+            } catch (err) {
+                this.showToast('Failed to copy. Please copy manually.');
+            }
+            document.body.removeChild(textarea);
+        });
+    }
 
  copyEmailContent(email, username) {
  const content = `Account Details for WOW-CSG 7 Days Fitness Challenge
@@ -2265,168 +2271,168 @@ Email: ${email}
 Username: ${username}
 
 Use Forgot Password if you need a reset link. Passwords are never emailed by this app.`;
- 
- this.copyToClipboard(content, 'Email content');
- }
+        
+        this.copyToClipboard(content, 'Email content');
+    }
 
- showToast(message, type = 'success') {
- // Remove existing toast if any
- const existingToast = document.querySelector('.toast-notification');
- if (existingToast) {
- existingToast.remove();
- }
+    showToast(message, type = 'success') {
+        // Remove existing toast if any
+        const existingToast = document.querySelector('.toast-notification');
+        if (existingToast) {
+            existingToast.remove();
+        }
 
- const toast = document.createElement('div');
- toast.className = `toast-notification toast-${type}`;
- toast.textContent = message;
- document.body.appendChild(toast);
+        const toast = document.createElement('div');
+        toast.className = `toast-notification toast-${type}`;
+        toast.textContent = message;
+        document.body.appendChild(toast);
 
- // Show toast
- setTimeout(() => {
- toast.classList.add('show');
- }, 10);
+        // Show toast
+        setTimeout(() => {
+            toast.classList.add('show');
+        }, 10);
 
- // Hide and remove toast after 3 seconds
- setTimeout(() => {
- toast.classList.remove('show');
- setTimeout(() => {
- if (toast.parentNode) {
- toast.remove();
- }
- }, 300);
- }, 3000);
- }
+        // Hide and remove toast after 3 seconds
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.remove();
+                }
+            }, 300);
+        }, 3000);
+    }
 
- // EmailJS Configuration Functions
- showEmailJSConfig() {
- const modal = document.getElementById('emailjsConfigModal');
- if (modal) {
- modal.style.display = 'block';
- this.loadEmailJSConfig();
- }
- }
+    // EmailJS Configuration Functions
+    showEmailJSConfig() {
+        const modal = document.getElementById('emailjsConfigModal');
+        if (modal) {
+            modal.style.display = 'block';
+            this.loadEmailJSConfig();
+        }
+    }
 
- closeEmailJSConfig() {
- const modal = document.getElementById('emailjsConfigModal');
- if (modal) {
- modal.style.display = 'none';
- }
- }
+    closeEmailJSConfig() {
+        const modal = document.getElementById('emailjsConfigModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }
 
- loadEmailJSConfig() {
- const serviceId = localStorage.getItem('emailjs_service_id') || '';
- const templateId = localStorage.getItem('emailjs_template_id') || '';
- const publicKey = localStorage.getItem('emailjs_public_key') || '';
+    loadEmailJSConfig() {
+        const serviceId = localStorage.getItem('emailjs_service_id') || '';
+        const templateId = localStorage.getItem('emailjs_template_id') || '';
+        const publicKey = localStorage.getItem('emailjs_public_key') || '';
 
- const serviceIdInput = document.getElementById('emailjsServiceId');
- const templateIdInput = document.getElementById('emailjsTemplateId');
- const publicKeyInput = document.getElementById('emailjsPublicKey');
+        const serviceIdInput = document.getElementById('emailjsServiceId');
+        const templateIdInput = document.getElementById('emailjsTemplateId');
+        const publicKeyInput = document.getElementById('emailjsPublicKey');
 
- if (serviceIdInput) serviceIdInput.value = serviceId;
- if (templateIdInput) templateIdInput.value = templateId;
- if (publicKeyInput) publicKeyInput.value = publicKey;
- }
+        if (serviceIdInput) serviceIdInput.value = serviceId;
+        if (templateIdInput) templateIdInput.value = templateId;
+        if (publicKeyInput) publicKeyInput.value = publicKey;
+    }
 
- saveEmailJSConfig() {
- const serviceId = document.getElementById('emailjsServiceId').value.trim();
- const templateId = document.getElementById('emailjsTemplateId').value.trim();
- const publicKey = document.getElementById('emailjsPublicKey').value.trim();
+    saveEmailJSConfig() {
+        const serviceId = document.getElementById('emailjsServiceId').value.trim();
+        const templateId = document.getElementById('emailjsTemplateId').value.trim();
+        const publicKey = document.getElementById('emailjsPublicKey').value.trim();
 
- if (!serviceId || !templateId || !publicKey) {
- alert('Please fill in all EmailJS configuration fields!');
- return;
- }
+        if (!serviceId || !templateId || !publicKey) {
+            alert('Please fill in all EmailJS configuration fields!');
+            return;
+        }
 
- localStorage.setItem('emailjs_service_id', serviceId);
- localStorage.setItem('emailjs_template_id', templateId);
- localStorage.setItem('emailjs_public_key', publicKey);
+        localStorage.setItem('emailjs_service_id', serviceId);
+        localStorage.setItem('emailjs_template_id', templateId);
+        localStorage.setItem('emailjs_public_key', publicKey);
 
- // Reinitialize EmailJS
- this.initializeEmailJS();
+        // Reinitialize EmailJS
+        this.initializeEmailJS();
 
- const statusDiv = document.getElementById('emailjsStatus');
- if (statusDiv) {
+        const statusDiv = document.getElementById('emailjsStatus');
+        if (statusDiv) {
  statusDiv.innerHTML = '<div class="email-success"><p>OK: EmailJS configuration saved successfully!</p></div>';
- }
+        }
 
- this.showToast('EmailJS configuration saved!');
- }
+        this.showToast('EmailJS configuration saved!');
+    }
 
- async testEmailJS() {
- const testEmail = prompt('Enter your email address to send a test email:');
- if (!testEmail) return;
+    async testEmailJS() {
+        const testEmail = prompt('Enter your email address to send a test email:');
+        if (!testEmail) return;
 
- const serviceId = localStorage.getItem('emailjs_service_id');
- const templateId = localStorage.getItem('emailjs_template_id');
- const publicKey = localStorage.getItem('emailjs_public_key');
+        const serviceId = localStorage.getItem('emailjs_service_id');
+        const templateId = localStorage.getItem('emailjs_template_id');
+        const publicKey = localStorage.getItem('emailjs_public_key');
 
- if (!serviceId || !templateId || !publicKey) {
- alert('Please configure EmailJS first!');
- return;
- }
+        if (!serviceId || !templateId || !publicKey) {
+            alert('Please configure EmailJS first!');
+            return;
+        }
 
- try {
- if (typeof emailjs === 'undefined') {
- alert('EmailJS SDK not loaded. Please refresh the page.');
- return;
- }
+        try {
+            if (typeof emailjs === 'undefined') {
+                alert('EmailJS SDK not loaded. Please refresh the page.');
+                return;
+            }
 
- emailjs.init(publicKey);
+            emailjs.init(publicKey);
 
- const templateParams = {
- to_email: testEmail,
- to_name: 'Test User',
- username: 'testuser',
+            const templateParams = {
+                to_email: testEmail,
+                to_name: 'Test User',
+                username: 'testuser',
  password: '[not used — passwords are never emailed]',
  subject: 'Test Email - WOW-CSG Fitness Challenge',
  message: 'This is a test email from WOW-CSG 7 Days Fitness Challenge. If you receive this, EmailJS is configured correctly!'
- };
+            };
 
- await emailjs.send(serviceId, templateId, templateParams);
- 
- const statusDiv = document.getElementById('emailjsStatus');
- if (statusDiv) {
+            await emailjs.send(serviceId, templateId, templateParams);
+            
+            const statusDiv = document.getElementById('emailjsStatus');
+            if (statusDiv) {
  statusDiv.innerHTML = `<div class="email-success"><p>OK: Test email sent successfully to ${testEmail}!</p></div>`;
- }
- this.showToast('Test email sent successfully!');
- } catch (error) {
- console.error('EmailJS Test Error:', error);
- const statusDiv = document.getElementById('emailjsStatus');
- if (statusDiv) {
+            }
+            this.showToast('Test email sent successfully!');
+        } catch (error) {
+            console.error('EmailJS Test Error:', error);
+            const statusDiv = document.getElementById('emailjsStatus');
+            if (statusDiv) {
  statusDiv.innerHTML = `<div class="email-error"><p>Error: ${error.text || error.message || 'Failed to send test email'}</p></div>`;
- }
- alert('Failed to send test email. Please check your EmailJS configuration.');
- }
- }
+            }
+            alert('Failed to send test email. Please check your EmailJS configuration.');
+        }
+    }
 
- clearEmailJSConfig() {
- if (confirm('Are you sure you want to clear EmailJS configuration? Automatic email sending will be disabled.')) {
- localStorage.removeItem('emailjs_service_id');
- localStorage.removeItem('emailjs_template_id');
- localStorage.removeItem('emailjs_public_key');
- 
- const serviceIdInput = document.getElementById('emailjsServiceId');
- const templateIdInput = document.getElementById('emailjsTemplateId');
- const publicKeyInput = document.getElementById('emailjsPublicKey');
+    clearEmailJSConfig() {
+        if (confirm('Are you sure you want to clear EmailJS configuration? Automatic email sending will be disabled.')) {
+            localStorage.removeItem('emailjs_service_id');
+            localStorage.removeItem('emailjs_template_id');
+            localStorage.removeItem('emailjs_public_key');
+            
+            const serviceIdInput = document.getElementById('emailjsServiceId');
+            const templateIdInput = document.getElementById('emailjsTemplateId');
+            const publicKeyInput = document.getElementById('emailjsPublicKey');
 
- if (serviceIdInput) serviceIdInput.value = '';
- if (templateIdInput) templateIdInput.value = '';
- if (publicKeyInput) publicKeyInput.value = '';
+            if (serviceIdInput) serviceIdInput.value = '';
+            if (templateIdInput) templateIdInput.value = '';
+            if (publicKeyInput) publicKeyInput.value = '';
 
- const statusDiv = document.getElementById('emailjsStatus');
- if (statusDiv) {
+            const statusDiv = document.getElementById('emailjsStatus');
+            if (statusDiv) {
  statusDiv.innerHTML = '<div class="email-warning"><p>Note: EmailJS configuration cleared.</p></div>';
- }
- this.showToast('EmailJS configuration cleared');
- }
- }
+            }
+            this.showToast('EmailJS configuration cleared');
+        }
+    }
 
- handleForgotPassword() {
- // Show forgot password modal
- this.showForgotPasswordModal();
- }
+    handleForgotPassword() {
+        // Show forgot password modal
+        this.showForgotPasswordModal();
+    }
 
- showForgotPasswordModal() {
+    showForgotPasswordModal() {
  if (!this.firebaseEnabled) {
  alert(
  'Firebase is required to reset passwords.\n\n' +
@@ -2435,51 +2441,51 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  return;
  }
 
- // Create modal overlay
- const modal = document.createElement('div');
- modal.className = 'email-modal-overlay';
- 
- // Generate CAPTCHA for password reset
- const captcha = this.generateCaptchaValue();
+        // Create modal overlay
+        const modal = document.createElement('div');
+        modal.className = 'email-modal-overlay';
+        
+        // Generate CAPTCHA for password reset
+        const captcha = this.generateCaptchaValue();
 
- modal.innerHTML = `
- <div class="email-modal">
- <div class="email-modal-header">
+        modal.innerHTML = `
+            <div class="email-modal">
+                <div class="email-modal-header">
  <h3>Reset Password</h3>
  <button type="button" class="email-modal-close" id="resetModalCloseBtn" aria-label="Close">&times;</button>
- </div>
- <div class="email-modal-content">
+                </div>
+                <div class="email-modal-content">
  <p class="email-info">Enter the <strong>CSG email</strong> you used to register. Firebase will email you a secure reset link (check Inbox and Spam).</p>
  <form id="resetPasswordForm">
- <!-- Honeypot field -->
- <input type="text" id="resetWebsite" name="website" style="display: none;" tabindex="-1" autocomplete="off">
- 
- <div class="form-group">
+                        <!-- Honeypot field -->
+                        <input type="text" id="resetWebsite" name="website" style="display: none;" tabindex="-1" autocomplete="off">
+                        
+                        <div class="form-group">
  <label for="resetIdentifier">CSG Email <span class="required">*</span></label>
  <input type="email" id="resetIdentifier" placeholder="you@csgi.com" required autocomplete="email">
  <small class="form-hint">Use your @csgi.com / @csg.com registration email (not username).</small>
- </div>
- <div class="form-group captcha-group">
- <label for="resetCaptchaAnswer">Security Check <span class="required">*</span></label>
- <div class="captcha-container">
- <div class="captcha-question" id="resetCaptchaQuestion">${captcha.question}</div>
- <input type="number" id="resetCaptchaAnswer" placeholder="Enter answer" required autocomplete="off" min="0">
+                        </div>
+                        <div class="form-group captcha-group">
+                            <label for="resetCaptchaAnswer">Security Check <span class="required">*</span></label>
+                            <div class="captcha-container">
+                                <div class="captcha-question" id="resetCaptchaQuestion">${captcha.question}</div>
+                                <input type="number" id="resetCaptchaAnswer" placeholder="Enter answer" required autocomplete="off" min="0">
  <button type="button" class="btn btn-secondary btn-small" id="refreshResetCaptchaBtn" title="Refresh CAPTCHA">Refresh</button>
- </div>
- <small class="form-hint">Please solve the math problem to verify you're human.</small>
- </div>
- <div class="email-actions">
+                            </div>
+                            <small class="form-hint">Please solve the math problem to verify you're human.</small>
+                        </div>
+                        <div class="email-actions">
  <button type="submit" class="btn btn-primary" id="sendResetLinkBtn">Send Reset Link</button>
  <button type="button" class="btn btn-secondary" id="cancelResetBtn">Cancel</button>
- </div>
- </form>
- </div>
- </div>
- `;
- document.body.appendChild(modal);
- 
- // Store CAPTCHA answer in modal data
- modal.dataset.captchaAnswer = captcha.answer;
+                        </div>
+                    </form>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        
+        // Store CAPTCHA answer in modal data
+        modal.dataset.captchaAnswer = captcha.answer;
  
  const close = () => modal.remove();
  modal.querySelector('#resetModalCloseBtn').addEventListener('click', close);
@@ -2489,19 +2495,19 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  e.preventDefault();
  this.resetPasswordFirebase();
  });
- 
- // Close on overlay click
- modal.addEventListener('click', (e) => {
- if (e.target === modal) {
+        
+        // Close on overlay click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
  close();
- }
- });
+            }
+        });
 
- // Focus on first input
- setTimeout(() => {
- document.getElementById('resetIdentifier').focus();
- }, 100);
- }
+        // Focus on first input
+        setTimeout(() => {
+            document.getElementById('resetIdentifier').focus();
+        }, 100);
+    }
 
  getPasswordResetActionSettings() {
  const continueUrl = (typeof window !== 'undefined' && window.location && window.location.origin)
@@ -2513,7 +2519,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  };
  }
 
- async resetPasswordFirebase() {
+    async resetPasswordFirebase() {
  const sendBtn = document.getElementById('sendResetLinkBtn');
  if (sendBtn) {
  sendBtn.disabled = true;
@@ -2521,46 +2527,46 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  try {
- // Bot protection: Check honeypot field
- const honeypot = document.getElementById('resetWebsite');
- if (honeypot && honeypot.value.trim() !== '') {
- console.warn('Bot detected: Honeypot field was filled in password reset');
- alert('Bot activity detected. Password reset blocked.');
- return;
- }
+        // Bot protection: Check honeypot field
+        const honeypot = document.getElementById('resetWebsite');
+        if (honeypot && honeypot.value.trim() !== '') {
+            console.warn('Bot detected: Honeypot field was filled in password reset');
+            alert('Bot activity detected. Password reset blocked.');
+            return;
+        }
 
- // Bot protection: Rate limiting check
- if (!this.checkRateLimit('passwordReset')) {
+        // Bot protection: Rate limiting check
+        if (!this.checkRateLimit('passwordReset')) {
  this.recordAttempt('passwordReset', false);
- alert('Too many password reset attempts. Please try again later.\n\nMaximum 5 attempts per hour and 10 attempts per day.');
- return;
- }
+            alert('Too many password reset attempts. Please try again later.\n\nMaximum 5 attempts per hour and 10 attempts per day.');
+            return;
+        }
 
- // Bot protection: Verify CAPTCHA
- const modal = document.querySelector('.email-modal-overlay');
+        // Bot protection: Verify CAPTCHA
+        const modal = document.querySelector('.email-modal-overlay');
  const captchaAnswer = modal ? parseInt(modal.dataset.captchaAnswer, 10) : null;
  const userAnswer = parseInt(document.getElementById('resetCaptchaAnswer').value, 10);
- 
- if (!captchaAnswer || userAnswer !== captchaAnswer) {
+        
+        if (!captchaAnswer || userAnswer !== captchaAnswer) {
  this.recordAttempt('passwordReset', false);
- alert('Security check failed. Please solve the math problem correctly.');
- this.refreshResetCaptcha();
- return;
- }
+            alert('Security check failed. Please solve the math problem correctly.');
+            this.refreshResetCaptcha();
+            return;
+        }
 
  const identifier = (document.getElementById('resetIdentifier').value || '').trim().toLowerCase();
- if (!identifier) {
+        if (!identifier) {
  alert('Please enter your CSG email address.');
- return;
- }
+            return;
+        }
 
- let email = identifier;
- if (!this.isEmail(identifier)) {
+        let email = identifier;
+        if (!this.isEmail(identifier)) {
  // Username / employee ID lookup needs Firestore auth; ask for email instead.
  alert('Please enter the CSG email address used at registration (example: name@csgi.com).');
- document.getElementById('resetIdentifier').focus();
- return;
- }
+                document.getElementById('resetIdentifier').focus();
+                return;
+            }
 
  if (!this.isCorporateEmail(email)) {
  alert('Password reset is only available for CSG corporate emails (@csgi.com / @csg.com).');
@@ -2570,11 +2576,11 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (!this.firebaseEnabled || !this.auth) {
  alert('Firebase is not available. Contact ' + this.securityCfg().supportEmail);
  return;
- }
+        }
 
- try {
+        try {
  await this.auth.sendPasswordResetEmail(email, this.getPasswordResetActionSettings());
- this.recordAttempt('passwordReset', true);
+            this.recordAttempt('passwordReset', true);
  if (modal) modal.remove();
  alert(
  'If an account exists for that email, a password reset link has been sent.\n\n' +
@@ -2584,8 +2590,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  'Still nothing after a few minutes? Contact ' + this.securityCfg().supportEmail
  );
  this.showToast('Password reset email requested. Check your inbox/spam.');
- } catch (error) {
- console.error('Firebase password reset error:', error);
+        } catch (error) {
+            console.error('Firebase password reset error:', error);
  this.recordAttempt('passwordReset', false);
  const code = error && error.code ? String(error.code) : '';
  let message = 'Unable to send reset email. Please try again.';
@@ -2608,7 +2614,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  'Password reset email sent (Firebase default link).\n\n' +
  'Check Inbox and Spam, then return here to log in.'
  );
- return;
+            return;
  } catch (retryErr) {
  console.error('Password reset retry failed:', retryErr);
  message = 'Reset link blocked by Auth domain settings. Contact ' + this.securityCfg().supportEmail;
@@ -2633,55 +2639,55 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  'Firebase is required to reset passwords.\n\n' +
  'Contact ' + this.securityCfg().supportEmail + ' for help.'
  );
- return;
- }
+            return;
+        }
  return this.resetPasswordFirebase();
- }
+    }
 
- showDashboard() {
- document.getElementById('loginCard').style.display = 'none';
- document.getElementById('dashboardCard').style.display = 'block';
- 
- // Check challenge status and disable features if challenge is over
- this.updateDates(); // This will call checkChallengeStatus
- 
- this.updateDashboard();
+    showDashboard() {
+        document.getElementById('loginCard').style.display = 'none';
+        document.getElementById('dashboardCard').style.display = 'block';
+        
+        // Check challenge status and disable features if challenge is over
+        this.updateDates(); // This will call checkChallengeStatus
+        
+        this.updateDashboard();
  this.switchInputMethod('counter');
  setTimeout(() => {
  this.initActivityMap();
  // Restore in-progress activity if the phone killed/reloaded the page while locked
  this.tryRestoreActivitySession();
  }, 250);
- }
+    }
 
- updateDashboard() {
- if (!this.currentUser) return;
+    updateDashboard() {
+        if (!this.currentUser) return;
 
- document.getElementById('userName').textContent = this.currentUser.name;
- 
- const today = new Date().toDateString();
- const todaySteps = this.currentUser.dailySteps[today] || 0;
- const totalSteps = this.currentUser.totalSteps || 0;
- 
- // Always recalculate streak to ensure it's up to date
- const streak = this.calculateStreak(this.currentUser);
- this.currentUser.streak = streak; // Update the stored streak value
+        document.getElementById('userName').textContent = this.currentUser.name;
+        
+        const today = new Date().toDateString();
+        const todaySteps = this.currentUser.dailySteps[today] || 0;
+        const totalSteps = this.currentUser.totalSteps || 0;
+        
+        // Always recalculate streak to ensure it's up to date
+        const streak = this.calculateStreak(this.currentUser);
+        this.currentUser.streak = streak; // Update the stored streak value
 
- // Animated number counting
- this.animateNumber('todaySteps', todaySteps);
- this.animateNumber('totalSteps', totalSteps);
- this.animateNumber('streak', streak);
+        // Animated number counting
+        this.animateNumber('todaySteps', todaySteps);
+        this.animateNumber('totalSteps', totalSteps);
+        this.animateNumber('streak', streak);
 
  // Update progress bar with animation - progressive daily KM goal
  const goalKm = this.getDailyGoalKm();
  const goal = this.getDailyGoalSteps();
  const dayNum = this.getChallengeDayNumber();
- const progress = Math.min((todaySteps / goal) * 100, 100);
- this.animateProgressBar(progress);
- const progressBadge = document.getElementById('progressBadge');
- if (progressBadge) {
- this.animateNumber('progressBadge', Math.round(progress), '%');
- }
+        const progress = Math.min((todaySteps / goal) * 100, 100);
+        this.animateProgressBar(progress);
+        const progressBadge = document.getElementById('progressBadge');
+        if (progressBadge) {
+            this.animateNumber('progressBadge', Math.round(progress), '%');
+        }
  const remainingEl = document.getElementById('remainingSteps');
  if (remainingEl) {
  remainingEl.textContent = Math.max(0, goal - todaySteps).toLocaleString() + ' steps';
@@ -2711,763 +2717,763 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  totalCalEl.textContent = `${Math.round(totalCalories).toLocaleString()} kcal`;
  }
 
- // Update rank
- const rank = this.getUserRank(this.currentUser);
- document.getElementById('rank').textContent = rank > 0 ? `#${rank}` : '-';
+        // Update rank
+        const rank = this.getUserRank(this.currentUser);
+        document.getElementById('rank').textContent = rank > 0 ? `#${rank}` : '-';
 
- // Update activities
- this.updateActivities();
- 
- // Update motivation messages
- this.updateMotivationMessages(todaySteps, progress);
- 
- // Update daily motivation quote
- this.updateDailyMotivation();
- }
+        // Update activities
+        this.updateActivities();
+        
+        // Update motivation messages
+        this.updateMotivationMessages(todaySteps, progress);
+        
+        // Update daily motivation quote
+        this.updateDailyMotivation();
+    }
 
- updateMotivationMessages(todaySteps, progress) {
- const motivationBadge = document.getElementById('motivationBadge');
- const badgeText = document.getElementById('badgeText');
- 
- if (!motivationBadge || !badgeText) return;
- 
- // Hide previous badge
- motivationBadge.style.display = 'none';
- 
+    updateMotivationMessages(todaySteps, progress) {
+        const motivationBadge = document.getElementById('motivationBadge');
+        const badgeText = document.getElementById('badgeText');
+        
+        if (!motivationBadge || !badgeText) return;
+        
+        // Hide previous badge
+        motivationBadge.style.display = 'none';
+        
  // Use real Unicode glyphs (textContent does not decode HTML entities like &#128694;)
- let message = '';
+        let message = '';
  let icon = String.fromCodePoint(0x1F3AF); // target
- 
- if (progress >= 100) {
+        
+        if (progress >= 100) {
  message = 'Amazing! You crushed your daily goal!';
  icon = String.fromCodePoint(0x1F3C6); // trophy
- } else if (progress >= 75) {
+        } else if (progress >= 75) {
  message = 'Almost there! Keep pushing!';
  icon = String.fromCodePoint(0x1F525); // fire
- } else if (progress >= 50) {
+        } else if (progress >= 50) {
  message = 'Halfway there! You\'re doing great!';
  icon = String.fromCodePoint(0x2B50); // star
- } else if (progress >= 25) {
+        } else if (progress >= 25) {
  message = 'Great start! Every step counts!';
  icon = String.fromCodePoint(0x1F463); // footprints
- } else if (todaySteps > 0) {
+        } else if (todaySteps > 0) {
  message = 'You\'re on the right track! Keep moving!';
  icon = String.fromCodePoint(0x1F6B6); // walker
- }
- 
- if (message) {
- badgeText.textContent = message;
- const badgeIcon = motivationBadge.querySelector('.badge-icon');
- if (badgeIcon) badgeIcon.textContent = icon;
- motivationBadge.style.display = 'flex';
- }
- }
+        }
+        
+        if (message) {
+            badgeText.textContent = message;
+            const badgeIcon = motivationBadge.querySelector('.badge-icon');
+            if (badgeIcon) badgeIcon.textContent = icon;
+            motivationBadge.style.display = 'flex';
+        }
+    }
 
- updateDailyMotivation() {
- const motivations = [
- "The only bad workout is the one that didn't happen!",
- "Your body can do it. It's your mind you need to convince!",
- "Don't stop when you're tired. Stop when you're done!",
- "Take care of your body. It's the only place you have to live!",
- "The pain you feel today will be the strength you feel tomorrow!",
- "Success is the sum of small efforts repeated day in and day out!",
- "You don't have to be great to start, but you have to start to be great!",
- "The only way to do great work is to love what you do!",
+    updateDailyMotivation() {
+        const motivations = [
+            "The only bad workout is the one that didn't happen!",
+            "Your body can do it. It's your mind you need to convince!",
+            "Don't stop when you're tired. Stop when you're done!",
+            "Take care of your body. It's the only place you have to live!",
+            "The pain you feel today will be the strength you feel tomorrow!",
+            "Success is the sum of small efforts repeated day in and day out!",
+            "You don't have to be great to start, but you have to start to be great!",
+            "The only way to do great work is to love what you do!",
  "Your limitation-it's only your imagination!",
- "Push yourself, because no one else is going to do it for you!",
- "Great things never come from comfort zones!",
- "Dream it. Wish it. Do it!",
- "Success doesn't just find you. You have to go out and get it!",
- "The harder you work for something, the greater you'll feel when you achieve it!",
- "Dream bigger. Do bigger!",
- "Don't wait for opportunity. Create it!",
- "Some people want it to happen, some wish it would happen, others make it happen!",
- "Great things never come from comfort zones!",
- "Do something today that your future self will thank you for!",
- "The only way to do great work is to love what you do!"
- ];
- 
- const motivationText = document.getElementById('dailyMotivation');
- if (motivationText) {
- // Get a random motivation or cycle through them
- const savedIndex = localStorage.getItem('motivationIndex') || '0';
- let index = parseInt(savedIndex);
- index = (index + 1) % motivations.length;
- localStorage.setItem('motivationIndex', index.toString());
- 
- motivationText.textContent = `"${motivations[index]}"`;
- }
- }
+            "Push yourself, because no one else is going to do it for you!",
+            "Great things never come from comfort zones!",
+            "Dream it. Wish it. Do it!",
+            "Success doesn't just find you. You have to go out and get it!",
+            "The harder you work for something, the greater you'll feel when you achieve it!",
+            "Dream bigger. Do bigger!",
+            "Don't wait for opportunity. Create it!",
+            "Some people want it to happen, some wish it would happen, others make it happen!",
+            "Great things never come from comfort zones!",
+            "Do something today that your future self will thank you for!",
+            "The only way to do great work is to love what you do!"
+        ];
+        
+        const motivationText = document.getElementById('dailyMotivation');
+        if (motivationText) {
+            // Get a random motivation or cycle through them
+            const savedIndex = localStorage.getItem('motivationIndex') || '0';
+            let index = parseInt(savedIndex);
+            index = (index + 1) % motivations.length;
+            localStorage.setItem('motivationIndex', index.toString());
+            
+            motivationText.textContent = `"${motivations[index]}"`;
+        }
+    }
 
- animateNumber(elementId, targetValue, suffix = '') {
- const element = document.getElementById(elementId);
- if (!element) return;
+    animateNumber(elementId, targetValue, suffix = '') {
+        const element = document.getElementById(elementId);
+        if (!element) return;
 
- const currentValue = parseInt(element.textContent.replace(/[^0-9]/g, '')) || 0;
- const duration = 1000; // 1 second
- const startTime = performance.now();
- const difference = targetValue - currentValue;
+        const currentValue = parseInt(element.textContent.replace(/[^0-9]/g, '')) || 0;
+        const duration = 1000; // 1 second
+        const startTime = performance.now();
+        const difference = targetValue - currentValue;
 
- const animate = (currentTime) => {
- const elapsed = currentTime - startTime;
- const progress = Math.min(elapsed / duration, 1);
- 
- // Easing function (ease-out)
- const easeOut = 1 - Math.pow(1 - progress, 3);
- const current = Math.round(currentValue + (difference * easeOut));
- 
- element.textContent = current.toLocaleString() + suffix;
- 
- if (progress < 1) {
- requestAnimationFrame(animate);
- } else {
- element.textContent = targetValue.toLocaleString() + suffix;
- }
- };
+        const animate = (currentTime) => {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            
+            // Easing function (ease-out)
+            const easeOut = 1 - Math.pow(1 - progress, 3);
+            const current = Math.round(currentValue + (difference * easeOut));
+            
+            element.textContent = current.toLocaleString() + suffix;
+            
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            } else {
+                element.textContent = targetValue.toLocaleString() + suffix;
+            }
+        };
 
- requestAnimationFrame(animate);
- }
+        requestAnimationFrame(animate);
+    }
 
- animateProgressBar(targetProgress) {
- const progressBar = document.getElementById('progressBar');
- const progressText = document.getElementById('progressText');
- const progressFill = document.getElementById('progressFill');
- 
- if (!progressBar) return;
+    animateProgressBar(targetProgress) {
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const progressFill = document.getElementById('progressFill');
+        
+        if (!progressBar) return;
 
- const currentProgress = parseFloat(progressBar.style.width) || 0;
- const duration = 800;
- const startTime = performance.now();
- const difference = targetProgress - currentProgress;
+        const currentProgress = parseFloat(progressBar.style.width) || 0;
+        const duration = 800;
+        const startTime = performance.now();
+        const difference = targetProgress - currentProgress;
 
- const animate = (currentTime) => {
- const elapsed = currentTime - startTime;
- const progress = Math.min(elapsed / duration, 1);
- 
- // Easing function (ease-out)
- const easeOut = 1 - Math.pow(1 - progress, 3);
- const current = currentProgress + (difference * easeOut);
- 
- progressBar.style.width = current + '%';
- if (progressText) {
- progressText.textContent = Math.round(current) + '%';
- }
- 
- if (progress < 1) {
- requestAnimationFrame(animate);
- } else {
- progressBar.style.width = targetProgress + '%';
- if (progressText) {
- progressText.textContent = Math.round(targetProgress) + '%';
- }
- }
- };
+        const animate = (currentTime) => {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            
+            // Easing function (ease-out)
+            const easeOut = 1 - Math.pow(1 - progress, 3);
+            const current = currentProgress + (difference * easeOut);
+            
+            progressBar.style.width = current + '%';
+            if (progressText) {
+                progressText.textContent = Math.round(current) + '%';
+            }
+            
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            } else {
+                progressBar.style.width = targetProgress + '%';
+                if (progressText) {
+                    progressText.textContent = Math.round(targetProgress) + '%';
+                }
+            }
+        };
 
- requestAnimationFrame(animate);
- }
+        requestAnimationFrame(animate);
+    }
 
- handleManualScreenshotUpload(file) {
- if (!file) return;
+    handleManualScreenshotUpload(file) {
+        if (!file) return;
 
- if (!file.type.startsWith('image/')) {
- alert('Please upload an image file!');
- return;
- }
+        if (!file.type.startsWith('image/')) {
+            alert('Please upload an image file!');
+            return;
+        }
 
- const reader = new FileReader();
- reader.onload = (e) => {
- const imagePreview = document.getElementById('manualImagePreview');
- const previewImage = document.getElementById('manualPreviewImage');
- const uploadArea = document.getElementById('manualUploadArea');
- 
- previewImage.src = e.target.result;
- imagePreview.style.display = 'block';
- uploadArea.style.display = 'none';
- };
- reader.readAsDataURL(file);
- }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const imagePreview = document.getElementById('manualImagePreview');
+            const previewImage = document.getElementById('manualPreviewImage');
+            const uploadArea = document.getElementById('manualUploadArea');
+            
+            previewImage.src = e.target.result;
+            imagePreview.style.display = 'block';
+            uploadArea.style.display = 'none';
+        };
+        reader.readAsDataURL(file);
+    }
 
- resetManualScreenshot() {
- document.getElementById('manualScreenshot').value = '';
- document.getElementById('manualImagePreview').style.display = 'none';
- document.getElementById('manualUploadArea').style.display = 'block';
- document.getElementById('manualPreviewImage').src = '';
- }
+    resetManualScreenshot() {
+        document.getElementById('manualScreenshot').value = '';
+        document.getElementById('manualImagePreview').style.display = 'none';
+        document.getElementById('manualUploadArea').style.display = 'block';
+        document.getElementById('manualPreviewImage').src = '';
+    }
 
- async addSteps() {
+    async addSteps() {
  alert('Manual entry is disabled. Please use the Live KM / Step Counter in the app.');
- return;
- }
+            return;
+    }
 
- convertFileToBase64(file) {
- return new Promise((resolve, reject) => {
- const reader = new FileReader();
- reader.onload = () => resolve(reader.result);
- reader.onerror = reject;
- reader.readAsDataURL(file);
- });
- }
+    convertFileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
 
- showAdminDashboard() {
- // Check if we're on admin page
- if (window.location.pathname.includes('admin.html')) {
- document.getElementById('adminLoginCard').style.display = 'none';
- document.getElementById('adminDashboard').style.display = 'block';
- } else {
- // On main page
- document.getElementById('loginCard').style.display = 'none';
- document.getElementById('dashboardCard').style.display = 'none';
- const adminDashboard = document.getElementById('adminDashboard');
- if (adminDashboard) {
- adminDashboard.style.display = 'block';
- }
- }
- // Show validations tab by default
- this.showValidationsTab();
- this.updateAdminDashboard();
- }
+    showAdminDashboard() {
+        // Check if we're on admin page
+        if (window.location.pathname.includes('admin.html')) {
+            document.getElementById('adminLoginCard').style.display = 'none';
+            document.getElementById('adminDashboard').style.display = 'block';
+        } else {
+            // On main page
+            document.getElementById('loginCard').style.display = 'none';
+            document.getElementById('dashboardCard').style.display = 'none';
+            const adminDashboard = document.getElementById('adminDashboard');
+            if (adminDashboard) {
+                adminDashboard.style.display = 'block';
+            }
+        }
+        // Show validations tab by default
+        this.showValidationsTab();
+        this.updateAdminDashboard();
+    }
 
- async updateAdminDashboard() {
- try {
+    async updateAdminDashboard() {
+        try {
  if (!this.requireAdmin()) {
  return;
  }
- if (this.firebaseEnabled) {
- await this.syncStepEntriesFromFirebase();
- }
- // Reload entries from localStorage to ensure we have the latest data
- this.stepEntries = this.loadStepEntries();
- 
- if (!Array.isArray(this.stepEntries)) {
- console.error('stepEntries is not an array!', typeof this.stepEntries, this.stepEntries);
- this.stepEntries = [];
- }
- 
- // Optimize: Single pass through entries to count all stats
- let pending = 0, approved = 0, rejected = 0;
- for (let i = 0; i < this.stepEntries.length; i++) {
- const e = this.stepEntries[i];
- if (!e) continue;
- const status = e.status || 'pending';
- if (status === 'pending') pending++;
- else if (status === 'approved') approved++;
- else if (status === 'rejected') rejected++;
- }
- 
- // Cache total steps calculation - only recalculate if participants changed
- if (!this._cachedTotalSteps || this._participantsVersion !== (this.participants?.length || 0)) {
- this._cachedTotalSteps = (this.participants || []).reduce((sum, participant) => {
- return sum + (participant.totalSteps || 0);
- }, 0);
- this._participantsVersion = this.participants?.length || 0;
- }
- const totalSteps = this._cachedTotalSteps;
+            if (this.firebaseEnabled) {
+                await this.syncStepEntriesFromFirebase();
+            }
+            // Reload entries from localStorage to ensure we have the latest data
+            this.stepEntries = this.loadStepEntries();
+            
+            if (!Array.isArray(this.stepEntries)) {
+                console.error('stepEntries is not an array!', typeof this.stepEntries, this.stepEntries);
+                this.stepEntries = [];
+            }
+            
+            // Optimize: Single pass through entries to count all stats
+            let pending = 0, approved = 0, rejected = 0;
+            for (let i = 0; i < this.stepEntries.length; i++) {
+                const e = this.stepEntries[i];
+                if (!e) continue;
+                const status = e.status || 'pending';
+                if (status === 'pending') pending++;
+                else if (status === 'approved') approved++;
+                else if (status === 'rejected') rejected++;
+            }
+            
+            // Cache total steps calculation - only recalculate if participants changed
+            if (!this._cachedTotalSteps || this._participantsVersion !== (this.participants?.length || 0)) {
+                this._cachedTotalSteps = (this.participants || []).reduce((sum, participant) => {
+                    return sum + (participant.totalSteps || 0);
+                }, 0);
+                this._participantsVersion = this.participants?.length || 0;
+            }
+            const totalSteps = this._cachedTotalSteps;
 
- // Update stats immediately
- const pendingCountEl = document.getElementById('pendingCount');
- const approvedCountEl = document.getElementById('approvedCount');
- const rejectedCountEl = document.getElementById('rejectedCount');
- const totalStepsCountEl = document.getElementById('totalStepsCount');
- 
- if (pendingCountEl) pendingCountEl.textContent = pending;
- if (approvedCountEl) approvedCountEl.textContent = approved;
- if (rejectedCountEl) rejectedCountEl.textContent = rejected;
- if (totalStepsCountEl) totalStepsCountEl.textContent = totalSteps.toLocaleString();
+            // Update stats immediately
+            const pendingCountEl = document.getElementById('pendingCount');
+            const approvedCountEl = document.getElementById('approvedCount');
+            const rejectedCountEl = document.getElementById('rejectedCount');
+            const totalStepsCountEl = document.getElementById('totalStepsCount');
+            
+            if (pendingCountEl) pendingCountEl.textContent = pending;
+            if (approvedCountEl) approvedCountEl.textContent = approved;
+            if (rejectedCountEl) rejectedCountEl.textContent = rejected;
+            if (totalStepsCountEl) totalStepsCountEl.textContent = totalSteps.toLocaleString();
 
- // Get current filter or default to 'pending'
- const activeFilter = document.querySelector('.admin-filters .filter-btn.active');
- const filter = activeFilter ? (activeFilter.dataset.filter || 'pending') : 'pending';
- 
- // Render validation list asynchronously to not block stats update
- setTimeout(() => this.renderValidationList(filter), 0);
- } catch (error) {
- console.error('Error in updateAdminDashboard:', error);
- alert('Error updating admin dashboard: ' + error.message);
- }
- }
+            // Get current filter or default to 'pending'
+            const activeFilter = document.querySelector('.admin-filters .filter-btn.active');
+            const filter = activeFilter ? (activeFilter.dataset.filter || 'pending') : 'pending';
+            
+            // Render validation list asynchronously to not block stats update
+            setTimeout(() => this.renderValidationList(filter), 0);
+        } catch (error) {
+            console.error('Error in updateAdminDashboard:', error);
+            alert('Error updating admin dashboard: ' + error.message);
+        }
+    }
 
- async filterAdminEntries(filter) {
- document.querySelectorAll('.admin-filters .filter-btn').forEach(btn => {
- btn.classList.remove('active');
- });
- document.querySelector(`[data-filter="${filter}"]`).classList.add('active');
- await this.renderValidationList(filter);
- }
+    async filterAdminEntries(filter) {
+        document.querySelectorAll('.admin-filters .filter-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.querySelector(`[data-filter="${filter}"]`).classList.add('active');
+        await this.renderValidationList(filter);
+    }
 
- // User Management Functions
- showUsersTab() {
- document.querySelectorAll('.admin-tab-content').forEach(tab => {
- tab.classList.remove('active');
- });
- document.querySelectorAll('.admin-tab-btn').forEach(btn => {
- btn.classList.remove('active');
- });
- document.getElementById('usersTab').classList.add('active');
- document.querySelector('[data-tab="users"]').classList.add('active');
- this.loadUsersList();
- }
+    // User Management Functions
+    showUsersTab() {
+        document.querySelectorAll('.admin-tab-content').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        document.querySelectorAll('.admin-tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.getElementById('usersTab').classList.add('active');
+        document.querySelector('[data-tab="users"]').classList.add('active');
+        this.loadUsersList();
+    }
 
- showValidationsTab() {
- document.querySelectorAll('.admin-tab-content').forEach(tab => {
- tab.classList.remove('active');
- });
- document.querySelectorAll('.admin-tab-btn').forEach(btn => {
- btn.classList.remove('active');
- });
- document.getElementById('validationsTab').classList.add('active');
- document.querySelector('[data-tab="validations"]').classList.add('active');
- }
+    showValidationsTab() {
+        document.querySelectorAll('.admin-tab-content').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        document.querySelectorAll('.admin-tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.getElementById('validationsTab').classList.add('active');
+        document.querySelector('[data-tab="validations"]').classList.add('active');
+    }
 
- loadUsersList() {
+    loadUsersList() {
  if (!this.requireAdmin()) {
  return;
  }
- const usersList = document.getElementById('usersList');
- if (!usersList) {
- console.error('usersList element not found!');
- return;
- }
+        const usersList = document.getElementById('usersList');
+        if (!usersList) {
+            console.error('usersList element not found!');
+            return;
+        }
 
- try {
- this.participants = this.loadParticipants();
- console.log('Loaded participants:', this.participants);
- console.log('Participants count:', this.participants ? this.participants.length : 0);
- 
- if (!this.participants || this.participants.length === 0) {
- usersList.innerHTML = '<p class="no-entries">No users registered yet.</p>';
- return;
- }
+        try {
+            this.participants = this.loadParticipants();
+            console.log('Loaded participants:', this.participants);
+            console.log('Participants count:', this.participants ? this.participants.length : 0);
+            
+            if (!this.participants || this.participants.length === 0) {
+                usersList.innerHTML = '<p class="no-entries">No users registered yet.</p>';
+                return;
+            }
 
- let html = '<div class="users-grid">';
- this.participants.forEach((user, index) => {
- try {
- const totalSteps = user.totalSteps || 0;
- const dailyStepsCount = user.dailySteps ? Object.keys(user.dailySteps).length : 0;
- const lastActivity = user.lastActivity ? new Date(user.lastActivity).toLocaleDateString() : 'Never';
- 
- // Use a safe identifier for the user
- const userId = user.id || user.employeeId || `user_${index}`;
- // Escape any special characters in the onclick handler
- const safeUserId = String(userId).replace(/'/g, "\\'");
- 
- html += `
- <div class="user-card">
- <div class="user-card-header">
- <h4>${(user.name || 'Unknown User').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</h4>
- <button class="btn btn-small btn-primary" onclick="app.viewUserDetails('${safeUserId}')">View Details</button>
- </div>
- <div class="user-card-info">
- <div class="user-info-item">
- <strong>Username:</strong> ${(user.username || 'N/A').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
- </div>
- <div class="user-info-item">
- <strong>Email:</strong> ${(user.email || user.emailId || 'N/A').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
- </div>
- <div class="user-info-item">
- <strong>Employee ID:</strong> ${(user.id || user.employeeId || 'N/A').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
- </div>
- <div class="user-info-item">
- <strong>Total Steps:</strong> ${totalSteps.toLocaleString()}
- </div>
- <div class="user-info-item">
- <strong>Active Days:</strong> ${dailyStepsCount}
- </div>
- <div class="user-info-item">
- <strong>Last Activity:</strong> ${lastActivity}
- </div>
- </div>
- </div>
- `;
- } catch (error) {
- console.error('Error rendering user card:', error, user);
- }
- });
- html += '</div>';
- usersList.innerHTML = html;
- console.log('Users list rendered successfully');
- } catch (error) {
- console.error('Error in loadUsersList:', error);
- usersList.innerHTML = `<p class="no-entries" style="color: red;">Error loading users: ${error.message}. Check console for details.</p>`;
- }
- }
+            let html = '<div class="users-grid">';
+            this.participants.forEach((user, index) => {
+                try {
+                    const totalSteps = user.totalSteps || 0;
+                    const dailyStepsCount = user.dailySteps ? Object.keys(user.dailySteps).length : 0;
+                    const lastActivity = user.lastActivity ? new Date(user.lastActivity).toLocaleDateString() : 'Never';
+                    
+                    // Use a safe identifier for the user
+                    const userId = user.id || user.employeeId || `user_${index}`;
+                    // Escape any special characters in the onclick handler
+                    const safeUserId = String(userId).replace(/'/g, "\\'");
+                    
+                    html += `
+                        <div class="user-card">
+                            <div class="user-card-header">
+                                <h4>${(user.name || 'Unknown User').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</h4>
+                                <button class="btn btn-small btn-primary" onclick="app.viewUserDetails('${safeUserId}')">View Details</button>
+                            </div>
+                            <div class="user-card-info">
+                                <div class="user-info-item">
+                                    <strong>Username:</strong> ${(user.username || 'N/A').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+                                </div>
+                                <div class="user-info-item">
+                                    <strong>Email:</strong> ${(user.email || user.emailId || 'N/A').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+                                </div>
+                                <div class="user-info-item">
+                                    <strong>Employee ID:</strong> ${(user.id || user.employeeId || 'N/A').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+                                </div>
+                                <div class="user-info-item">
+                                    <strong>Total Steps:</strong> ${totalSteps.toLocaleString()}
+                                </div>
+                                <div class="user-info-item">
+                                    <strong>Active Days:</strong> ${dailyStepsCount}
+                                </div>
+                                <div class="user-info-item">
+                                    <strong>Last Activity:</strong> ${lastActivity}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } catch (error) {
+                    console.error('Error rendering user card:', error, user);
+                }
+            });
+            html += '</div>';
+            usersList.innerHTML = html;
+            console.log('Users list rendered successfully');
+        } catch (error) {
+            console.error('Error in loadUsersList:', error);
+            usersList.innerHTML = `<p class="no-entries" style="color: red;">Error loading users: ${error.message}. Check console for details.</p>`;
+        }
+    }
 
- viewUserDetails(userId) {
- // Reload participants to ensure we have the latest data
- this.participants = this.loadParticipants();
- 
- // Handle user_ prefix from index-based IDs
- let searchId = userId;
- if (userId.startsWith('user_')) {
- const index = parseInt(userId.replace('user_', ''));
- const user = this.participants[index];
- if (user) {
- searchId = user.id || user.employeeId || userId;
- }
- }
- 
- const user = this.participants.find(p => 
- (p.id && p.id === searchId) || 
- (p.employeeId && p.employeeId === searchId) ||
- (p.id && String(p.id) === String(searchId)) ||
- (p.employeeId && String(p.employeeId) === String(searchId))
- );
- 
- if (!user) {
- console.error('User not found. Search ID:', searchId, 'All participants:', this.participants);
- alert('User not found! Please try refreshing the users list.');
- return;
- }
+    viewUserDetails(userId) {
+        // Reload participants to ensure we have the latest data
+        this.participants = this.loadParticipants();
+        
+        // Handle user_ prefix from index-based IDs
+        let searchId = userId;
+        if (userId.startsWith('user_')) {
+            const index = parseInt(userId.replace('user_', ''));
+            const user = this.participants[index];
+            if (user) {
+                searchId = user.id || user.employeeId || userId;
+            }
+        }
+        
+        const user = this.participants.find(p => 
+            (p.id && p.id === searchId) || 
+            (p.employeeId && p.employeeId === searchId) ||
+            (p.id && String(p.id) === String(searchId)) ||
+            (p.employeeId && String(p.employeeId) === String(searchId))
+        );
+        
+        if (!user) {
+            console.error('User not found. Search ID:', searchId, 'All participants:', this.participants);
+            alert('User not found! Please try refreshing the users list.');
+            return;
+        }
 
- // Get all activities for this user
- this.stepEntries = this.loadStepEntries();
- const actualUserId = user.id || user.employeeId || searchId;
- const userActivities = this.stepEntries.filter(entry => {
- const entryUserId = entry.userId || entry.userId;
- return entryUserId === actualUserId || 
- entryUserId === user.id || 
- entryUserId === user.employeeId ||
- String(entryUserId) === String(actualUserId) ||
- String(entryUserId) === String(user.id) ||
- String(entryUserId) === String(user.employeeId);
- }).sort((a, b) => new Date(b.date) - new Date(a.date));
- 
- console.log('User activities found:', userActivities.length, 'for user:', actualUserId);
+        // Get all activities for this user
+        this.stepEntries = this.loadStepEntries();
+        const actualUserId = user.id || user.employeeId || searchId;
+        const userActivities = this.stepEntries.filter(entry => {
+            const entryUserId = entry.userId || entry.userId;
+            return entryUserId === actualUserId || 
+                   entryUserId === user.id || 
+                   entryUserId === user.employeeId ||
+                   String(entryUserId) === String(actualUserId) ||
+                   String(entryUserId) === String(user.id) ||
+                   String(entryUserId) === String(user.employeeId);
+        }).sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        console.log('User activities found:', userActivities.length, 'for user:', actualUserId);
 
- const modal = document.getElementById('userDetailsModal');
- const content = document.getElementById('userDetailsContent');
- 
- if (!modal || !content) return;
+        const modal = document.getElementById('userDetailsModal');
+        const content = document.getElementById('userDetailsContent');
+        
+        if (!modal || !content) return;
 
- const totalSteps = user.totalSteps || 0;
- const dailySteps = user.dailySteps || {};
- const dailyStepsCount = Object.keys(dailySteps).length;
- const streak = this.calculateStreak(user);
- 
- // Calculate activity statistics
- const totalActivitySteps = userActivities.reduce((sum, a) => sum + (a.steps || 0), 0);
- const approvedActivities = userActivities.filter(a => a.status === 'approved').length;
- const pendingActivities = userActivities.filter(a => !a.status || a.status === 'pending').length;
- const rejectedActivities = userActivities.filter(a => a.status === 'rejected').length;
- const activitiesWithScreenshots = userActivities.filter(a => a.screenshot).length;
- 
- let activitiesHtml = '';
- if (userActivities.length > 0) {
- activitiesHtml = `
- <div class="user-activities-section">
+        const totalSteps = user.totalSteps || 0;
+        const dailySteps = user.dailySteps || {};
+        const dailyStepsCount = Object.keys(dailySteps).length;
+        const streak = this.calculateStreak(user);
+        
+        // Calculate activity statistics
+        const totalActivitySteps = userActivities.reduce((sum, a) => sum + (a.steps || 0), 0);
+        const approvedActivities = userActivities.filter(a => a.status === 'approved').length;
+        const pendingActivities = userActivities.filter(a => !a.status || a.status === 'pending').length;
+        const rejectedActivities = userActivities.filter(a => a.status === 'rejected').length;
+        const activitiesWithScreenshots = userActivities.filter(a => a.screenshot).length;
+        
+        let activitiesHtml = '';
+        if (userActivities.length > 0) {
+            activitiesHtml = `
+                <div class="user-activities-section">
  <h3> Activity Details</h3>
- 
- <!-- Activity Statistics Summary -->
- <div class="activity-stats-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
- <div class="stat-box">
- <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #003366;">${userActivities.length}</div>
- <div class="stat-label" style="font-size: 0.85rem; color: #666;">Total Entries</div>
- </div>
- <div class="stat-box">
- <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #4caf50;">${approvedActivities}</div>
+                    
+                    <!-- Activity Statistics Summary -->
+                    <div class="activity-stats-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                        <div class="stat-box">
+                            <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #003366;">${userActivities.length}</div>
+                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">Total Entries</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #4caf50;">${approvedActivities}</div>
  <div class="stat-label" style="font-size: 0.85rem; color: #666;"> Approved</div>
- </div>
- <div class="stat-box">
- <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #ff9800;">${pendingActivities}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #ff9800;">${pendingActivities}</div>
  <div class="stat-label" style="font-size: 0.85rem; color: #666;"> Pending</div>
- </div>
- <div class="stat-box">
- <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #f44336;">${rejectedActivities}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #f44336;">${rejectedActivities}</div>
  <div class="stat-label" style="font-size: 0.85rem; color: #666;"> Rejected</div>
- </div>
- <div class="stat-box">
- <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #2196f3;">${totalActivitySteps.toLocaleString()}</div>
- <div class="stat-label" style="font-size: 0.85rem; color: #666;">Total Steps</div>
- </div>
- <div class="stat-box">
- <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #9c27b0;">${activitiesWithScreenshots}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #2196f3;">${totalActivitySteps.toLocaleString()}</div>
+                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">Total Steps</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #9c27b0;">${activitiesWithScreenshots}</div>
  <div class="stat-label" style="font-size: 0.85rem; color: #666;">| With Screenshots</div>
- </div>
- </div>
- 
- <div class="activities-list" style="max-height: 500px; overflow-y: auto;">
- `;
- 
- userActivities.forEach((activity, index) => {
- const date = new Date(activity.date);
- const dateStr = date.toLocaleDateString();
- const timeStr = date.toLocaleTimeString();
- const status = activity.status || 'pending';
- const statusClass = status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : 'pending';
+                        </div>
+                    </div>
+                    
+                    <div class="activities-list" style="max-height: 500px; overflow-y: auto;">
+            `;
+            
+            userActivities.forEach((activity, index) => {
+                const date = new Date(activity.date);
+                const dateStr = date.toLocaleDateString();
+                const timeStr = date.toLocaleTimeString();
+                const status = activity.status || 'pending';
+                const statusClass = status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : 'pending';
  const statusIcon = status === 'approved' ? '' : status === 'rejected' ? '' : '';
- 
- // Format validation date if available
- let validatedDateStr = '';
- if (activity.validatedAt) {
- try {
- validatedDateStr = new Date(activity.validatedAt).toLocaleString();
- } catch (e) {
- validatedDateStr = activity.validatedAt;
- }
- }
- 
- // Format last modified date if available
- let modifiedDateStr = '';
- if (activity.lastModifiedAt) {
- try {
- modifiedDateStr = new Date(activity.lastModifiedAt).toLocaleString();
- } catch (e) {
- modifiedDateStr = activity.lastModifiedAt;
- }
- }
- 
- const sourceDisplay = activity.source === 'step-counter' ? 'Step Counter' : 
- activity.source === 'manual' ? 'Manual Entry' : 
- activity.source === 'screenshot' ? 'Screenshot Upload' : 
- activity.source || 'Unknown';
- 
- activitiesHtml += `
- <div class="activity-entry ${statusClass}" style="border: 2px solid ${status === 'approved' ? '#4caf50' : status === 'rejected' ? '#f44336' : '#ff9800'}; border-radius: 8px; padding: 15px; margin-bottom: 15px; background: white;">
- <div class="activity-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #eee;">
- <div>
+                
+                // Format validation date if available
+                let validatedDateStr = '';
+                if (activity.validatedAt) {
+                    try {
+                        validatedDateStr = new Date(activity.validatedAt).toLocaleString();
+                    } catch (e) {
+                        validatedDateStr = activity.validatedAt;
+                    }
+                }
+                
+                // Format last modified date if available
+                let modifiedDateStr = '';
+                if (activity.lastModifiedAt) {
+                    try {
+                        modifiedDateStr = new Date(activity.lastModifiedAt).toLocaleString();
+                    } catch (e) {
+                        modifiedDateStr = activity.lastModifiedAt;
+                    }
+                }
+                
+                const sourceDisplay = activity.source === 'step-counter' ? 'Step Counter' : 
+                                     activity.source === 'manual' ? 'Manual Entry' : 
+                                     activity.source === 'screenshot' ? 'Screenshot Upload' : 
+                                     activity.source || 'Unknown';
+                
+                activitiesHtml += `
+                    <div class="activity-entry ${statusClass}" style="border: 2px solid ${status === 'approved' ? '#4caf50' : status === 'rejected' ? '#f44336' : '#ff9800'}; border-radius: 8px; padding: 15px; margin-bottom: 15px; background: white;">
+                        <div class="activity-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #eee;">
+                            <div>
  <span class="activity-date" style="font-weight: bold; color: #003366; font-size: 1rem;"> ${dateStr} ${timeStr}</span>
- <div style="font-size: 0.85rem; color: #666; margin-top: 4px;">
- Entry ID: <code style="background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 0.8rem;">${activity.id || 'N/A'}</code>
- </div>
- </div>
- <span class="activity-status ${statusClass}" style="padding: 6px 12px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; background: ${status === 'approved' ? '#e8f5e9' : status === 'rejected' ? '#ffebee' : '#fff3e0'}; color: ${status === 'approved' ? '#2e7d32' : status === 'rejected' ? '#c62828' : '#e65100'};">
- ${statusIcon} ${status.toUpperCase()}
- </span>
- </div>
- <div class="activity-details" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px;">
- <div class="detail-item">
+                                <div style="font-size: 0.85rem; color: #666; margin-top: 4px;">
+                                    Entry ID: <code style="background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 0.8rem;">${activity.id || 'N/A'}</code>
+                                </div>
+                            </div>
+                            <span class="activity-status ${statusClass}" style="padding: 6px 12px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; background: ${status === 'approved' ? '#e8f5e9' : status === 'rejected' ? '#ffebee' : '#fff3e0'}; color: ${status === 'approved' ? '#2e7d32' : status === 'rejected' ? '#c62828' : '#e65100'};">
+                                ${statusIcon} ${status.toUpperCase()}
+                            </span>
+                        </div>
+                        <div class="activity-details" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px;">
+                            <div class="detail-item">
  <strong style="color: #003366;"> Steps:</strong> 
- <span style="font-size: 1.1rem; font-weight: bold; color: #2196f3;">${(activity.steps || 0).toLocaleString()}</span>
- </div>
- <div class="detail-item">
+                                <span style="font-size: 1.1rem; font-weight: bold; color: #2196f3;">${(activity.steps || 0).toLocaleString()}</span>
+                            </div>
+                            <div class="detail-item">
  <strong style="color: #003366;"> Source:</strong> 
- <span>${sourceDisplay}</span>
- </div>
- ${activity.userName || activity.name ? `
- <div class="detail-item">
+                                <span>${sourceDisplay}</span>
+                            </div>
+                            ${activity.userName || activity.name ? `
+                                <div class="detail-item">
  <strong style="color: #003366;"> User:</strong> 
- <span>${this.escapeHtml(activity.userName || activity.name)}</span>
- </div>
- ` : ''}
- ${activity.userEmail || activity.email ? `
- <div class="detail-item">
+                                    <span>${this.escapeHtml(activity.userName || activity.name)}</span>
+                                </div>
+                            ` : ''}
+                            ${activity.userEmail || activity.email ? `
+                                <div class="detail-item">
  <strong style="color: #003366;"> Email:</strong> 
- <span>${this.escapeHtml(activity.userEmail || activity.email)}</span>
- </div>
- ` : ''}
- </div>
- 
- ${activity.screenshot ? `
- <div class="screenshot-section" style="margin: 12px 0; padding: 12px; background: #f8f9fa; border-radius: 6px;">
+                                    <span>${this.escapeHtml(activity.userEmail || activity.email)}</span>
+                                </div>
+                            ` : ''}
+                        </div>
+                        
+                        ${activity.screenshot ? `
+                            <div class="screenshot-section" style="margin: 12px 0; padding: 12px; background: #f8f9fa; border-radius: 6px;">
  <strong style="color: #003366; display: block; margin-bottom: 8px;">| Screenshot:</strong>
- <img src="${activity.screenshot}" 
- alt="Activity screenshot" 
- class="activity-screenshot" 
- onclick="this.style.maxWidth = this.style.maxWidth === '100%' ? '200px' : '100%'; this.style.cursor = 'pointer';"
- style="max-width: 200px; border-radius: 6px; cursor: pointer; border: 2px solid #ddd; transition: all 0.3s ease;"
- title="Click to enlarge">
- <div style="margin-top: 8px; font-size: 0.85rem; color: #666;">Click image to enlarge</div>
- </div>
- ` : `
- <div style="padding: 8px; background: #fff3cd; border-radius: 4px; font-size: 0.9rem; color: #856404;">
+                                <img src="${activity.screenshot}" 
+                                     alt="Activity screenshot" 
+                                     class="activity-screenshot" 
+                                     onclick="this.style.maxWidth = this.style.maxWidth === '100%' ? '200px' : '100%'; this.style.cursor = 'pointer';"
+                                     style="max-width: 200px; border-radius: 6px; cursor: pointer; border: 2px solid #ddd; transition: all 0.3s ease;"
+                                     title="Click to enlarge">
+                                <div style="margin-top: 8px; font-size: 0.85rem; color: #666;">Click image to enlarge</div>
+                            </div>
+                        ` : `
+                            <div style="padding: 8px; background: #fff3cd; border-radius: 4px; font-size: 0.9rem; color: #856404;">
  No screenshot provided
- </div>
- `}
- 
- ${activity.notes ? `
- <div class="notes-section" style="margin: 12px 0; padding: 12px; background: #e3f2fd; border-radius: 6px; border-left: 4px solid #2196f3;">
+                            </div>
+                        `}
+                        
+                        ${activity.notes ? `
+                            <div class="notes-section" style="margin: 12px 0; padding: 12px; background: #e3f2fd; border-radius: 6px; border-left: 4px solid #2196f3;">
  <strong style="color: #003366; display: block; margin-bottom: 6px;"> Notes:</strong>
- <div style="color: #555; white-space: pre-wrap;">${this.escapeHtml(activity.notes)}</div>
- </div>
- ` : ''}
- 
- ${activity.validatedBy ? `
- <div class="validation-info" style="margin: 12px 0; padding: 10px; background: #f5f5f5; border-radius: 6px; font-size: 0.9rem;">
+                                <div style="color: #555; white-space: pre-wrap;">${this.escapeHtml(activity.notes)}</div>
+                            </div>
+                        ` : ''}
+                        
+                        ${activity.validatedBy ? `
+                            <div class="validation-info" style="margin: 12px 0; padding: 10px; background: #f5f5f5; border-radius: 6px; font-size: 0.9rem;">
  <strong style="color: #003366;"> Validated by:</strong> ${this.escapeHtml(activity.validatedBy)}
- ${validatedDateStr ? ` on ${validatedDateStr}` : ''}
- </div>
- ` : ''}
- 
- ${activity.lastModifiedBy ? `
- <div class="modification-info" style="margin: 12px 0; padding: 10px; background: #f5f5f5; border-radius: 6px; font-size: 0.9rem;">
+                                ${validatedDateStr ? ` on ${validatedDateStr}` : ''}
+                            </div>
+                        ` : ''}
+                        
+                        ${activity.lastModifiedBy ? `
+                            <div class="modification-info" style="margin: 12px 0; padding: 10px; background: #f5f5f5; border-radius: 6px; font-size: 0.9rem;">
  <strong style="color: #003366;"> Last modified by:</strong> ${this.escapeHtml(activity.lastModifiedBy)}
- ${modifiedDateStr ? ` on ${modifiedDateStr}` : ''}
- </div>
- ` : ''}
- 
- <div class="activity-actions" style="display: flex; gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
- ${status === 'pending' ? `
+                                ${modifiedDateStr ? ` on ${modifiedDateStr}` : ''}
+                            </div>
+                        ` : ''}
+                        
+                        <div class="activity-actions" style="display: flex; gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
+                            ${status === 'pending' ? `
  <button class="btn btn-small btn-success" onclick="app.validateEntry('${activity.id}', 'approved'); app.viewUserDetails('${actualUserId}');" title="Approve this entry"> Approve</button>
  <button class="btn btn-small btn-danger" onclick="app.validateEntry('${activity.id}', 'rejected'); app.viewUserDetails('${actualUserId}');" title="Reject this entry"> Reject</button>
- ` : status === 'approved' ? `
+                            ` : status === 'approved' ? `
  <button class="btn btn-small btn-danger" onclick="app.validateEntry('${activity.id}', 'rejected'); app.viewUserDetails('${actualUserId}');" title="Reject this entry"> Reject</button>
- ` : status === 'rejected' ? `
+                            ` : status === 'rejected' ? `
  <button class="btn btn-small btn-success" onclick="app.validateEntry('${activity.id}', 'approved'); app.viewUserDetails('${actualUserId}');" title="Approve this entry"> Approve</button>
- ` : ''}
+                            ` : ''}
  <button class="btn btn-small btn-secondary" onclick="app.editEntrySteps('${activity.id}'); app.viewUserDetails('${actualUserId}');" title="Edit steps for this entry"> Edit Steps</button>
  <button class="btn btn-small btn-danger" onclick="if(confirm('Are you sure you want to delete this activity?')) { app.deleteUserActivity('${activity.id}', '${actualUserId}'); }" title="Delete this activity"> Delete</button>
- </div>
- </div>
- `;
- });
- 
- activitiesHtml += `
- </div>
- </div>
- `;
- } else {
- activitiesHtml = `
- <div class="user-activities-section">
+                        </div>
+                    </div>
+                `;
+            });
+            
+            activitiesHtml += `
+                    </div>
+                </div>
+            `;
+        } else {
+            activitiesHtml = `
+                <div class="user-activities-section">
  <h3> Activity Details</h3>
- <div style="padding: 30px; text-align: center; background: #f8f9fa; border-radius: 8px; margin-top: 15px;">
- <p style="font-size: 1.1rem; color: #666; margin: 0;">No activities recorded yet.</p>
- <p style="font-size: 0.9rem; color: #999; margin-top: 8px;">This user hasn't submitted any step entries.</p>
- </div>
- </div>
- `;
- }
+                    <div style="padding: 30px; text-align: center; background: #f8f9fa; border-radius: 8px; margin-top: 15px;">
+                        <p style="font-size: 1.1rem; color: #666; margin: 0;">No activities recorded yet.</p>
+                        <p style="font-size: 0.9rem; color: #999; margin-top: 8px;">This user hasn't submitted any step entries.</p>
+                    </div>
+                </div>
+            `;
+        }
 
- content.innerHTML = `
- <form id="editUserForm" onsubmit="event.preventDefault(); app.saveUserDetails('${actualUserId}');">
- <div class="form-section">
+        content.innerHTML = `
+            <form id="editUserForm" onsubmit="event.preventDefault(); app.saveUserDetails('${actualUserId}');">
+                <div class="form-section">
  <h3> Personal Information</h3>
- <div class="form-group">
- <label>Full Name <span class="required">*</span></label>
- <input type="text" id="editUserName" value="${user.name || ''}" required>
- </div>
- <div class="form-group">
- <label>Email <span class="required">*</span></label>
- <input type="email" id="editUserEmail" value="${user.email || user.emailId || ''}" required>
- </div>
- <div class="form-group">
- <label>Employee ID <span class="required">*</span></label>
- <input type="text" id="editUserEmployeeId" value="${user.id || user.employeeId || ''}" required>
- </div>
- </div>
+                    <div class="form-group">
+                        <label>Full Name <span class="required">*</span></label>
+                        <input type="text" id="editUserName" value="${user.name || ''}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email <span class="required">*</span></label>
+                        <input type="email" id="editUserEmail" value="${user.email || user.emailId || ''}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Employee ID <span class="required">*</span></label>
+                        <input type="text" id="editUserEmployeeId" value="${user.id || user.employeeId || ''}" required>
+                    </div>
+                </div>
 
- <div class="form-section">
+                <div class="form-section">
  <h3> Account Credentials</h3>
- <div class="form-group">
- <label>Username <span class="required">*</span></label>
- <input type="text" id="editUserUsername" value="${user.username || ''}" required>
- </div>
- <div class="form-group">
+                    <div class="form-group">
+                        <label>Username <span class="required">*</span></label>
+                        <input type="text" id="editUserUsername" value="${user.username || ''}" required>
+                    </div>
+                    <div class="form-group">
  <label>Password</label>
  <p class="form-hint" style="margin-bottom: 8px;">Passwords are managed by Firebase Auth only. They are never stored in this app.</p>
  <button type="button" class="btn btn-secondary" onclick="app.sendUserPasswordResetEmail(decodeURIComponent('${encodeURIComponent(user.email || user.emailId || '')}'))">Send password reset email</button>
- </div>
- </div>
+                    </div>
+                </div>
 
- <div class="form-section">
+                <div class="form-section">
  <h3> Statistics</h3>
- <div class="user-stats-grid">
- <div class="stat-item">
- <strong>Total Steps:</strong> ${totalSteps.toLocaleString()}
- </div>
- <div class="stat-item">
- <strong>Active Days:</strong> ${dailyStepsCount}
- </div>
- <div class="stat-item">
- <strong>Current Streak:</strong> ${streak} days
- </div>
- <div class="stat-item">
- <strong>Last Activity:</strong> ${user.lastActivity ? new Date(user.lastActivity).toLocaleString() : 'Never'}
- </div>
- </div>
- </div>
+                    <div class="user-stats-grid">
+                        <div class="stat-item">
+                            <strong>Total Steps:</strong> ${totalSteps.toLocaleString()}
+                        </div>
+                        <div class="stat-item">
+                            <strong>Active Days:</strong> ${dailyStepsCount}
+                        </div>
+                        <div class="stat-item">
+                            <strong>Current Streak:</strong> ${streak} days
+                        </div>
+                        <div class="stat-item">
+                            <strong>Last Activity:</strong> ${user.lastActivity ? new Date(user.lastActivity).toLocaleString() : 'Never'}
+                        </div>
+                    </div>
+                </div>
 
- ${activitiesHtml}
+                ${activitiesHtml}
 
- <div class="form-actions">
+                <div class="form-actions">
  <button type="submit" class="btn btn-primary"> Save Changes</button>
- <button type="button" class="btn btn-secondary" onclick="app.closeUserDetailsModal()">Cancel</button>
+                    <button type="button" class="btn btn-secondary" onclick="app.closeUserDetailsModal()">Cancel</button>
  <button type="button" class="btn btn-danger" onclick="app.deleteUser('${actualUserId}')"> Delete User</button>
- </div>
- </form>
- `;
+                </div>
+            </form>
+        `;
 
- modal.style.display = 'flex';
- }
+        modal.style.display = 'flex';
+    }
 
- saveUserDetails(userId) {
- // Reload participants to ensure we have the latest data
- this.participants = this.loadParticipants();
- 
- // Handle user_ prefix from index-based IDs
- let searchId = userId;
- if (userId.startsWith('user_')) {
- const index = parseInt(userId.replace('user_', ''));
- const userByIndex = this.participants[index];
- if (userByIndex) {
- searchId = userByIndex.id || userByIndex.employeeId || userId;
- }
- }
- 
- const user = this.participants.find(p => 
- (p.id && p.id === searchId) || 
- (p.employeeId && p.employeeId === searchId) ||
- (p.id && String(p.id) === String(searchId)) ||
- (p.employeeId && String(p.employeeId) === String(searchId))
- );
- 
- if (!user) {
- console.error('User not found for save. Search ID:', searchId);
- alert('User not found!');
- return;
- }
+    saveUserDetails(userId) {
+        // Reload participants to ensure we have the latest data
+        this.participants = this.loadParticipants();
+        
+        // Handle user_ prefix from index-based IDs
+        let searchId = userId;
+        if (userId.startsWith('user_')) {
+            const index = parseInt(userId.replace('user_', ''));
+            const userByIndex = this.participants[index];
+            if (userByIndex) {
+                searchId = userByIndex.id || userByIndex.employeeId || userId;
+            }
+        }
+        
+        const user = this.participants.find(p => 
+            (p.id && p.id === searchId) || 
+            (p.employeeId && p.employeeId === searchId) ||
+            (p.id && String(p.id) === String(searchId)) ||
+            (p.employeeId && String(p.employeeId) === String(searchId))
+        );
+        
+        if (!user) {
+            console.error('User not found for save. Search ID:', searchId);
+            alert('User not found!');
+            return;
+        }
 
- const name = document.getElementById('editUserName').value.trim();
- const email = document.getElementById('editUserEmail').value.trim();
- const employeeId = document.getElementById('editUserEmployeeId').value.trim();
- const username = document.getElementById('editUserUsername').value.trim();
+        const name = document.getElementById('editUserName').value.trim();
+        const email = document.getElementById('editUserEmail').value.trim();
+        const employeeId = document.getElementById('editUserEmployeeId').value.trim();
+        const username = document.getElementById('editUserUsername').value.trim();
 
- if (!name || !email || !employeeId || !username) {
- alert('Name, Email, Employee ID, and Username are required!');
- return;
- }
+        if (!name || !email || !employeeId || !username) {
+            alert('Name, Email, Employee ID, and Username are required!');
+            return;
+        }
 
- // Check for duplicate username (excluding current user)
- const duplicateUsername = this.participants.find(p => 
- p.username && p.username.toLowerCase() === username.toLowerCase() && 
- (p.id !== userId && p.employeeId !== userId)
- );
- if (duplicateUsername) {
- alert('Username already exists! Please choose a different username.');
- return;
- }
+        // Check for duplicate username (excluding current user)
+        const duplicateUsername = this.participants.find(p => 
+            p.username && p.username.toLowerCase() === username.toLowerCase() && 
+            (p.id !== userId && p.employeeId !== userId)
+        );
+        if (duplicateUsername) {
+            alert('Username already exists! Please choose a different username.');
+            return;
+        }
 
- // Check for duplicate email (excluding current user)
- const duplicateEmail = this.participants.find(p => 
- (p.email || p.emailId) && (p.email || p.emailId).toLowerCase() === email.toLowerCase() && 
- (p.id !== userId && p.employeeId !== userId)
- );
- if (duplicateEmail) {
- alert('Email already exists! Please use a different email.');
- return;
- }
+        // Check for duplicate email (excluding current user)
+        const duplicateEmail = this.participants.find(p => 
+            (p.email || p.emailId) && (p.email || p.emailId).toLowerCase() === email.toLowerCase() && 
+            (p.id !== userId && p.employeeId !== userId)
+        );
+        if (duplicateEmail) {
+            alert('Email already exists! Please use a different email.');
+            return;
+        }
 
  // Update user profile fields only (never store passwords locally)
- user.name = name;
- user.email = email;
- user.emailId = email;
- user.id = employeeId;
- user.employeeId = employeeId;
- user.username = username;
+        user.name = name;
+        user.email = email;
+        user.emailId = email;
+        user.id = employeeId;
+        user.employeeId = employeeId;
+        user.username = username;
  delete user.password;
  delete user.passwordHash;
 
- // Save to localStorage
- const index = this.participants.findIndex(p => 
- (p.id && p.id === searchId) || 
- (p.employeeId && p.employeeId === searchId) ||
- (p.id && String(p.id) === String(searchId)) ||
- (p.employeeId && String(p.employeeId) === String(searchId))
- );
- if (index !== -1) {
+        // Save to localStorage
+        const index = this.participants.findIndex(p => 
+            (p.id && p.id === searchId) || 
+            (p.employeeId && p.employeeId === searchId) ||
+            (p.id && String(p.id) === String(searchId)) ||
+            (p.employeeId && String(p.employeeId) === String(searchId))
+        );
+        if (index !== -1) {
  this.participants[index] = this.stripSecretsFromParticipant(user);
- this.saveParticipantsCache();
- 
- // If this is the current user, update currentUser
- if (this.currentUser && (this.currentUser.id === searchId || this.currentUser.employeeId === searchId)) {
+            this.saveParticipantsCache();
+            
+            // If this is the current user, update currentUser
+            if (this.currentUser && (this.currentUser.id === searchId || this.currentUser.employeeId === searchId)) {
  this.currentUser = this.stripSecretsFromParticipant(user);
  localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
  }
@@ -3476,15 +3482,15 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.participantsCol().doc(user.uid).set(this.stripSecretsFromParticipant(user), { merge: true }).catch((err) => {
  console.warn('Failed to sync profile edit to Firebase:', err);
  });
- }
+            }
 
- alert('User details updated successfully!');
- this.closeUserDetailsModal();
- this.loadUsersList();
- } else {
- alert('Error: Could not find user to update!');
- }
- }
+            alert('User details updated successfully!');
+            this.closeUserDetailsModal();
+            this.loadUsersList();
+        } else {
+            alert('Error: Could not find user to update!');
+        }
+    }
 
  async sendUserPasswordResetEmail(email) {
  if (!this.requireAdmin()) {
@@ -3508,47 +3514,47 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
  }
 
- deleteUser(userId) {
+    deleteUser(userId) {
  if (!this.requireAdmin()) {
  return;
  }
- if (!confirm('Are you sure you want to delete this user? This will also delete all their step entries. This action cannot be undone!')) {
- return;
- }
+        if (!confirm('Are you sure you want to delete this user? This will also delete all their step entries. This action cannot be undone!')) {
+            return;
+        }
 
- const user = this.participants.find(p => (p.id === userId) || (p.employeeId === userId));
- if (!user) {
- alert('User not found!');
- return;
- }
+        const user = this.participants.find(p => (p.id === userId) || (p.employeeId === userId));
+        if (!user) {
+            alert('User not found!');
+            return;
+        }
 
- // Delete user from participants
- this.participants = this.participants.filter(p => (p.id !== userId) && (p.employeeId !== userId));
- this.saveParticipantsCache();
- if (this.firebaseEnabled && user.uid) {
+        // Delete user from participants
+        this.participants = this.participants.filter(p => (p.id !== userId) && (p.employeeId !== userId));
+        this.saveParticipantsCache();
+        if (this.firebaseEnabled && user.uid) {
  this.participantsCol().doc(user.uid).delete().catch((error) => {
- console.warn('Failed to delete participant from Firebase:', error);
- });
- }
+                console.warn('Failed to delete participant from Firebase:', error);
+            });
+        }
 
- // Delete all step entries for this user
- this.stepEntries = this.loadStepEntries();
- const removedEntries = this.stepEntries.filter(entry =>
- entry.userId === userId || entry.userId === user.id || entry.userId === user.employeeId
- );
- this.stepEntries = this.stepEntries.filter(entry => 
- entry.userId !== userId && entry.userId !== user.id && entry.userId !== user.employeeId
- );
- this.saveStepEntries();
- if (removedEntries.length > 0) {
- removedEntries.forEach(entry => this.deleteStepEntryFromFirebase(entry.id));
- }
+        // Delete all step entries for this user
+        this.stepEntries = this.loadStepEntries();
+        const removedEntries = this.stepEntries.filter(entry =>
+            entry.userId === userId || entry.userId === user.id || entry.userId === user.employeeId
+        );
+        this.stepEntries = this.stepEntries.filter(entry => 
+            entry.userId !== userId && entry.userId !== user.id && entry.userId !== user.employeeId
+        );
+        this.saveStepEntries();
+        if (removedEntries.length > 0) {
+            removedEntries.forEach(entry => this.deleteStepEntryFromFirebase(entry.id));
+        }
 
- alert('User and all their activities have been deleted!');
- this.closeUserDetailsModal();
- this.loadUsersList();
- this.updateAdminDashboard();
- }
+        alert('User and all their activities have been deleted!');
+        this.closeUserDetailsModal();
+        this.loadUsersList();
+        this.updateAdminDashboard();
+    }
 
  /**
  * Admin: wipe local caches and empty the current-season Firebase collections
@@ -3634,605 +3640,605 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
  }
 
- deleteUserActivity(activityId, userId) {
- if (!confirm('Are you sure you want to delete this activity entry?')) {
- return;
- }
+    deleteUserActivity(activityId, userId) {
+        if (!confirm('Are you sure you want to delete this activity entry?')) {
+            return;
+        }
 
- this.stepEntries = this.loadStepEntries();
- const activity = this.stepEntries.find(e => e.id === activityId);
- 
- if (activity) {
- // Remove steps from user's total
- const user = this.participants.find(p => (p.id === userId) || (p.employeeId === userId));
- if (user) {
- const entryDate = new Date(activity.date).toDateString();
- if (user.dailySteps && user.dailySteps[entryDate]) {
- user.dailySteps[entryDate] = Math.max(0, user.dailySteps[entryDate] - activity.steps);
- if (user.dailySteps[entryDate] === 0) {
- delete user.dailySteps[entryDate];
- }
- }
- user.totalSteps = Math.max(0, (user.totalSteps || 0) - activity.steps);
- this.saveParticipantsCache();
- this.syncParticipantToFirebase(user);
- }
+        this.stepEntries = this.loadStepEntries();
+        const activity = this.stepEntries.find(e => e.id === activityId);
+        
+        if (activity) {
+            // Remove steps from user's total
+            const user = this.participants.find(p => (p.id === userId) || (p.employeeId === userId));
+            if (user) {
+                const entryDate = new Date(activity.date).toDateString();
+                if (user.dailySteps && user.dailySteps[entryDate]) {
+                    user.dailySteps[entryDate] = Math.max(0, user.dailySteps[entryDate] - activity.steps);
+                    if (user.dailySteps[entryDate] === 0) {
+                        delete user.dailySteps[entryDate];
+                    }
+                }
+                user.totalSteps = Math.max(0, (user.totalSteps || 0) - activity.steps);
+                this.saveParticipantsCache();
+                this.syncParticipantToFirebase(user);
+            }
 
- // Remove entry
- this.stepEntries = this.stepEntries.filter(e => e.id !== activityId);
- this.saveStepEntries();
- this.deleteStepEntryFromFirebase(activityId);
- }
+            // Remove entry
+            this.stepEntries = this.stepEntries.filter(e => e.id !== activityId);
+            this.saveStepEntries();
+            this.deleteStepEntryFromFirebase(activityId);
+        }
 
- alert('Activity deleted successfully!');
- this.viewUserDetails(userId); // Refresh the modal
- this.updateAdminDashboard();
- }
+        alert('Activity deleted successfully!');
+        this.viewUserDetails(userId); // Refresh the modal
+        this.updateAdminDashboard();
+    }
 
- closeUserDetailsModal() {
- const modal = document.getElementById('userDetailsModal');
- if (modal) {
- modal.style.display = 'none';
- }
- }
+    closeUserDetailsModal() {
+        const modal = document.getElementById('userDetailsModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }
 
- // Help Modal Functions
- showHelpModal() {
- const modal = document.getElementById('helpModal');
- if (modal) {
- modal.style.display = 'flex';
- }
- }
+    // Help Modal Functions
+    showHelpModal() {
+        const modal = document.getElementById('helpModal');
+        if (modal) {
+            modal.style.display = 'flex';
+        }
+    }
 
- closeHelpModal() {
- const modal = document.getElementById('helpModal');
- if (modal) {
- modal.style.display = 'none';
- }
- }
+    closeHelpModal() {
+        const modal = document.getElementById('helpModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }
 
- openEmailClient() {
+    openEmailClient() {
  const subject = encodeURIComponent('WOW-CSG Fitness Challenge Support');
- const body = encodeURIComponent('Hello,\n\nI need help with:\n\n');
- window.location.href = `mailto:wow-csg@csgi.com?subject=${subject}&body=${body}`;
- }
+        const body = encodeURIComponent('Hello,\n\nI need help with:\n\n');
+        window.location.href = `mailto:wow-csg@csgi.com?subject=${subject}&body=${body}`;
+    }
 
- async renderValidationList(filter = 'pending') {
- try {
- const validationList = document.getElementById('validationList');
- if (!validationList) {
- console.error('validationList element not found!');
- return;
- }
+    async renderValidationList(filter = 'pending') {
+        try {
+            const validationList = document.getElementById('validationList');
+            if (!validationList) {
+                console.error('validationList element not found!');
+                return;
+            }
 
- if (this.firebaseEnabled) {
- if (!Array.isArray(this.stepEntries) || this.stepEntries.length === 0) {
- await this.syncStepEntriesFromFirebase();
- }
- } else {
- // Ensure entries are loaded for local-only mode
- this.stepEntries = this.loadStepEntries();
- }
- 
- // Show loading state
- validationList.innerHTML = '<p class="no-entries">Loading entries...</p>';
+            if (this.firebaseEnabled) {
+                if (!Array.isArray(this.stepEntries) || this.stepEntries.length === 0) {
+                    await this.syncStepEntriesFromFirebase();
+                }
+            } else {
+                // Ensure entries are loaded for local-only mode
+                this.stepEntries = this.loadStepEntries();
+            }
+            
+            // Show loading state
+            validationList.innerHTML = '<p class="no-entries">Loading entries...</p>';
 
- // Use requestAnimationFrame to prevent blocking UI
- requestAnimationFrame(() => {
- // Optimize: Single pass filtering (no array copy needed)
- let entries = [];
- const filterLower = filter.toLowerCase();
- 
- for (let i = 0; i < this.stepEntries.length; i++) {
- const e = this.stepEntries[i];
- if (!e) continue;
- if (filter === 'all' || (e.status || 'pending').toLowerCase() === filterLower) {
- entries.push(e);
- }
- }
+            // Use requestAnimationFrame to prevent blocking UI
+            requestAnimationFrame(() => {
+                // Optimize: Single pass filtering (no array copy needed)
+                let entries = [];
+                const filterLower = filter.toLowerCase();
+                
+                for (let i = 0; i < this.stepEntries.length; i++) {
+                    const e = this.stepEntries[i];
+                    if (!e) continue;
+                    if (filter === 'all' || (e.status || 'pending').toLowerCase() === filterLower) {
+                        entries.push(e);
+                    }
+                }
 
- // Optimized sorting - use getTime() for faster comparison
- entries.sort((a, b) => {
- const dateA = a.date ? new Date(a.date).getTime() : 0;
- const dateB = b.date ? new Date(b.date).getTime() : 0;
- return dateB - dateA;
- });
+                // Optimized sorting - use getTime() for faster comparison
+                entries.sort((a, b) => {
+                    const dateA = a.date ? new Date(a.date).getTime() : 0;
+                    const dateB = b.date ? new Date(b.date).getTime() : 0;
+                    return dateB - dateA;
+                });
 
- if (entries.length === 0) {
- const filterText = filter === 'all' ? '' : ` for "${filter}" status`;
- validationList.innerHTML = `<p class="no-entries">No entries found${filterText}. Total entries in system: ${this.stepEntries.length}</p>`;
- return;
- }
+                if (entries.length === 0) {
+                    const filterText = filter === 'all' ? '' : ` for "${filter}" status`;
+                    validationList.innerHTML = `<p class="no-entries">No entries found${filterText}. Total entries in system: ${this.stepEntries.length}</p>`;
+                    return;
+                }
 
- // Limit initial render for performance (show first 100 entries)
- const maxEntries = 100;
- const entriesToRender = entries.slice(0, maxEntries);
- 
- // Batch create HTML string (faster than individual DOM operations)
- const htmlParts = [];
- for (let i = 0; i < entriesToRender.length; i++) {
- htmlParts.push(this.createEntryHTML(entriesToRender[i]));
- }
- 
- let html = htmlParts.join('');
- 
- // Add pagination info if there are more entries
- if (entries.length > maxEntries) {
- html += `<p class="pagination-info" style="text-align: center; padding: 15px; color: #666; font-size: 0.9rem;">Showing ${maxEntries} of ${entries.length} entries. Use filters to narrow results.</p>`;
- }
- 
- validationList.innerHTML = html;
- });
- } catch (error) {
- console.error('Error in renderValidationList:', error);
- const validationList = document.getElementById('validationList');
- if (validationList) {
- validationList.innerHTML = `<p class="no-entries" style="color: red;">Error rendering entries: ${error.message}</p>`;
- }
- }
- }
+                // Limit initial render for performance (show first 100 entries)
+                const maxEntries = 100;
+                const entriesToRender = entries.slice(0, maxEntries);
+                
+                // Batch create HTML string (faster than individual DOM operations)
+                const htmlParts = [];
+                for (let i = 0; i < entriesToRender.length; i++) {
+                    htmlParts.push(this.createEntryHTML(entriesToRender[i]));
+                }
+                
+                let html = htmlParts.join('');
+                
+                // Add pagination info if there are more entries
+                if (entries.length > maxEntries) {
+                    html += `<p class="pagination-info" style="text-align: center; padding: 15px; color: #666; font-size: 0.9rem;">Showing ${maxEntries} of ${entries.length} entries. Use filters to narrow results.</p>`;
+                }
+                
+                validationList.innerHTML = html;
+            });
+        } catch (error) {
+            console.error('Error in renderValidationList:', error);
+            const validationList = document.getElementById('validationList');
+            if (validationList) {
+                validationList.innerHTML = `<p class="no-entries" style="color: red;">Error rendering entries: ${error.message}</p>`;
+            }
+        }
+    }
 
- createEntryHTML(entry) {
- if (!entry) return '';
- 
- const userName = entry.userName || entry.name || 'Unknown User';
- const userEmail = entry.userEmail || entry.email || 'No email';
- const userId = entry.userId || entry.id || 'unknown';
- const steps = entry.steps || 0;
- const entryDate = entry.date || new Date().toISOString();
- const entryStatus = entry.status || 'pending';
- 
- // Parse date safely
- let date;
- try {
- date = new Date(entryDate);
- if (isNaN(date.getTime())) date = new Date();
- } catch (e) {
- date = new Date();
- }
- 
- const statusClass = entryStatus === 'approved' ? 'approved' : entryStatus === 'rejected' ? 'rejected' : 'pending';
+    createEntryHTML(entry) {
+        if (!entry) return '';
+        
+        const userName = entry.userName || entry.name || 'Unknown User';
+        const userEmail = entry.userEmail || entry.email || 'No email';
+        const userId = entry.userId || entry.id || 'unknown';
+        const steps = entry.steps || 0;
+        const entryDate = entry.date || new Date().toISOString();
+        const entryStatus = entry.status || 'pending';
+        
+        // Parse date safely
+        let date;
+        try {
+            date = new Date(entryDate);
+            if (isNaN(date.getTime())) date = new Date();
+        } catch (e) {
+            date = new Date();
+        }
+        
+        const statusClass = entryStatus === 'approved' ? 'approved' : entryStatus === 'rejected' ? 'rejected' : 'pending';
  const statusIcon = entryStatus === 'approved' ? '' : entryStatus === 'rejected' ? '' : '';
- 
- // Format date safely
- let formattedDate;
- try {
- formattedDate = date.toLocaleString();
- } catch (e) {
- formattedDate = entryDate;
- }
- 
- // Format validated date safely
- let validatedDateStr = '';
- if (entry.validatedAt) {
- try {
- const validatedDate = new Date(entry.validatedAt);
- if (!isNaN(validatedDate.getTime())) {
- validatedDateStr = validatedDate.toLocaleString();
- }
- } catch (e) {
- validatedDateStr = entry.validatedAt;
- }
- }
- 
- // Format modified date safely
- let modifiedDateStr = '';
- if (entry.lastModifiedAt) {
- try {
- const modifiedDate = new Date(entry.lastModifiedAt);
- if (!isNaN(modifiedDate.getTime())) {
- modifiedDateStr = modifiedDate.toLocaleString();
- }
- } catch (e) {
- modifiedDateStr = entry.lastModifiedAt;
- }
- }
- 
- return `
- <div class="validation-entry ${statusClass}">
- <div class="entry-header">
- <div class="entry-info">
- <h4>${this.escapeHtml(userName)} (${this.escapeHtml(userEmail)})</h4>
- <p class="entry-date">${formattedDate}</p>
- <p class="entry-id" style="font-size: 0.8rem; color: #666;">Entry ID: ${entry.id || 'N/A'}</p>
- <p class="entry-user-id" style="font-size: 0.8rem; color: #666;">User ID: ${userId}</p>
- </div>
- <div class="entry-status ${statusClass}">
- ${statusIcon} ${entryStatus.toUpperCase()}
- </div>
- </div>
- <div class="entry-details">
- <div class="entry-steps">
- <strong>Steps:</strong> ${steps.toLocaleString()}
- </div>
- <div class="entry-screenshot">
- <strong>Screenshot:</strong>
- ${entry.screenshot ? `
- <img src="${entry.screenshot}" alt="Step screenshot" class="validation-screenshot" onclick="this.classList.toggle('expanded')" style="cursor: pointer; max-width: 200px; border-radius: 8px; margin-top: 8px;">
- ` : `
- <p class="no-screenshot">No screenshot provided (Step counter entry or manual entry without screenshot)</p>
- `}
- </div>
- ${entry.source ? `<div class="entry-source" style="margin-top: 8px; font-size: 0.9rem; color: #666;"><strong>Source:</strong> ${entry.source === 'step-counter' ? 'Step Counter' : 'Manual Entry'}</div>` : ''}
- ${entry.validatedBy ? `<div class="entry-validator" style="margin-top: 8px; font-size: 0.9rem; color: #666;"><strong>Validated by:</strong> ${this.escapeHtml(entry.validatedBy)}${validatedDateStr ? ` on ${validatedDateStr}` : ''}</div>` : ''}
- ${entry.lastModifiedBy ? `<div class="entry-modifier" style="margin-top: 8px; font-size: 0.9rem; color: #666;"><strong>Last modified by:</strong> ${this.escapeHtml(entry.lastModifiedBy)}${modifiedDateStr ? ` on ${modifiedDateStr}` : ''}</div>` : ''}
- ${entry.notes ? `<div class="entry-notes" style="margin-top: 8px; padding: 8px; background: #f5f5f5; border-radius: 4px; font-size: 0.9rem;"><strong>Notes:</strong> ${this.escapeHtml(entry.notes)}</div>` : ''}
- </div>
- <div class="entry-actions">
- ${entryStatus === 'pending' ? `
- <button class="btn btn-success" onclick="app.validateEntry('${entry.id}', 'approved')">Approve</button>
- <button class="btn btn-danger" onclick="app.validateEntry('${entry.id}', 'rejected')">Reject</button>
- ` : entryStatus === 'approved' ? `
- <button class="btn btn-success" onclick="app.validateEntry('${entry.id}', 'approved')">Re-approve</button>
- <button class="btn btn-danger" onclick="app.validateEntry('${entry.id}', 'rejected')">Reject</button>
- ` : entryStatus === 'rejected' ? `
- <button class="btn btn-success" onclick="app.validateEntry('${entry.id}', 'approved')">Approve</button>
- <button class="btn btn-danger" onclick="app.validateEntry('${entry.id}', 'rejected')">Reject Again</button>
- ` : ''}
+        
+        // Format date safely
+        let formattedDate;
+        try {
+            formattedDate = date.toLocaleString();
+        } catch (e) {
+            formattedDate = entryDate;
+        }
+        
+        // Format validated date safely
+        let validatedDateStr = '';
+        if (entry.validatedAt) {
+            try {
+                const validatedDate = new Date(entry.validatedAt);
+                if (!isNaN(validatedDate.getTime())) {
+                    validatedDateStr = validatedDate.toLocaleString();
+                }
+            } catch (e) {
+                validatedDateStr = entry.validatedAt;
+            }
+        }
+        
+        // Format modified date safely
+        let modifiedDateStr = '';
+        if (entry.lastModifiedAt) {
+            try {
+                const modifiedDate = new Date(entry.lastModifiedAt);
+                if (!isNaN(modifiedDate.getTime())) {
+                    modifiedDateStr = modifiedDate.toLocaleString();
+                }
+            } catch (e) {
+                modifiedDateStr = entry.lastModifiedAt;
+            }
+        }
+        
+        return `
+            <div class="validation-entry ${statusClass}">
+                <div class="entry-header">
+                    <div class="entry-info">
+                        <h4>${this.escapeHtml(userName)} (${this.escapeHtml(userEmail)})</h4>
+                        <p class="entry-date">${formattedDate}</p>
+                        <p class="entry-id" style="font-size: 0.8rem; color: #666;">Entry ID: ${entry.id || 'N/A'}</p>
+                        <p class="entry-user-id" style="font-size: 0.8rem; color: #666;">User ID: ${userId}</p>
+                    </div>
+                    <div class="entry-status ${statusClass}">
+                        ${statusIcon} ${entryStatus.toUpperCase()}
+                    </div>
+                </div>
+                <div class="entry-details">
+                    <div class="entry-steps">
+                        <strong>Steps:</strong> ${steps.toLocaleString()}
+                    </div>
+                    <div class="entry-screenshot">
+                        <strong>Screenshot:</strong>
+                        ${entry.screenshot ? `
+                            <img src="${entry.screenshot}" alt="Step screenshot" class="validation-screenshot" onclick="this.classList.toggle('expanded')" style="cursor: pointer; max-width: 200px; border-radius: 8px; margin-top: 8px;">
+                        ` : `
+                            <p class="no-screenshot">No screenshot provided (Step counter entry or manual entry without screenshot)</p>
+                        `}
+                    </div>
+                    ${entry.source ? `<div class="entry-source" style="margin-top: 8px; font-size: 0.9rem; color: #666;"><strong>Source:</strong> ${entry.source === 'step-counter' ? 'Step Counter' : 'Manual Entry'}</div>` : ''}
+                    ${entry.validatedBy ? `<div class="entry-validator" style="margin-top: 8px; font-size: 0.9rem; color: #666;"><strong>Validated by:</strong> ${this.escapeHtml(entry.validatedBy)}${validatedDateStr ? ` on ${validatedDateStr}` : ''}</div>` : ''}
+                    ${entry.lastModifiedBy ? `<div class="entry-modifier" style="margin-top: 8px; font-size: 0.9rem; color: #666;"><strong>Last modified by:</strong> ${this.escapeHtml(entry.lastModifiedBy)}${modifiedDateStr ? ` on ${modifiedDateStr}` : ''}</div>` : ''}
+                    ${entry.notes ? `<div class="entry-notes" style="margin-top: 8px; padding: 8px; background: #f5f5f5; border-radius: 4px; font-size: 0.9rem;"><strong>Notes:</strong> ${this.escapeHtml(entry.notes)}</div>` : ''}
+                </div>
+                <div class="entry-actions">
+                    ${entryStatus === 'pending' ? `
+                        <button class="btn btn-success" onclick="app.validateEntry('${entry.id}', 'approved')">Approve</button>
+                        <button class="btn btn-danger" onclick="app.validateEntry('${entry.id}', 'rejected')">Reject</button>
+                    ` : entryStatus === 'approved' ? `
+                        <button class="btn btn-success" onclick="app.validateEntry('${entry.id}', 'approved')">Re-approve</button>
+                        <button class="btn btn-danger" onclick="app.validateEntry('${entry.id}', 'rejected')">Reject</button>
+                    ` : entryStatus === 'rejected' ? `
+                        <button class="btn btn-success" onclick="app.validateEntry('${entry.id}', 'approved')">Approve</button>
+                        <button class="btn btn-danger" onclick="app.validateEntry('${entry.id}', 'rejected')">Reject Again</button>
+                    ` : ''}
  <button class="btn btn-edit" onclick="app.editEntrySteps('${entry.id}')"> Edit Steps</button>
- </div>
- </div>
- `;
- }
+                </div>
+            </div>
+        `;
+    }
 
- escapeHtml(text) {
- if (!text) return '';
- const div = document.createElement('div');
- div.textContent = text;
- return div.innerHTML;
- }
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
 
- validateEntry(entryId, status) {
+    validateEntry(entryId, status) {
  if (!this.requireAdmin()) {
  return;
  }
- const entry = this.stepEntries.find(e => e.id === entryId);
- if (!entry) return;
+        const entry = this.stepEntries.find(e => e.id === entryId);
+        if (!entry) return;
 
- const notes = prompt(status === 'approved' ? 'Add approval notes (optional):' : 'Add rejection reason (required):');
- 
- if (status === 'rejected' && !notes) {
- alert('Please provide a reason for rejection!');
- return;
- }
+        const notes = prompt(status === 'approved' ? 'Add approval notes (optional):' : 'Add rejection reason (required):');
+        
+        if (status === 'rejected' && !notes) {
+            alert('Please provide a reason for rejection!');
+            return;
+        }
 
- const previousStatus = entry.status;
- const currentSteps = entry.steps;
+        const previousStatus = entry.status;
+        const currentSteps = entry.steps;
 
- entry.status = status;
- entry.validatedBy = 'Admin';
- entry.validatedAt = new Date().toISOString();
- entry.notes = notes || null;
+        entry.status = status;
+        entry.validatedBy = 'Admin';
+        entry.validatedAt = new Date().toISOString();
+        entry.notes = notes || null;
 
- // If approving, update user's steps
- if (status === 'approved') {
- const participant = this.participants.find(p => p.id === entry.userId);
- if (participant) {
- const entryDate = new Date(entry.date).toDateString();
- 
- // Handle different previous statuses
- if (previousStatus === 'approved') {
- // Re-approval after edit (entry was reset to pending)
- // Steps were already removed in editEntrySteps, so just add current steps
- participant.dailySteps[entryDate] = (participant.dailySteps[entryDate] || 0) + currentSteps;
- participant.totalSteps = (participant.totalSteps || 0) + currentSteps;
- } else if (previousStatus === 'rejected') {
- // Approving a previously rejected entry - add the steps
- participant.dailySteps[entryDate] = (participant.dailySteps[entryDate] || 0) + currentSteps;
- participant.totalSteps = (participant.totalSteps || 0) + currentSteps;
- } else {
- // First time approval (pending) - just add the steps
- participant.dailySteps[entryDate] = (participant.dailySteps[entryDate] || 0) + currentSteps;
- participant.totalSteps = (participant.totalSteps || 0) + currentSteps;
- }
- 
- // Update activity message
- const activity = participant.activities.find(a => a.entryId === entryId);
- if (activity) {
- if (previousStatus === 'approved') {
- activity.message = `Steps re-approved: ${currentSteps.toLocaleString()} steps (Approved)`;
- } else if (previousStatus === 'rejected') {
- activity.message = `Steps approved after rejection: ${currentSteps.toLocaleString()} steps (Approved)`;
- } else {
- activity.message = `Added ${currentSteps.toLocaleString()} steps (Approved)`;
- }
- }
+        // If approving, update user's steps
+        if (status === 'approved') {
+            const participant = this.participants.find(p => p.id === entry.userId);
+            if (participant) {
+                const entryDate = new Date(entry.date).toDateString();
+                
+                // Handle different previous statuses
+                if (previousStatus === 'approved') {
+                    // Re-approval after edit (entry was reset to pending)
+                    // Steps were already removed in editEntrySteps, so just add current steps
+                    participant.dailySteps[entryDate] = (participant.dailySteps[entryDate] || 0) + currentSteps;
+                    participant.totalSteps = (participant.totalSteps || 0) + currentSteps;
+                } else if (previousStatus === 'rejected') {
+                    // Approving a previously rejected entry - add the steps
+                    participant.dailySteps[entryDate] = (participant.dailySteps[entryDate] || 0) + currentSteps;
+                    participant.totalSteps = (participant.totalSteps || 0) + currentSteps;
+                } else {
+                    // First time approval (pending) - just add the steps
+                    participant.dailySteps[entryDate] = (participant.dailySteps[entryDate] || 0) + currentSteps;
+                    participant.totalSteps = (participant.totalSteps || 0) + currentSteps;
+                }
+                
+                // Update activity message
+                const activity = participant.activities.find(a => a.entryId === entryId);
+                if (activity) {
+                    if (previousStatus === 'approved') {
+                        activity.message = `Steps re-approved: ${currentSteps.toLocaleString()} steps (Approved)`;
+                    } else if (previousStatus === 'rejected') {
+                        activity.message = `Steps approved after rejection: ${currentSteps.toLocaleString()} steps (Approved)`;
+                    } else {
+                        activity.message = `Added ${currentSteps.toLocaleString()} steps (Approved)`;
+                    }
+                }
 
- this.saveParticipantsCache();
- }
- } else if (status === 'rejected') {
- // If rejecting a previously approved entry, subtract the steps
- if (previousStatus === 'approved') {
- const participant = this.participants.find(p => p.id === entry.userId);
- if (participant) {
- const entryDate = new Date(entry.date).toDateString();
- participant.dailySteps[entryDate] = Math.max(0, (participant.dailySteps[entryDate] || 0) - currentSteps);
- participant.totalSteps = Math.max(0, (participant.totalSteps || 0) - currentSteps);
- 
- // Update activity message
- const activity = participant.activities.find(a => a.entryId === entryId);
- if (activity) {
- activity.message = `Added ${currentSteps.toLocaleString()} steps (Rejected)`;
- }
+                this.saveParticipantsCache();
+            }
+        } else if (status === 'rejected') {
+            // If rejecting a previously approved entry, subtract the steps
+            if (previousStatus === 'approved') {
+                const participant = this.participants.find(p => p.id === entry.userId);
+                if (participant) {
+                    const entryDate = new Date(entry.date).toDateString();
+                    participant.dailySteps[entryDate] = Math.max(0, (participant.dailySteps[entryDate] || 0) - currentSteps);
+                    participant.totalSteps = Math.max(0, (participant.totalSteps || 0) - currentSteps);
+                    
+                    // Update activity message
+                    const activity = participant.activities.find(a => a.entryId === entryId);
+                    if (activity) {
+                        activity.message = `Added ${currentSteps.toLocaleString()} steps (Rejected)`;
+                    }
 
- this.saveParticipantsCache();
- }
- }
- // If rejecting a previously rejected entry, no change needed (steps were never added)
- }
+                    this.saveParticipantsCache();
+                }
+            }
+            // If rejecting a previously rejected entry, no change needed (steps were never added)
+        }
 
- this.saveStepEntries();
- this.upsertStepEntryInFirebase(entry);
- if (this.firebaseEnabled) {
- const participant = this.participants.find(p => p.id === entry.userId || p.employeeId === entry.userId);
- if (participant) {
- this.syncParticipantToFirebase(participant);
- }
- }
- this.updateAdminDashboard();
- this.updateLeaderboard();
- 
- if (status === 'approved' && previousStatus === 'approved') {
- alert(`Entry re-approved successfully!\n\nSteps: ${currentSteps.toLocaleString()}\n\nLeaderboard has been updated.`);
- } else if (status === 'approved' && previousStatus === 'rejected') {
- alert(`Rejected entry approved successfully!\n\nSteps: ${currentSteps.toLocaleString()}\n\nLeaderboard has been updated.`);
- } else {
- alert(`Entry ${status} successfully!`);
- }
- }
+        this.saveStepEntries();
+        this.upsertStepEntryInFirebase(entry);
+        if (this.firebaseEnabled) {
+            const participant = this.participants.find(p => p.id === entry.userId || p.employeeId === entry.userId);
+            if (participant) {
+                this.syncParticipantToFirebase(participant);
+            }
+        }
+        this.updateAdminDashboard();
+        this.updateLeaderboard();
+        
+        if (status === 'approved' && previousStatus === 'approved') {
+            alert(`Entry re-approved successfully!\n\nSteps: ${currentSteps.toLocaleString()}\n\nLeaderboard has been updated.`);
+        } else if (status === 'approved' && previousStatus === 'rejected') {
+            alert(`Rejected entry approved successfully!\n\nSteps: ${currentSteps.toLocaleString()}\n\nLeaderboard has been updated.`);
+        } else {
+            alert(`Entry ${status} successfully!`);
+        }
+    }
 
- editEntrySteps(entryId) {
- const entry = this.stepEntries.find(e => e.id === entryId);
- if (!entry) return;
+    editEntrySteps(entryId) {
+        const entry = this.stepEntries.find(e => e.id === entryId);
+        if (!entry) return;
 
- const currentSteps = entry.steps;
- const newStepsStr = prompt(`Edit step count for this entry:\n\nCurrent steps: ${currentSteps.toLocaleString()}\n\nEnter new step count:`, currentSteps);
- 
- if (newStepsStr === null) return; // User cancelled
+        const currentSteps = entry.steps;
+        const newStepsStr = prompt(`Edit step count for this entry:\n\nCurrent steps: ${currentSteps.toLocaleString()}\n\nEnter new step count:`, currentSteps);
+        
+        if (newStepsStr === null) return; // User cancelled
 
- const newSteps = parseInt(newStepsStr);
- if (isNaN(newSteps) || newSteps < 0) {
- alert('Please enter a valid number of steps (0 or greater)!');
- return;
- }
+        const newSteps = parseInt(newStepsStr);
+        if (isNaN(newSteps) || newSteps < 0) {
+            alert('Please enter a valid number of steps (0 or greater)!');
+            return;
+        }
 
- if (newSteps === currentSteps) {
- alert('Step count unchanged.');
- return;
- }
+        if (newSteps === currentSteps) {
+            alert('Step count unchanged.');
+            return;
+        }
 
- const previousStatus = entry.status;
- const previousSteps = entry.steps;
- entry.steps = newSteps;
- entry.lastModifiedBy = 'Admin';
- entry.lastModifiedAt = new Date().toISOString();
+        const previousStatus = entry.status;
+        const previousSteps = entry.steps;
+        entry.steps = newSteps;
+        entry.lastModifiedBy = 'Admin';
+        entry.lastModifiedAt = new Date().toISOString();
 
- // If entry was previously approved, remove the old steps from user totals
- if (previousStatus === 'approved') {
- const participant = this.participants.find(p => p.id === entry.userId);
- if (participant) {
- const entryDate = new Date(entry.date).toDateString();
- 
- // Subtract old steps
- participant.dailySteps[entryDate] = Math.max(0, (participant.dailySteps[entryDate] || 0) - previousSteps);
- participant.totalSteps = Math.max(0, (participant.totalSteps || 0) - previousSteps);
- 
- // Update activity message
- const activity = participant.activities.find(a => a.entryId === entryId);
- if (activity) {
+        // If entry was previously approved, remove the old steps from user totals
+        if (previousStatus === 'approved') {
+            const participant = this.participants.find(p => p.id === entry.userId);
+            if (participant) {
+                const entryDate = new Date(entry.date).toDateString();
+                
+                // Subtract old steps
+                participant.dailySteps[entryDate] = Math.max(0, (participant.dailySteps[entryDate] || 0) - previousSteps);
+                participant.totalSteps = Math.max(0, (participant.totalSteps || 0) - previousSteps);
+                
+                // Update activity message
+                const activity = participant.activities.find(a => a.entryId === entryId);
+                if (activity) {
  activity.message = `Steps updated: ${previousSteps.toLocaleString()} -> ${newSteps.toLocaleString()} (Pending re-approval)`;
- }
+                }
 
- this.saveParticipantsCache();
- }
- 
- // Reset status to pending so admin can re-approve
- entry.status = 'pending';
- entry.validatedBy = null;
- entry.validatedAt = null;
- entry.notes = null;
- }
+                this.saveParticipantsCache();
+            }
+            
+            // Reset status to pending so admin can re-approve
+            entry.status = 'pending';
+            entry.validatedBy = null;
+            entry.validatedAt = null;
+            entry.notes = null;
+        }
 
- this.saveStepEntries();
- this.upsertStepEntryInFirebase(entry);
- if (this.firebaseEnabled) {
- const participant = this.participants.find(p => p.id === entry.userId || p.employeeId === entry.userId);
- if (participant) {
- this.syncParticipantToFirebase(participant);
- }
- }
- this.updateAdminDashboard();
- this.updateLeaderboard();
- 
- alert(`Step count updated successfully!\n\nPrevious: ${previousSteps.toLocaleString()}\nNew: ${newSteps.toLocaleString()}\nDifference: ${(newSteps - previousSteps).toLocaleString()}\n\nEntry status reset to PENDING. Please approve the entry to apply the changes to the leaderboard.`);
- }
+        this.saveStepEntries();
+        this.upsertStepEntryInFirebase(entry);
+        if (this.firebaseEnabled) {
+            const participant = this.participants.find(p => p.id === entry.userId || p.employeeId === entry.userId);
+            if (participant) {
+                this.syncParticipantToFirebase(participant);
+            }
+        }
+        this.updateAdminDashboard();
+        this.updateLeaderboard();
+        
+        alert(`Step count updated successfully!\n\nPrevious: ${previousSteps.toLocaleString()}\nNew: ${newSteps.toLocaleString()}\nDifference: ${(newSteps - previousSteps).toLocaleString()}\n\nEntry status reset to PENDING. Please approve the entry to apply the changes to the leaderboard.`);
+    }
 
- showSuccessAnimation(steps) {
- // Create a temporary success message
- const successMsg = document.createElement('div');
- successMsg.style.cssText = `
- position: fixed;
- top: 20px;
- right: 20px;
- background: linear-gradient(135deg, #003366 0%, #001a33 100%);
- color: white;
- padding: 20px 30px;
- border-radius: 12px;
- box-shadow: 0 8px 30px rgba(0, 51, 102, 0.4);
- z-index: 1000;
- animation: slideInRight 0.5s ease-out, fadeOut 0.5s ease-out 2.5s;
- font-weight: 600;
- font-size: 1.1rem;
- `;
+    showSuccessAnimation(steps) {
+        // Create a temporary success message
+        const successMsg = document.createElement('div');
+        successMsg.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #003366 0%, #001a33 100%);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0, 51, 102, 0.4);
+            z-index: 1000;
+            animation: slideInRight 0.5s ease-out, fadeOut 0.5s ease-out 2.5s;
+            font-weight: 600;
+            font-size: 1.1rem;
+        `;
  successMsg.textContent = ` ${steps.toLocaleString()} steps added!`;
- document.body.appendChild(successMsg);
+        document.body.appendChild(successMsg);
 
- // Add CSS animations if not already present
- if (!document.getElementById('successAnimationStyles')) {
- const style = document.createElement('style');
- style.id = 'successAnimationStyles';
- style.textContent = `
- @keyframes slideInRight {
- from {
- transform: translateX(400px);
- opacity: 0;
- }
- to {
- transform: translateX(0);
- opacity: 1;
- }
- }
- @keyframes fadeOut {
- from {
- opacity: 1;
- transform: translateX(0);
- }
- to {
- opacity: 0;
- transform: translateX(400px);
- }
- }
- `;
- document.head.appendChild(style);
- }
+        // Add CSS animations if not already present
+        if (!document.getElementById('successAnimationStyles')) {
+            const style = document.createElement('style');
+            style.id = 'successAnimationStyles';
+            style.textContent = `
+                @keyframes slideInRight {
+                    from {
+                        transform: translateX(400px);
+                        opacity: 0;
+                    }
+                    to {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                }
+                @keyframes fadeOut {
+                    from {
+                        opacity: 1;
+                        transform: translateX(0);
+                    }
+                    to {
+                        opacity: 0;
+                        transform: translateX(400px);
+                    }
+                }
+            `;
+            document.head.appendChild(style);
+        }
 
- setTimeout(() => {
- successMsg.remove();
- }, 3000);
- }
+        setTimeout(() => {
+            successMsg.remove();
+        }, 3000);
+    }
 
- calculateStreak(participant) {
- if (!participant) {
- return 0;
- }
+    calculateStreak(participant) {
+        if (!participant) {
+            return 0;
+        }
 
- // Prefer entry-based streak when step entries exist (counts per qualifying entry)
- const entries = Array.isArray(this.stepEntries) ? this.stepEntries : this.loadStepEntries();
- if (Array.isArray(entries) && entries.length > 0) {
- const participantIds = new Set([
- participant.uid ? String(participant.uid) : '',
- participant.id ? String(participant.id) : '',
- participant.employeeId ? String(participant.employeeId) : ''
- ].filter(Boolean));
+        // Prefer entry-based streak when step entries exist (counts per qualifying entry)
+        const entries = Array.isArray(this.stepEntries) ? this.stepEntries : this.loadStepEntries();
+        if (Array.isArray(entries) && entries.length > 0) {
+            const participantIds = new Set([
+                participant.uid ? String(participant.uid) : '',
+                participant.id ? String(participant.id) : '',
+                participant.employeeId ? String(participant.employeeId) : ''
+            ].filter(Boolean));
 
- const qualifyingCountsByDate = {};
- entries.forEach(entry => {
- if (!entry) {
- return;
- }
- const entryUserUid = entry.userUid ? String(entry.userUid) : '';
- const entryUserId = entry.userId ? String(entry.userId) : '';
- const matchesUser = (entryUserUid && participantIds.has(entryUserUid)) ||
- (entryUserId && participantIds.has(entryUserId));
+            const qualifyingCountsByDate = {};
+            entries.forEach(entry => {
+                if (!entry) {
+                    return;
+                }
+                const entryUserUid = entry.userUid ? String(entry.userUid) : '';
+                const entryUserId = entry.userId ? String(entry.userId) : '';
+                const matchesUser = (entryUserUid && participantIds.has(entryUserUid)) ||
+                    (entryUserId && participantIds.has(entryUserId));
 
- if (!matchesUser) {
- return;
- }
+                if (!matchesUser) {
+                    return;
+                }
 
- const steps = typeof entry.steps === 'number' ? entry.steps : parseInt(entry.steps);
- const entryDate = new Date(entry.date || Date.now());
- if (isNaN(entryDate.getTime())) {
- return;
- }
+                const steps = typeof entry.steps === 'number' ? entry.steps : parseInt(entry.steps);
+                const entryDate = new Date(entry.date || Date.now());
+                if (isNaN(entryDate.getTime())) {
+                    return;
+                }
  const dayGoal = this.getDailyGoalSteps(entryDate);
  if (!steps || steps < dayGoal) {
  return;
  }
 
- entryDate.setHours(0, 0, 0, 0);
- const dateKey = entryDate.toDateString();
- qualifyingCountsByDate[dateKey] = (qualifyingCountsByDate[dateKey] || 0) + 1;
- });
+                entryDate.setHours(0, 0, 0, 0);
+                const dateKey = entryDate.toDateString();
+                qualifyingCountsByDate[dateKey] = (qualifyingCountsByDate[dateKey] || 0) + 1;
+            });
 
- let streak = 0;
- Object.values(qualifyingCountsByDate).forEach(count => {
- streak += count;
- });
- return streak;
- }
+            let streak = 0;
+            Object.values(qualifyingCountsByDate).forEach(count => {
+                streak += count;
+            });
+            return streak;
+        }
 
- if (!participant.dailySteps || Object.keys(participant.dailySteps).length === 0) {
- return 0;
- }
- 
- // Get today's date string (same format as stored: toDateString())
- const today = new Date();
- today.setHours(0, 0, 0, 0);
- const todayStr = today.toDateString();
- 
- // Create a map of date strings to steps for easy lookup
- const stepsByDate = {};
- Object.keys(participant.dailySteps).forEach(dateStr => {
- try {
- // Parse the date string - handle both Date objects and strings
- let date;
- if (dateStr instanceof Date) {
- date = new Date(dateStr);
- } else {
- date = new Date(dateStr);
- }
- 
- // Check if date is valid
- if (isNaN(date.getTime())) {
- console.warn('Invalid date string in dailySteps:', dateStr);
- return;
- }
- 
- date.setHours(0, 0, 0, 0);
- const normalizedDateStr = date.toDateString();
- // Sum steps if multiple entries exist for same date
- if (stepsByDate[normalizedDateStr]) {
- stepsByDate[normalizedDateStr] += participant.dailySteps[dateStr];
- } else {
- stepsByDate[normalizedDateStr] = participant.dailySteps[dateStr];
- }
- } catch (e) {
- console.warn('Error parsing date in calculateStreak:', dateStr, e);
- }
- });
- 
- let streak = 0;
- let checkDate = new Date(today);
- const minStepsForStreak = 1; // Count any day with activity (steps > 0) as a streak day
- const maxDaysToCheck = 365; // Prevent infinite loops
- let daysChecked = 0;
- 
- // Check consecutive days starting from today (or yesterday if today has no activity)
- // First, check if today has any steps
- if (stepsByDate[todayStr] && stepsByDate[todayStr] >= minStepsForStreak) {
- // Start counting from today
- checkDate = new Date(today);
- } else {
- // If today has no steps, start from yesterday
- checkDate.setDate(checkDate.getDate() - 1);
- }
- 
- // Count consecutive days backwards
- while (daysChecked < maxDaysToCheck) {
- const checkDateStr = checkDate.toDateString();
- const steps = stepsByDate[checkDateStr];
- 
- // If this date has any steps (activity), increment streak
- if (steps && steps >= minStepsForStreak) {
- streak++;
- // Move to previous day
- checkDate.setDate(checkDate.getDate() - 1);
- daysChecked++;
- } else {
- // No more consecutive days with activity
- break;
- }
- }
- 
- return streak;
- }
+        if (!participant.dailySteps || Object.keys(participant.dailySteps).length === 0) {
+            return 0;
+        }
+        
+        // Get today's date string (same format as stored: toDateString())
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayStr = today.toDateString();
+        
+        // Create a map of date strings to steps for easy lookup
+        const stepsByDate = {};
+        Object.keys(participant.dailySteps).forEach(dateStr => {
+            try {
+                // Parse the date string - handle both Date objects and strings
+                let date;
+                if (dateStr instanceof Date) {
+                    date = new Date(dateStr);
+                } else {
+                    date = new Date(dateStr);
+                }
+                
+                // Check if date is valid
+                if (isNaN(date.getTime())) {
+                    console.warn('Invalid date string in dailySteps:', dateStr);
+                    return;
+                }
+                
+                date.setHours(0, 0, 0, 0);
+                const normalizedDateStr = date.toDateString();
+                // Sum steps if multiple entries exist for same date
+                if (stepsByDate[normalizedDateStr]) {
+                    stepsByDate[normalizedDateStr] += participant.dailySteps[dateStr];
+                } else {
+                    stepsByDate[normalizedDateStr] = participant.dailySteps[dateStr];
+                }
+            } catch (e) {
+                console.warn('Error parsing date in calculateStreak:', dateStr, e);
+            }
+        });
+        
+        let streak = 0;
+        let checkDate = new Date(today);
+        const minStepsForStreak = 1; // Count any day with activity (steps > 0) as a streak day
+        const maxDaysToCheck = 365; // Prevent infinite loops
+        let daysChecked = 0;
+        
+        // Check consecutive days starting from today (or yesterday if today has no activity)
+        // First, check if today has any steps
+        if (stepsByDate[todayStr] && stepsByDate[todayStr] >= minStepsForStreak) {
+            // Start counting from today
+            checkDate = new Date(today);
+        } else {
+            // If today has no steps, start from yesterday
+            checkDate.setDate(checkDate.getDate() - 1);
+        }
+        
+        // Count consecutive days backwards
+        while (daysChecked < maxDaysToCheck) {
+            const checkDateStr = checkDate.toDateString();
+            const steps = stepsByDate[checkDateStr];
+            
+            // If this date has any steps (activity), increment streak
+            if (steps && steps >= minStepsForStreak) {
+                streak++;
+                // Move to previous day
+                checkDate.setDate(checkDate.getDate() - 1);
+                daysChecked++;
+            } else {
+                // No more consecutive days with activity
+                break;
+            }
+        }
+        
+        return streak;
+    }
 
- getUserRank(user) {
- const sorted = [...this.participants].sort((a, b) => 
- (b.totalSteps || 0) - (a.totalSteps || 0)
- );
- return sorted.findIndex(p => p.name === user.name) + 1;
- }
+    getUserRank(user) {
+        const sorted = [...this.participants].sort((a, b) => 
+            (b.totalSteps || 0) - (a.totalSteps || 0)
+        );
+        return sorted.findIndex(p => p.name === user.name) + 1;
+    }
 
  getChallengeDayDate(dayNum) {
  const { startDate } = this.getChallengeBounds();
@@ -4339,12 +4345,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const active = document.querySelector('.filter-btn.active, .day-filter-btn.active');
  filter = (active && active.dataset.filter) || 'total';
  }
- const list = document.getElementById('leaderboardList');
- if (!list) return; // Element doesn't exist on admin page
- list.innerHTML = '';
+        const list = document.getElementById('leaderboardList');
+        if (!list) return; // Element doesn't exist on admin page
+        list.innerHTML = '';
  this.updateLeaderboardSubtitle(filter);
 
- let sorted = [];
+        let sorted = [];
  const dayMatch = String(filter).match(/^day-(\d+)$/);
 
  if (dayMatch) {
@@ -4374,131 +4380,131 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  return;
  }
 
- if (filter === 'total') {
- sorted = [...this.participants].sort((a, b) => 
- (b.totalSteps || 0) - (a.totalSteps || 0)
- );
- } else if (filter === 'today') {
- const today = new Date().toDateString();
- sorted = [...this.participants]
- .map(p => ({
- ...p,
- todaySteps: p.dailySteps[today] || 0
- }))
- .sort((a, b) => b.todaySteps - a.todaySteps);
- } else if (filter === 'avg') {
- sorted = [...this.participants]
- .map(p => {
- const days = Object.keys(p.dailySteps || {}).length || 1;
- return {
- ...p,
- avgSteps: (p.totalSteps || 0) / days
- };
- })
- .sort((a, b) => b.avgSteps - a.avgSteps);
- }
+        if (filter === 'total') {
+            sorted = [...this.participants].sort((a, b) => 
+                (b.totalSteps || 0) - (a.totalSteps || 0)
+            );
+        } else if (filter === 'today') {
+            const today = new Date().toDateString();
+            sorted = [...this.participants]
+                .map(p => ({
+                    ...p,
+                    todaySteps: p.dailySteps[today] || 0
+                }))
+                .sort((a, b) => b.todaySteps - a.todaySteps);
+        } else if (filter === 'avg') {
+            sorted = [...this.participants]
+                .map(p => {
+                    const days = Object.keys(p.dailySteps || {}).length || 1;
+                    return {
+                        ...p,
+                        avgSteps: (p.totalSteps || 0) / days
+                    };
+                })
+                .sort((a, b) => b.avgSteps - a.avgSteps);
+        }
 
- if (sorted.length === 0) {
- list.innerHTML = '<div class="leaderboard-item"><div class="rank">-</div><div class="name">No participants yet</div><div class="steps">0 steps</div></div>';
- return;
- }
+        if (sorted.length === 0) {
+            list.innerHTML = '<div class="leaderboard-item"><div class="rank">-</div><div class="name">No participants yet</div><div class="steps">0 steps</div></div>';
+            return;
+        }
 
- sorted.forEach((participant, index) => {
- const item = document.createElement('div');
- item.className = 'leaderboard-item';
+        sorted.forEach((participant, index) => {
+            const item = document.createElement('div');
+            item.className = 'leaderboard-item';
 
- let stepsDisplay = '';
- if (filter === 'total') {
- stepsDisplay = `${(participant.totalSteps || 0).toLocaleString()} steps`;
- } else if (filter === 'today') {
- stepsDisplay = `${(participant.todaySteps || 0).toLocaleString()} steps`;
- } else if (filter === 'avg') {
- stepsDisplay = `${Math.round(participant.avgSteps || 0).toLocaleString()} avg`;
- }
+            let stepsDisplay = '';
+            if (filter === 'total') {
+                stepsDisplay = `${(participant.totalSteps || 0).toLocaleString()} steps`;
+            } else if (filter === 'today') {
+                stepsDisplay = `${(participant.todaySteps || 0).toLocaleString()} steps`;
+            } else if (filter === 'avg') {
+                stepsDisplay = `${Math.round(participant.avgSteps || 0).toLocaleString()} avg`;
+            }
 
- item.innerHTML = `
- <div class="rank">${index + 1}</div>
+            item.innerHTML = `
+                <div class="rank">${index + 1}</div>
  <div class="name">${this.escapeHtml(participant.name)}${participant.department ? ` (${this.escapeHtml(participant.department)})` : ''}</div>
- <div class="steps">${stepsDisplay}</div>
- `;
+                <div class="steps">${stepsDisplay}</div>
+            `;
 
- list.appendChild(item);
- });
- }
+            list.appendChild(item);
+        });
+    }
 
- updateActivities() {
- const list = document.getElementById('activityList');
- list.innerHTML = '';
+    updateActivities() {
+        const list = document.getElementById('activityList');
+        list.innerHTML = '';
 
- if (!this.currentUser.activities || this.currentUser.activities.length === 0) {
+        if (!this.currentUser.activities || this.currentUser.activities.length === 0) {
  list.innerHTML = '<p class="no-activity">No activity yet. Start walking! -</p>';
- return;
- }
+            return;
+        }
 
- this.currentUser.activities.slice(0, 10).forEach(activity => {
- const item = document.createElement('div');
- item.className = 'activity-item';
- 
- const date = new Date(activity.date);
- const timeStr = date.toLocaleString('en-US', {
- month: 'short',
- day: 'numeric',
- hour: '2-digit',
- minute: '2-digit'
- });
+        this.currentUser.activities.slice(0, 10).forEach(activity => {
+            const item = document.createElement('div');
+            item.className = 'activity-item';
+            
+            const date = new Date(activity.date);
+            const timeStr = date.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
 
- item.innerHTML = `
+            item.innerHTML = `
  <div>${this.escapeHtml(activity.message || '')}</div>
- <div class="activity-time">${timeStr}</div>
- `;
+                <div class="activity-time">${timeStr}</div>
+            `;
 
- list.appendChild(item);
- });
- }
+            list.appendChild(item);
+        });
+    }
 
- logout() {
+    logout() {
  if (this.stepCounter.isRunning) {
  this.stopStepCounter();
  } else {
  this.clearActivitySession();
  }
- if (this.firebaseEnabled && this.auth) {
- this.auth.signOut().catch((error) => {
- console.warn('Firebase sign out failed:', error);
- });
- }
- this.currentUser = null;
- localStorage.removeItem('currentUser');
- document.getElementById('loginCard').style.display = 'block';
- document.getElementById('dashboardCard').style.display = 'none';
- document.getElementById('loginForm').reset();
- }
+        if (this.firebaseEnabled && this.auth) {
+            this.auth.signOut().catch((error) => {
+                console.warn('Firebase sign out failed:', error);
+            });
+        }
+        this.currentUser = null;
+        localStorage.removeItem('currentUser');
+        document.getElementById('loginCard').style.display = 'block';
+        document.getElementById('dashboardCard').style.display = 'none';
+        document.getElementById('loginForm').reset();
+    }
 
- async handleFirebaseLogin(identifier, password) {
- try {
- let email = identifier;
- let participant = null;
+    async handleFirebaseLogin(identifier, password) {
+        try {
+            let email = identifier;
+            let participant = null;
 
- if (!this.isEmail(identifier)) {
- participant = await this.lookupFirebaseParticipant(identifier);
- if (!participant || !participant.email) {
+            if (!this.isEmail(identifier)) {
+                participant = await this.lookupFirebaseParticipant(identifier);
+                if (!participant || !participant.email) {
  // Fall back: allow email login path only when identifier is email
  alert('No account found for that username, email, or Employee ID.\n\nIf your challenge data was reset, login with your email address.');
- document.getElementById('loginUsername').focus();
- return;
- }
- email = participant.email;
- }
+                    document.getElementById('loginUsername').focus();
+                    return;
+                }
+                email = participant.email;
+            }
 
- const credential = await this.auth.signInWithEmailAndPassword(email, password);
+            const credential = await this.auth.signInWithEmailAndPassword(email, password);
  if (!this.isCorporateEmail(credential.user.email || email)) {
  await this.auth.signOut();
  alert('Only CSG corporate email accounts can use this challenge.');
  return;
  }
  let profile = participant && participant.uid === credential.user.uid && this.isCurrentSeasonParticipant(participant)
- ? participant
- : await this.loadCurrentUserFromFirebase(credential.user.uid);
+                ? participant
+                : await this.loadCurrentUserFromFirebase(credential.user.uid);
 
  // Auth works but season profile missing/cleared: recreate a fresh challenge profile
  if (!profile) {
@@ -4515,22 +4521,22 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.currentUser = this.stripSecretsFromParticipant(profile);
  localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
 
- document.getElementById('loginForm').reset();
- this.showDashboard();
- this.updateLeaderboard();
- } catch (error) {
+            document.getElementById('loginForm').reset();
+            this.showDashboard();
+            this.updateLeaderboard();
+        } catch (error) {
  if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential' || error.code === 'auth/invalid-login-credentials') {
- alert('Invalid username or password!');
- document.getElementById('loginPassword').focus();
- } else if (error.code === 'auth/user-not-found') {
- alert('No account found for that username, email, or Employee ID.');
- document.getElementById('loginUsername').focus();
- } else {
- console.error('Firebase login error:', error);
- alert('Login failed. Please try again.');
- }
- }
- }
+                alert('Invalid username or password!');
+                document.getElementById('loginPassword').focus();
+            } else if (error.code === 'auth/user-not-found') {
+                alert('No account found for that username, email, or Employee ID.');
+                document.getElementById('loginUsername').focus();
+            } else {
+                console.error('Firebase login error:', error);
+                alert('Login failed. Please try again.');
+            }
+        }
+    }
 
  /**
  * When Auth login succeeds but challenge data was cleared / old season,
@@ -4538,8 +4544,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  */
  async createFreshSeasonProfileFromAuth(authUser, email) {
  if (!this.firebaseEnabled || !this.db || !authUser) {
- return null;
- }
+            return null;
+        }
 
  const uid = authUser.uid;
  let prior = null;
@@ -4620,38 +4626,41 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const byEmail = pickCurrent(emailSnap);
  if (byEmail) return byEmail;
 
- return null;
- }
+        return null;
+    }
 
- async isFirebaseFieldTaken(fieldName, value) {
- if (!this.firebaseEnabled || !this.db) {
- return false;
- }
- try {
- const snap = await this.participantsCol()
- .where(fieldName, '==', value)
- .where('season', '==', this.dataSeason)
- .limit(1)
- .get();
- return !snap.empty;
- } catch (error) {
- // Fallback if composite index is missing: scan season-filtered cache/docs
- console.warn('Season field query failed, falling back:', error.message || error);
- const snap = await this.participantsCol().where(fieldName, '==', value).limit(25).get();
- return snap.docs.some((docSnap) => docSnap.data().season === this.dataSeason);
- }
- }
+    async isFirebaseFieldTaken(fieldName, value) {
+        if (!this.firebaseEnabled || !this.db) {
+            return false;
+        }
+        // Pre-registration callers are signed out; Firestore rules require corporate auth to read.
+        // Skip blocking checks until after Auth signup — email uniqueness is enforced by Firebase Auth.
+        if (!this.auth || !this.auth.currentUser) {
+            return false;
+        }
+        try {
+            const snap = await this.participantsCol()
+                .where(fieldName, '==', value)
+                .where('season', '==', this.dataSeason)
+                .limit(1)
+                .get();
+            return !snap.empty;
+        } catch (error) {
+            console.warn('Duplicate check skipped:', error.message || error);
+            return false;
+        }
+    }
 
- async loadCurrentUserFromFirebase(uid) {
- if (!this.firebaseEnabled || !this.db) {
- return null;
- }
- try {
+    async loadCurrentUserFromFirebase(uid) {
+        if (!this.firebaseEnabled || !this.db) {
+            return null;
+        }
+        try {
  const doc = await this.participantsCol().doc(uid).get();
- if (!doc.exists) {
- return null;
- }
- const participant = doc.data();
+            if (!doc.exists) {
+                return null;
+            }
+            const participant = doc.data();
  // Old-season profiles are treated as cleared
  if (!this.isCurrentSeasonParticipant(participant)) {
  return null;
@@ -4659,48 +4668,48 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.currentUser = this.stripSecretsFromParticipant(participant);
  localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
  return this.currentUser;
- } catch (error) {
- console.error('Failed to load user profile from Firebase:', error);
- return null;
- }
- }
+        } catch (error) {
+            console.error('Failed to load user profile from Firebase:', error);
+            return null;
+        }
+    }
 
- async syncParticipantsFromFirebase() {
- if (!this.firebaseEnabled || !this.db) {
- return;
- }
- try {
+    async syncParticipantsFromFirebase() {
+        if (!this.firebaseEnabled || !this.db) {
+            return;
+        }
+        try {
  const snapshot = await this.participantsCol().get();
  this.participants = this.filterCurrentSeasonParticipants(
  snapshot.docs.map((doc) => this.stripSecretsFromParticipant(doc.data()))
  );
- this.saveParticipantsCache();
- if (!window.location.pathname.includes('admin.html')) {
- this.updateLeaderboard();
- }
- } catch (error) {
- console.warn('Failed to sync participants from Firebase:', error);
- }
- }
+            this.saveParticipantsCache();
+            if (!window.location.pathname.includes('admin.html')) {
+                this.updateLeaderboard();
+            }
+        } catch (error) {
+            console.warn('Failed to sync participants from Firebase:', error);
+        }
+    }
 
- async syncStepEntriesFromFirebase() {
- if (!this.firebaseEnabled || !this.db) {
- return;
- }
- try {
+    async syncStepEntriesFromFirebase() {
+        if (!this.firebaseEnabled || !this.db) {
+            return;
+        }
+        try {
  const snapshot = await this.stepEntriesCol().get();
  this.stepEntries = this.filterCurrentSeasonEntries(snapshot.docs.map(doc => doc.data()));
- this.saveStepEntries();
- } catch (error) {
- console.warn('Failed to sync step entries from Firebase:', error);
- }
- }
+            this.saveStepEntries();
+        } catch (error) {
+            console.warn('Failed to sync step entries from Firebase:', error);
+        }
+    }
 
- async upsertStepEntryInFirebase(entry) {
- if (!this.firebaseEnabled || !this.db || !entry || !entry.id) {
- return;
- }
- try {
+    async upsertStepEntryInFirebase(entry) {
+        if (!this.firebaseEnabled || !this.db || !entry || !entry.id) {
+            return;
+        }
+        try {
  const payload = { ...entry };
  delete payload.screenshot;
  delete payload.bodyWeightKg;
@@ -4712,215 +4721,215 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  payload.userUid = this.auth.currentUser.uid;
  }
  await this.stepEntriesCol().doc(entry.id).set(payload, { merge: true });
- } catch (error) {
- console.warn('Failed to upsert step entry in Firebase:', error);
- }
- }
+        } catch (error) {
+            console.warn('Failed to upsert step entry in Firebase:', error);
+        }
+    }
 
- async deleteStepEntryFromFirebase(entryId) {
- if (!this.firebaseEnabled || !this.db || !entryId) {
- return;
- }
- try {
+    async deleteStepEntryFromFirebase(entryId) {
+        if (!this.firebaseEnabled || !this.db || !entryId) {
+            return;
+        }
+        try {
  await this.stepEntriesCol().doc(entryId).delete();
- } catch (error) {
- console.warn('Failed to delete step entry from Firebase:', error);
- }
- }
+        } catch (error) {
+            console.warn('Failed to delete step entry from Firebase:', error);
+        }
+    }
 
- async syncParticipantToFirebase(participant) {
- if (!this.firebaseEnabled || !this.db || !participant || !participant.uid) {
- return;
- }
- try {
+    async syncParticipantToFirebase(participant) {
+        if (!this.firebaseEnabled || !this.db || !participant || !participant.uid) {
+            return;
+        }
+        try {
  await this.participantsCol().doc(participant.uid).set(participant, { merge: true });
- } catch (error) {
- console.warn('Failed to sync participant to Firebase:', error);
- }
- }
+        } catch (error) {
+            console.warn('Failed to sync participant to Firebase:', error);
+        }
+    }
 
- async migrateLocalUsersToFirebase() {
+    async migrateLocalUsersToFirebase() {
  if (!this.requireAdmin()) {
  return;
  }
- if (!this.firebaseEnabled || !this.auth || !this.db) {
- alert('Firebase is not configured. Please update firebase-config.js first.');
- return;
- }
+        if (!this.firebaseEnabled || !this.auth || !this.db) {
+            alert('Firebase is not configured. Please update firebase-config.js first.');
+            return;
+        }
 
- const localUsers = this.getLegacyParticipantsForMigration();
- const localStepEntries = this.getLegacyStepEntriesForMigration();
- if (!localUsers.length && !localStepEntries.length) {
- alert('No local users or step entries found to migrate.');
- return;
- }
+        const localUsers = this.getLegacyParticipantsForMigration();
+        const localStepEntries = this.getLegacyStepEntriesForMigration();
+        if (!localUsers.length && !localStepEntries.length) {
+            alert('No local users or step entries found to migrate.');
+            return;
+        }
 
- const confirmed = confirm(
- `This will migrate ${localUsers.length} local users and ${localStepEntries.length} step entries to Firebase.\n\n` +
- `New accounts will receive a password reset email.\n` +
- `Continue?`
- );
- if (!confirmed) {
- return;
- }
+        const confirmed = confirm(
+            `This will migrate ${localUsers.length} local users and ${localStepEntries.length} step entries to Firebase.\n\n` +
+            `New accounts will receive a password reset email.\n` +
+            `Continue?`
+        );
+        if (!confirmed) {
+            return;
+        }
 
- const results = {
- processed: 0,
- createdAuth: 0,
- createdDocs: 0,
- updatedDocs: 0,
- skippedMissingEmail: 0,
- skippedInvalidEmail: 0,
- skippedExistingAuthNoDoc: 0,
- stepEntriesMigrated: 0,
- stepEntriesSkipped: 0,
- failed: 0
- };
+        const results = {
+            processed: 0,
+            createdAuth: 0,
+            createdDocs: 0,
+            updatedDocs: 0,
+            skippedMissingEmail: 0,
+            skippedInvalidEmail: 0,
+            skippedExistingAuthNoDoc: 0,
+            stepEntriesMigrated: 0,
+            stepEntriesSkipped: 0,
+            failed: 0
+        };
 
- this.isMigratingUsers = true;
+        this.isMigratingUsers = true;
 
- try {
- for (const localUser of localUsers) {
- results.processed += 1;
- const email = localUser.email || localUser.emailId || '';
+        try {
+            for (const localUser of localUsers) {
+                results.processed += 1;
+                const email = localUser.email || localUser.emailId || '';
 
- if (!email) {
- results.skippedMissingEmail += 1;
- continue;
- }
+                if (!email) {
+                    results.skippedMissingEmail += 1;
+                    continue;
+                }
 
- if (!this.isEmail(email)) {
- results.skippedInvalidEmail += 1;
- continue;
- }
+                if (!this.isEmail(email)) {
+                    results.skippedInvalidEmail += 1;
+                    continue;
+                }
 
- let uid = null;
- let docRef = null;
- let docExists = false;
+                let uid = null;
+                let docRef = null;
+                let docExists = false;
 
- const emailLower = email.toLowerCase();
- const existingDocSnap = await this.db
+                const emailLower = email.toLowerCase();
+                const existingDocSnap = await this.db
  .collection(this.participantsCollection)
- .where('emailLower', '==', emailLower)
- .limit(1)
- .get();
+                    .where('emailLower', '==', emailLower)
+                    .limit(1)
+                    .get();
 
- if (!existingDocSnap.empty) {
- docRef = existingDocSnap.docs[0].ref;
- uid = existingDocSnap.docs[0].id;
- docExists = true;
- }
+                if (!existingDocSnap.empty) {
+                    docRef = existingDocSnap.docs[0].ref;
+                    uid = existingDocSnap.docs[0].id;
+                    docExists = true;
+                }
 
- let authExists = false;
- try {
- const methods = await this.auth.fetchSignInMethodsForEmail(email);
- authExists = Array.isArray(methods) && methods.length > 0;
- } catch (error) {
- console.warn('Failed to check auth for email:', email, error);
- }
+                let authExists = false;
+                try {
+                    const methods = await this.auth.fetchSignInMethodsForEmail(email);
+                    authExists = Array.isArray(methods) && methods.length > 0;
+                } catch (error) {
+                    console.warn('Failed to check auth for email:', email, error);
+                }
 
- if (!uid && !authExists) {
- try {
- const tempPassword = this.generateTempPassword();
- const credential = await this.auth.createUserWithEmailAndPassword(email, tempPassword);
- uid = credential.user.uid;
+                if (!uid && !authExists) {
+                    try {
+                        const tempPassword = this.generateTempPassword();
+                        const credential = await this.auth.createUserWithEmailAndPassword(email, tempPassword);
+                        uid = credential.user.uid;
  docRef = this.participantsCol().doc(uid);
- results.createdAuth += 1;
+                        results.createdAuth += 1;
 
- try {
- await this.auth.sendPasswordResetEmail(email);
- } catch (error) {
- console.warn('Failed to send reset email for', email, error);
- }
- } catch (error) {
- console.error('Failed to create Firebase user for', email, error);
- results.failed += 1;
- continue;
- }
- }
+                        try {
+                            await this.auth.sendPasswordResetEmail(email);
+                        } catch (error) {
+                            console.warn('Failed to send reset email for', email, error);
+                        }
+                    } catch (error) {
+                        console.error('Failed to create Firebase user for', email, error);
+                        results.failed += 1;
+                        continue;
+                    }
+                }
 
- if (!uid && authExists) {
- results.skippedExistingAuthNoDoc += 1;
- continue;
- }
+                if (!uid && authExists) {
+                    results.skippedExistingAuthNoDoc += 1;
+                    continue;
+                }
 
- const normalized = this.normalizeLocalParticipant(localUser, uid);
- if (!docRef) {
+                const normalized = this.normalizeLocalParticipant(localUser, uid);
+                if (!docRef) {
  docRef = this.participantsCol().doc(uid);
- }
+                }
 
- await docRef.set(normalized, { merge: true });
- if (docExists) {
- results.updatedDocs += 1;
- } else {
- results.createdDocs += 1;
- }
- }
+                await docRef.set(normalized, { merge: true });
+                if (docExists) {
+                    results.updatedDocs += 1;
+                } else {
+                    results.createdDocs += 1;
+                }
+            }
 
- for (const entry of localStepEntries) {
- if (!entry || !entry.id) {
- results.stepEntriesSkipped += 1;
- continue;
- }
+            for (const entry of localStepEntries) {
+                if (!entry || !entry.id) {
+                    results.stepEntriesSkipped += 1;
+                    continue;
+                }
 
- let userUid = null;
- if (entry.userUid) {
- userUid = entry.userUid;
- } else if (entry.userEmail && this.isEmail(entry.userEmail)) {
- const participant = await this.lookupFirebaseParticipant(entry.userEmail);
- if (participant && participant.uid) {
- userUid = participant.uid;
- }
- } else if (entry.userId) {
- const participant = await this.lookupFirebaseParticipant(entry.userId);
- if (participant && participant.uid) {
- userUid = participant.uid;
- }
- }
+                let userUid = null;
+                if (entry.userUid) {
+                    userUid = entry.userUid;
+                } else if (entry.userEmail && this.isEmail(entry.userEmail)) {
+                    const participant = await this.lookupFirebaseParticipant(entry.userEmail);
+                    if (participant && participant.uid) {
+                        userUid = participant.uid;
+                    }
+                } else if (entry.userId) {
+                    const participant = await this.lookupFirebaseParticipant(entry.userId);
+                    if (participant && participant.uid) {
+                        userUid = participant.uid;
+                    }
+                }
 
- const normalizedEntry = this.normalizeStepEntry(entry, userUid);
+                const normalizedEntry = this.normalizeStepEntry(entry, userUid);
  await this.stepEntriesCol().doc(normalizedEntry.id).set(normalizedEntry, { merge: true });
- results.stepEntriesMigrated += 1;
- }
- } finally {
- this.isMigratingUsers = false;
- try {
- await this.auth.signOut();
- } catch (error) {
- console.warn('Firebase sign out failed after migration:', error);
- }
- this.currentUser = null;
- localStorage.removeItem('currentUser');
- }
+                results.stepEntriesMigrated += 1;
+            }
+        } finally {
+            this.isMigratingUsers = false;
+            try {
+                await this.auth.signOut();
+            } catch (error) {
+                console.warn('Firebase sign out failed after migration:', error);
+            }
+            this.currentUser = null;
+            localStorage.removeItem('currentUser');
+        }
 
- await this.syncParticipantsFromFirebase();
- await this.syncStepEntriesFromFirebase();
+        await this.syncParticipantsFromFirebase();
+        await this.syncStepEntriesFromFirebase();
 
- alert(
- `Migration complete.\n\n` +
- `Processed: ${results.processed}\n` +
- `Auth created: ${results.createdAuth}\n` +
- `Profiles created: ${results.createdDocs}\n` +
- `Profiles updated: ${results.updatedDocs}\n` +
- `Skipped (missing email): ${results.skippedMissingEmail}\n` +
- `Skipped (invalid email): ${results.skippedInvalidEmail}\n` +
- `Skipped (auth exists, no profile): ${results.skippedExistingAuthNoDoc}\n` +
- `Step entries migrated: ${results.stepEntriesMigrated}\n` +
- `Step entries skipped: ${results.stepEntriesSkipped}\n` +
- `Failed: ${results.failed}`
- );
- }
+        alert(
+            `Migration complete.\n\n` +
+            `Processed: ${results.processed}\n` +
+            `Auth created: ${results.createdAuth}\n` +
+            `Profiles created: ${results.createdDocs}\n` +
+            `Profiles updated: ${results.updatedDocs}\n` +
+            `Skipped (missing email): ${results.skippedMissingEmail}\n` +
+            `Skipped (invalid email): ${results.skippedInvalidEmail}\n` +
+            `Skipped (auth exists, no profile): ${results.skippedExistingAuthNoDoc}\n` +
+            `Step entries migrated: ${results.stepEntriesMigrated}\n` +
+            `Step entries skipped: ${results.stepEntriesSkipped}\n` +
+            `Failed: ${results.failed}`
+        );
+    }
 
- saveParticipantsCache() {
- const storageKey = this.firebaseEnabled ? 'participants_cache' : 'participants';
+    saveParticipantsCache() {
+        const storageKey = this.firebaseEnabled ? 'participants_cache' : 'participants';
  const sanitized = (this.participants || []).map((p) => this.stripSecretsFromParticipant(p));
  this.participants = sanitized;
  localStorage.setItem(storageKey, JSON.stringify(sanitized));
- }
+    }
 
- loadParticipants() {
- const storageKey = this.firebaseEnabled ? 'participants_cache' : 'participants';
- const saved = localStorage.getItem(storageKey);
+    loadParticipants() {
+        const storageKey = this.firebaseEnabled ? 'participants_cache' : 'participants';
+        const saved = localStorage.getItem(storageKey);
  if (!saved) {
  return [];
  }
@@ -4934,64 +4943,64 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  console.warn('Failed to parse participants cache:', error);
  return [];
  }
- }
+    }
 
- // Step Counter Functions
- showStepCounterPanel() {
- // This function is kept for backward compatibility but now we use tabs
- this.switchInputMethod('counter');
- }
+    // Step Counter Functions
+    showStepCounterPanel() {
+        // This function is kept for backward compatibility but now we use tabs
+        this.switchInputMethod('counter');
+    }
 
- hideStepCounterPanel() {
- // This function is kept for backward compatibility
- // When switching away from counter tab, stop if running
- if (this.stepCounter.isRunning) {
- this.stopStepCounter();
- }
- }
+    hideStepCounterPanel() {
+        // This function is kept for backward compatibility
+        // When switching away from counter tab, stop if running
+        if (this.stepCounter.isRunning) {
+            this.stopStepCounter();
+        }
+    }
 
- async requestMotionPermission() {
- // Request device motion permission (iOS 13+)
- if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
- try {
- const permission = await DeviceMotionEvent.requestPermission();
- this.stepCounter.permissionGranted = permission === 'granted';
- if (!this.stepCounter.permissionGranted) {
- this.updateCounterStatus('Permission denied. Please enable motion access in settings.');
- }
- } catch (error) {
- console.error('Error requesting motion permission:', error);
- this.updateCounterStatus('Unable to access motion sensors.');
- }
- } else {
- // Android and older iOS - permission not required
- this.stepCounter.permissionGranted = true;
- }
- }
+    async requestMotionPermission() {
+        // Request device motion permission (iOS 13+)
+        if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+            try {
+                const permission = await DeviceMotionEvent.requestPermission();
+                this.stepCounter.permissionGranted = permission === 'granted';
+                if (!this.stepCounter.permissionGranted) {
+                    this.updateCounterStatus('Permission denied. Please enable motion access in settings.');
+                }
+            } catch (error) {
+                console.error('Error requesting motion permission:', error);
+                this.updateCounterStatus('Unable to access motion sensors.');
+            }
+        } else {
+            // Android and older iOS - permission not required
+            this.stepCounter.permissionGranted = true;
+        }
+    }
 
- startStepCounter() {
- if (!this.stepCounter.permissionGranted && typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
- this.requestMotionPermission().then(() => {
- if (this.stepCounter.permissionGranted) {
- this.initializeStepCounter();
- }
- });
- return;
- }
+    startStepCounter() {
+        if (!this.stepCounter.permissionGranted && typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+            this.requestMotionPermission().then(() => {
+                if (this.stepCounter.permissionGranted) {
+                    this.initializeStepCounter();
+                }
+            });
+            return;
+        }
 
- this.initializeStepCounter();
- }
+        this.initializeStepCounter();
+    }
 
- initializeStepCounter() {
- if (this.stepCounter.isRunning) return;
+    initializeStepCounter() {
+        if (this.stepCounter.isRunning) return;
 
  const mode = this.getTrackingMode();
  this.stepCounter.trackingMode = mode;
- this.stepCounter.isRunning = true;
- this.stepCounter.startTime = Date.now();
- this.stepCounter.lastAcceleration = { x: 0, y: 0, z: 0 };
- this.stepCounter.stepHistory = [];
- this.stepCounter.accelerationHistory = [];
+        this.stepCounter.isRunning = true;
+        this.stepCounter.startTime = Date.now();
+        this.stepCounter.lastAcceleration = { x: 0, y: 0, z: 0 };
+        this.stepCounter.stepHistory = [];
+        this.stepCounter.accelerationHistory = [];
  this.stepCounter.distanceKm = 0;
  this.stepCounter.path = [];
  this.stepCounter.lastPosition = null;
@@ -5167,8 +5176,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const creditSec = Math.min(dtSec, 2 * 3600);
  if (creditSec < 2) {
  this.stepCounter.lastTreadmillTickAt = now;
- return;
- }
+            return;
+        }
  const speed = this.getTreadmillSpeedKmh();
  this.stepCounter.treadmillDistanceKm += (speed / 3600) * creditSec;
  this.stepCounter.lastTreadmillTickAt = now;
@@ -5179,26 +5188,26 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  bindMotionListener() {
  if (typeof DeviceMotionEvent === 'undefined') return;
  if (!this.boundHandleDeviceMotion) {
- this.boundHandleDeviceMotion = this.handleDeviceMotion.bind(this);
+        this.boundHandleDeviceMotion = this.handleDeviceMotion.bind(this);
  }
  window.removeEventListener('devicemotion', this.boundHandleDeviceMotion);
- window.addEventListener('devicemotion', this.boundHandleDeviceMotion);
+        window.addEventListener('devicemotion', this.boundHandleDeviceMotion);
  }
 
  applyRunningActivityUi() {
- const startBtn = document.getElementById('startCounterBtn');
- const stopBtn = document.getElementById('stopCounterBtn');
- const saveBtn = document.getElementById('saveCounterStepsBtn');
- const timerEl = document.getElementById('counterTimer');
- const pulseEl = document.getElementById('counterPulse');
+        const startBtn = document.getElementById('startCounterBtn');
+        const stopBtn = document.getElementById('stopCounterBtn');
+        const saveBtn = document.getElementById('saveCounterStepsBtn');
+        const timerEl = document.getElementById('counterTimer');
+        const pulseEl = document.getElementById('counterPulse');
  const valueEl = document.getElementById('liveKmCount');
-
- if (startBtn) startBtn.style.display = 'none';
- if (stopBtn) stopBtn.style.display = 'inline-block';
- if (saveBtn) saveBtn.style.display = 'none';
- if (timerEl) timerEl.style.display = 'flex';
- if (pulseEl) pulseEl.classList.add('active');
- if (valueEl) valueEl.classList.add('active');
+        
+        if (startBtn) startBtn.style.display = 'none';
+        if (stopBtn) stopBtn.style.display = 'inline-block';
+        if (saveBtn) saveBtn.style.display = 'none';
+        if (timerEl) timerEl.style.display = 'flex';
+        if (pulseEl) pulseEl.classList.add('active');
+        if (valueEl) valueEl.classList.add('active');
  }
 
  getActivitySessionUserKey() {
@@ -5373,19 +5382,19 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (hintMessage) {
  this.updateCounterHint(hintMessage);
  }
- }
+    }
 
- handleDeviceMotion(event) {
- if (!this.stepCounter.isRunning) return;
+    handleDeviceMotion(event) {
+        if (!this.stepCounter.isRunning) return;
 
- const acceleration = event.accelerationIncludingGravity || event.acceleration;
- if (!acceleration) return;
+        const acceleration = event.accelerationIncludingGravity || event.acceleration;
+        if (!acceleration) return;
 
- const currentAccel = {
- x: acceleration.x || 0,
- y: acceleration.y || 0,
- z: acceleration.z || 0
- };
+        const currentAccel = {
+            x: acceleration.x || 0,
+            y: acceleration.y || 0,
+            z: acceleration.z || 0
+        };
 
  // Absolute magnitude peak detection is more reliable than delta-only while walking
  const mag = Math.sqrt(
@@ -5397,23 +5406,23 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const deltaMag = Math.abs(mag - lastMag);
  const deltaZ = Math.abs(currentAccel.z - (this.stepCounter.lastAcceleration.z || 0));
 
- this.stepCounter.accelerationHistory.push({
+        this.stepCounter.accelerationHistory.push({
  magnitude: deltaMag,
  absMag: mag,
  deltaZ,
- timestamp: Date.now()
- });
+            timestamp: Date.now()
+        });
  if (this.stepCounter.accelerationHistory.length > 25) {
- this.stepCounter.accelerationHistory.shift();
- }
+            this.stepCounter.accelerationHistory.shift();
+        }
 
  const peakThreshold = this.stepCounter.trackingMode === 'treadmill' ? 10.8 : 11.2;
  const valleyThreshold = this.stepCounter.trackingMode === 'treadmill' ? 9.4 : 9.6;
- const now = Date.now();
+            const now = Date.now();
  const minStepGapMs = this.stepCounter.trackingMode === 'treadmill' ? 280 : 320;
- const timeSinceLastStep = this.stepCounter.stepHistory.length > 0
- ? now - this.stepCounter.stepHistory[this.stepCounter.stepHistory.length - 1]
- : 1000;
+            const timeSinceLastStep = this.stepCounter.stepHistory.length > 0 
+                ? now - this.stepCounter.stepHistory[this.stepCounter.stepHistory.length - 1]
+                : 1000;
 
  // Arm on valley, fire step on rising peak (classic step algorithm)
  if (mag < valleyThreshold) {
@@ -5424,28 +5433,28 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const deltaHit = deltaMag > this.stepCounter.threshold && deltaZ > this.stepCounter.minVerticalChange && timeSinceLastStep > minStepGapMs;
 
  if (peakHit || deltaHit) {
- this.stepCounter.stepCount++;
- this.stepCounter.stepHistory.push(now);
+                this.stepCounter.stepCount++;
+                this.stepCounter.stepHistory.push(now);
  this.stepCounter.stepPeakArmed = false;
  if (this.stepCounter.stepHistory.length > 12) {
- this.stepCounter.stepHistory.shift();
- }
- this.updateStepCounterDisplay();
- this.animateStepCounter();
+                    this.stepCounter.stepHistory.shift();
+                }
+                this.updateStepCounterDisplay();
+                this.animateStepCounter();
  this.persistActivitySession(false);
- }
+        }
 
  this.stepCounter.lastAccelMagnitude = mag;
- this.stepCounter.lastAcceleration = currentAccel;
- }
+        this.stepCounter.lastAcceleration = currentAccel;
+    }
 
- stopStepCounter() {
- if (!this.stepCounter.isRunning) return;
+    stopStepCounter() {
+        if (!this.stepCounter.isRunning) return;
 
- this.stepCounter.isRunning = false;
- if (this.boundHandleDeviceMotion) {
- window.removeEventListener('devicemotion', this.boundHandleDeviceMotion);
- }
+        this.stepCounter.isRunning = false;
+        if (this.boundHandleDeviceMotion) {
+            window.removeEventListener('devicemotion', this.boundHandleDeviceMotion);
+        }
  this.stopGpsTracking();
  this.stopBackgroundGpsPoll();
  this.stopWakeLockWatchdog();
@@ -5454,40 +5463,40 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.stopHtmlAudioKeepAlive();
  this.stopKeepAwakeFallback();
  this.notifyServiceWorkerTracking(false);
- this.stopTimer();
+        this.stopTimer();
  this.clearActivitySession();
  if (window.WowNative && window.WowNative.isNative) {
  window.WowNative.stopPedometer();
  }
 
- const startBtn = document.getElementById('startCounterBtn');
- const stopBtn = document.getElementById('stopCounterBtn');
- const saveBtn = document.getElementById('saveCounterStepsBtn');
- const pulseEl = document.getElementById('counterPulse');
+        const startBtn = document.getElementById('startCounterBtn');
+        const stopBtn = document.getElementById('stopCounterBtn');
+        const saveBtn = document.getElementById('saveCounterStepsBtn');
+        const pulseEl = document.getElementById('counterPulse');
  const valueEl = document.getElementById('liveKmCount');
- 
- if (startBtn) startBtn.style.display = 'inline-block';
- if (stopBtn) stopBtn.style.display = 'none';
- if (pulseEl) pulseEl.classList.remove('active');
- if (valueEl) valueEl.classList.remove('active');
- 
+        
+        if (startBtn) startBtn.style.display = 'inline-block';
+        if (stopBtn) stopBtn.style.display = 'none';
+        if (pulseEl) pulseEl.classList.remove('active');
+        if (valueEl) valueEl.classList.remove('active');
+        
  const distance = this.getTrackedDistanceKm();
  if (distance > 0 || this.stepCounter.stepCount > 0) {
- if (saveBtn) saveBtn.style.display = 'block';
- }
+            if (saveBtn) saveBtn.style.display = 'block';
+        }
 
- const duration = Math.round((Date.now() - this.stepCounter.startTime) / 1000);
- const minutes = Math.floor(duration / 60);
- const seconds = duration % 60;
- const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
- 
+        const duration = Math.round((Date.now() - this.stepCounter.startTime) / 1000);
+        const minutes = Math.floor(duration / 60);
+        const seconds = duration % 60;
+        const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+        
  this.updateCounterStatus(`Stopped. Covered ${distance.toFixed(2)} KM in ${timeStr}.`);
  this.updateCounterHint('Save to update your challenge progress and leaderboard.');
  this.showCounterNotification(`Activity stopped: ${distance.toFixed(2)} KM`);
  this.updateStepCounterDisplay();
- }
+    }
 
- resetStepCounter() {
+    resetStepCounter() {
  this.stopGpsTracking();
  this.stopBackgroundGpsPoll();
  this.stopWakeLockWatchdog();
@@ -5500,10 +5509,10 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (window.WowNative && window.WowNative.isNative) {
  window.WowNative.stopPedometer();
  }
- this.stepCounter.stepCount = 0;
- this.stepCounter.stepHistory = [];
- this.stepCounter.accelerationHistory = [];
- this.stepCounter.startTime = null;
+        this.stepCounter.stepCount = 0;
+        this.stepCounter.stepHistory = [];
+        this.stepCounter.accelerationHistory = [];
+        this.stepCounter.startTime = null;
  this.stepCounter.distanceKm = 0;
  this.stepCounter.treadmillDistanceKm = 0;
  this.stepCounter.lastTreadmillTickAt = null;
@@ -5512,22 +5521,22 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.stepCounter.gpsReady = false;
  this.clearActivitySession();
  this.clearActivityMapTrack();
- this.updateStepCounterDisplay();
+        this.updateStepCounterDisplay();
  this.updateCounterStatus('Reset. Ready to track your next walk/run.');
  this.updateCounterHint('Start Activity to begin GPS map tracking.');
- 
+        
  const startBtn = document.getElementById('startCounterBtn');
  const stopBtn = document.getElementById('stopCounterBtn');
- const saveBtn = document.getElementById('saveCounterStepsBtn');
- const timerEl = document.getElementById('counterTimer');
- 
+        const saveBtn = document.getElementById('saveCounterStepsBtn');
+        const timerEl = document.getElementById('counterTimer');
+        
  if (startBtn) startBtn.style.display = 'inline-block';
  if (stopBtn) stopBtn.style.display = 'none';
- if (saveBtn) saveBtn.style.display = 'none';
- if (timerEl) timerEl.style.display = 'none';
- 
- const timerValue = document.getElementById('timerValue');
- if (timerValue) timerValue.textContent = '00:00';
+        if (saveBtn) saveBtn.style.display = 'none';
+        if (timerEl) timerEl.style.display = 'none';
+        
+        const timerValue = document.getElementById('timerValue');
+        if (timerValue) timerValue.textContent = '00:00';
  this.stopTimer();
  }
 
@@ -6237,9 +6246,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (this.activityPolyline && this.activityPolyline.getLatLngs().length > 1) {
  this.activityMap.fitBounds(this.activityPolyline.getBounds(), { padding: [24, 24] });
  }
- }
+    }
 
- updateStepCounterDisplay() {
+    updateStepCounterDisplay() {
  const distance = this.getTrackedDistanceKm();
  const calories = this.getSessionCalories();
  const kmEl = document.getElementById('liveKmCount');
@@ -6270,39 +6279,39 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  paceLabel.textContent = `${pace.toFixed(1)} min/KM`;
  } else if (paceLabel) {
  paceLabel.textContent = '--';
- }
- }
+        }
+    }
 
- animateStepCounter() {
+    animateStepCounter() {
  const display = document.getElementById('liveKmCount');
- if (display) {
- display.style.transform = 'scale(1.1)';
- setTimeout(() => {
- display.style.transform = 'scale(1)';
- }, 150);
- }
- }
+        if (display) {
+            display.style.transform = 'scale(1.1)';
+            setTimeout(() => {
+                display.style.transform = 'scale(1)';
+            }, 150);
+        }
+    }
 
- updateCounterStatus(message) {
- const status = document.getElementById('counterStatus');
- if (status) {
- status.textContent = message;
- }
- }
+    updateCounterStatus(message) {
+        const status = document.getElementById('counterStatus');
+        if (status) {
+            status.textContent = message;
+        }
+    }
 
- updateCounterHint(message) {
- const hint = document.getElementById('counterHint');
- if (hint) {
- hint.textContent = message;
- }
- }
+    updateCounterHint(message) {
+        const hint = document.getElementById('counterHint');
+        if (hint) {
+            hint.textContent = message;
+        }
+    }
 
- // Timer functions
+    // Timer functions
  startTimer(preserveElapsed = false) {
- if (this.timerInterval) {
- clearInterval(this.timerInterval);
- }
-
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+        }
+        
  if (!preserveElapsed || !this.stepCounter.startTime) {
  if (!this.stepCounter.startTime) {
  this.stepCounter.startTime = Date.now();
@@ -6310,16 +6319,16 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
  this.timerStartTime = this.stepCounter.startTime;
 
- this.timerInterval = setInterval(() => {
+        this.timerInterval = setInterval(() => {
  const elapsed = Math.floor((Date.now() - this.stepCounter.startTime) / 1000);
- const minutes = Math.floor(elapsed / 60);
- const seconds = elapsed % 60;
- const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
- 
- const timerValue = document.getElementById('timerValue');
- if (timerValue) {
- timerValue.textContent = timeStr;
- }
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+            const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            
+            const timerValue = document.getElementById('timerValue');
+            if (timerValue) {
+                timerValue.textContent = timeStr;
+            }
  this.accumulateTreadmillDistance();
  // While locked, sensors pause — keep steps aligned with KM from GPS/treadmill
  if (document.visibilityState !== 'visible') {
@@ -6330,23 +6339,23 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (elapsed > 0 && elapsed % 5 === 0) {
  this.persistActivitySession(false);
  }
- }, 1000);
- }
+        }, 1000);
+    }
 
- stopTimer() {
- if (this.timerInterval) {
- clearInterval(this.timerInterval);
- this.timerInterval = null;
- }
- }
+    stopTimer() {
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+            this.timerInterval = null;
+        }
+    }
 
- useCounterSteps() {
- // This function is disabled - users cannot use step counter steps in manual entry
- // They must save steps directly using "Save Steps & Update Leaderboard" button
- return;
- 
- // Disabled code below:
- // if (this.stepCounter.stepCount > 0) {
+    useCounterSteps() {
+        // This function is disabled - users cannot use step counter steps in manual entry
+        // They must save steps directly using "Save Steps & Update Leaderboard" button
+        return;
+        
+        // Disabled code below:
+        // if (this.stepCounter.stepCount > 0) {
  // // Switch to manual entry tab and populate the input
  // this.switchInputMethod('manual');
  // const stepsInput = document.getElementById('stepsInput');
@@ -6356,52 +6365,52 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  // this.updateScreenshotRequirement();
  // this.showCounterNotification(`Added ${this.stepCounter.stepCount.toLocaleString()} steps to manual entry form! Screenshot is optional for step counter entries.`);
  // // Don't reset counter - user might want to save directly
- // }
- }
+        // }
+    }
 
- updateScreenshotRequirement() {
- const stepsInput = document.getElementById('stepsInput');
- const screenshotRequired = document.getElementById('screenshotRequired');
- const screenshotHint = document.getElementById('screenshotHint');
- const manualScreenshot = document.getElementById('manualScreenshot');
- 
- if (!stepsInput || !screenshotRequired || !screenshotHint) return;
+    updateScreenshotRequirement() {
+        const stepsInput = document.getElementById('stepsInput');
+        const screenshotRequired = document.getElementById('screenshotRequired');
+        const screenshotHint = document.getElementById('screenshotHint');
+        const manualScreenshot = document.getElementById('manualScreenshot');
+        
+        if (!stepsInput || !screenshotRequired || !screenshotHint) return;
 
- const inputValue = parseInt(stepsInput.value);
- const isFromStepCounter = this.stepCounter.stepCount > 0 && inputValue === this.stepCounter.stepCount;
+        const inputValue = parseInt(stepsInput.value);
+        const isFromStepCounter = this.stepCounter.stepCount > 0 && inputValue === this.stepCounter.stepCount;
 
- if (isFromStepCounter) {
- // Step counter - screenshot optional
- screenshotRequired.style.display = 'none';
- screenshotRequired.textContent = '';
- screenshotHint.textContent = 'Optional for step counter entries';
- screenshotHint.style.color = '#666';
- if (manualScreenshot) {
- manualScreenshot.removeAttribute('required');
- }
- } else {
- // Manual entry - screenshot required
- screenshotRequired.style.display = 'inline';
- screenshotRequired.textContent = '*';
- screenshotHint.textContent = 'Required for manual entry validation';
- screenshotHint.style.color = '#333';
- if (manualScreenshot) {
- manualScreenshot.setAttribute('required', 'required');
- }
- }
- }
+        if (isFromStepCounter) {
+            // Step counter - screenshot optional
+            screenshotRequired.style.display = 'none';
+            screenshotRequired.textContent = '';
+            screenshotHint.textContent = 'Optional for step counter entries';
+            screenshotHint.style.color = '#666';
+            if (manualScreenshot) {
+                manualScreenshot.removeAttribute('required');
+            }
+        } else {
+            // Manual entry - screenshot required
+            screenshotRequired.style.display = 'inline';
+            screenshotRequired.textContent = '*';
+            screenshotHint.textContent = 'Required for manual entry validation';
+            screenshotHint.style.color = '#333';
+            if (manualScreenshot) {
+                manualScreenshot.setAttribute('required', 'required');
+            }
+        }
+    }
 
- async saveCounterStepsDirectly() {
- if (!this.currentUser) {
- alert('Please login first!');
- return;
- }
+    async saveCounterStepsDirectly() {
+        if (!this.currentUser) {
+            alert('Please login first!');
+            return;
+        }
 
  if (!this.canLogSteps()) {
  const { endDate } = this.getChallengeBounds();
  alert(`The challenge has ended. New step entries are no longer being accepted.\n\nEnded on ${this.formatDate(endDate)}.`);
- return;
- }
+            return;
+        }
 
  this.accumulateTreadmillDistance();
  const distanceKm = this.getTrackedDistanceKm();
@@ -6414,8 +6423,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  alert(mode === 'treadmill'
  ? 'No treadmill distance yet. Set speed, Start Activity, walk/run, then Stop and Save.'
  : 'No distance recorded yet. Start Activity, move with GPS on, then Stop and Save.');
- return;
- }
+            return;
+        }
 
  const durationSec = this.stepCounter.startTime
  ? Math.round((Date.now() - this.stepCounter.startTime) / 1000)
@@ -6434,11 +6443,11 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  async saveStepsWithScreenshot(steps, screenshotData, fromStepCounter = false, trackMeta = null) {
- const today = new Date().toDateString();
- const currentSteps = this.currentUser.dailySteps[today] || 0;
- this.currentUser.dailySteps[today] = currentSteps + steps;
- this.currentUser.totalSteps = (this.currentUser.totalSteps || 0) + steps;
- this.currentUser.lastActivity = new Date().toISOString();
+        const today = new Date().toDateString();
+        const currentSteps = this.currentUser.dailySteps[today] || 0;
+        this.currentUser.dailySteps[today] = currentSteps + steps;
+        this.currentUser.totalSteps = (this.currentUser.totalSteps || 0) + steps;
+        this.currentUser.lastActivity = new Date().toISOString();
 
  const distanceKm = trackMeta && typeof trackMeta.distanceKm === 'number'
  ? trackMeta.distanceKm
@@ -6485,30 +6494,30 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
  this.currentUser.dailyStats[today] = prevDay;
 
- const entryId = `ENTRY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const entryId = `ENTRY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
  const authUid = (this.auth && this.auth.currentUser && this.auth.currentUser.uid) || this.currentUser.uid || null;
  if (!authUid) {
  alert('You must be signed in with Firebase to save activity.');
  return;
  }
- const stepEntry = {
- id: entryId,
- userId: this.currentUser.id || this.currentUser.employeeId || 'unknown',
+        const stepEntry = {
+            id: entryId,
+            userId: this.currentUser.id || this.currentUser.employeeId || 'unknown',
  userUid: authUid,
- userName: this.currentUser.name || 'Unknown User',
- userEmail: this.currentUser.email || this.currentUser.emailId || 'No email',
- steps: steps,
+            userName: this.currentUser.name || 'Unknown User',
+            userEmail: this.currentUser.email || this.currentUser.emailId || 'No email',
+            steps: steps,
  distanceKm: Number(distanceKm.toFixed(3)),
  caloriesBurned,
  path: this.sanitizePathForCloud(trackMeta && Array.isArray(trackMeta.path) ? trackMeta.path : []),
  durationSec,
  screenshot: null,
- date: new Date().toISOString(),
+            date: new Date().toISOString(),
  status: fromStepCounter ? 'approved' : 'pending',
  validatedBy: fromStepCounter ? 'App GPS Counter' : null,
  validatedAt: fromStepCounter ? new Date().toISOString() : null,
- lastModifiedBy: null,
- lastModifiedAt: null,
+            lastModifiedBy: null,
+            lastModifiedAt: null,
  notes: fromStepCounter
  ? ((trackMeta && trackMeta.trackingMode === 'treadmill')
  ? `Treadmill activity: ${distanceKm.toFixed(2)} KM at ${trackMeta.treadmillSpeedKmh || '?'} km/h - ${caloriesBurned} kcal`
@@ -6520,267 +6529,267 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  trackingMode: trackMeta && trackMeta.trackingMode ? trackMeta.trackingMode : (fromStepCounter ? 'outdoor' : null),
  treadmillSpeedKmh: trackMeta && trackMeta.treadmillSpeedKmh ? trackMeta.treadmillSpeedKmh : null,
  season: this.dataSeason
- };
+        };
 
- // Ensure stepEntries is initialized
- if (!this.stepEntries || !Array.isArray(this.stepEntries)) {
- console.warn('stepEntries not initialized in saveStepsWithScreenshot, loading from localStorage...');
- this.stepEntries = this.loadStepEntries();
- }
- 
- this.stepEntries.unshift(stepEntry);
- 
- console.log('=== Entry Creation (saveStepsWithScreenshot) ===');
- console.log('Entry created:', stepEntry);
- console.log('Total entries before save:', this.stepEntries.length);
- 
- this.saveStepEntries();
- this.upsertStepEntryInFirebase(stepEntry);
- 
- // Verify save immediately
- const verify = this.loadStepEntries();
- console.log('Verification - Entries in localStorage after save:', verify.length);
- console.log('Verification - Latest entry ID:', verify.length > 0 ? verify[0].id : 'none');
- 
- if (verify.length === 0) {
- console.error('ERROR: Entry was not saved to localStorage! Attempting manual save...');
- // Try manual save
- try {
- const storageKey = this.firebaseEnabled ? 'stepEntries_cache' : 'stepEntries';
- localStorage.setItem(storageKey, JSON.stringify([stepEntry]));
- console.log('Manual save attempted');
- } catch (e) {
- console.error('Manual save also failed:', e);
- alert('CRITICAL: Entry could not be saved to localStorage! Please check browser settings.');
- }
- }
+        // Ensure stepEntries is initialized
+        if (!this.stepEntries || !Array.isArray(this.stepEntries)) {
+            console.warn('stepEntries not initialized in saveStepsWithScreenshot, loading from localStorage...');
+            this.stepEntries = this.loadStepEntries();
+        }
+        
+        this.stepEntries.unshift(stepEntry);
+        
+        console.log('=== Entry Creation (saveStepsWithScreenshot) ===');
+        console.log('Entry created:', stepEntry);
+        console.log('Total entries before save:', this.stepEntries.length);
+        
+        this.saveStepEntries();
+        this.upsertStepEntryInFirebase(stepEntry);
+        
+        // Verify save immediately
+        const verify = this.loadStepEntries();
+        console.log('Verification - Entries in localStorage after save:', verify.length);
+        console.log('Verification - Latest entry ID:', verify.length > 0 ? verify[0].id : 'none');
+        
+        if (verify.length === 0) {
+            console.error('ERROR: Entry was not saved to localStorage! Attempting manual save...');
+            // Try manual save
+            try {
+                const storageKey = this.firebaseEnabled ? 'stepEntries_cache' : 'stepEntries';
+                localStorage.setItem(storageKey, JSON.stringify([stepEntry]));
+                console.log('Manual save attempted');
+            } catch (e) {
+                console.error('Manual save also failed:', e);
+                alert('CRITICAL: Entry could not be saved to localStorage! Please check browser settings.');
+            }
+        }
 
  const modeLabel = trackMeta && trackMeta.trackingMode === 'treadmill' ? 'treadmill' : 'GPS';
- const activityMessage = fromStepCounter
+        const activityMessage = fromStepCounter 
  ? `Covered ${distanceKm.toFixed(2)} KM (${steps.toLocaleString()} steps) via ${modeLabel} - burned ${caloriesBurned} kcal`
  : `Added ${steps.toLocaleString()} steps - burned ${caloriesBurned} kcal`;
- 
- this.currentUser.activities.unshift({
- date: new Date().toISOString(),
- steps: steps,
+        
+        this.currentUser.activities.unshift({
+            date: new Date().toISOString(),
+            steps: steps,
  distanceKm: Number(distanceKm.toFixed(3)),
  caloriesBurned,
- message: activityMessage,
- entryId: entryId
- });
+            message: activityMessage,
+            entryId: entryId
+        });
 
- // Keep only last 20 activities
- if (this.currentUser.activities.length > 20) {
- this.currentUser.activities = this.currentUser.activities.slice(0, 20);
- }
+        // Keep only last 20 activities
+        if (this.currentUser.activities.length > 20) {
+            this.currentUser.activities = this.currentUser.activities.slice(0, 20);
+        }
 
- // Update streak
- this.currentUser.streak = this.calculateStreak(this.currentUser);
+        // Update streak
+        this.currentUser.streak = this.calculateStreak(this.currentUser);
 
- // Save
- const index = this.participants.findIndex(p => p.name === this.currentUser.name);
- if (index !== -1) {
- this.participants[index] = this.currentUser;
- }
+        // Save
+        const index = this.participants.findIndex(p => p.name === this.currentUser.name);
+        if (index !== -1) {
+            this.participants[index] = this.currentUser;
+        }
 
- localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
- this.saveParticipantsCache();
- this.syncParticipantToFirebase(this.currentUser);
+        localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
+        this.saveParticipantsCache();
+        this.syncParticipantToFirebase(this.currentUser);
 
- // Reset step counter
- this.resetStepCounter();
- this.stopTimer();
- 
- // Clear screenshot input if it was used
+        // Reset step counter
+        this.resetStepCounter();
+        this.stopTimer();
+        
+        // Clear screenshot input if it was used
  const manualShot = document.getElementById('manualScreenshot');
  const manualPreview = document.getElementById('manualImagePreview');
  const manualUpload = document.getElementById('manualUploadArea');
  if (manualShot) manualShot.value = '';
  if (manualPreview) manualPreview.style.display = 'none';
  if (manualUpload) manualUpload.style.display = 'block';
- 
- // Show success
+        
+        // Show success
  this.showCounterNotification(` ${distanceKm.toFixed(2)} KM - ${caloriesBurned} kcal saved!`);
- 
- // Update dashboard and leaderboard immediately
- this.updateDashboard();
- this.updateLeaderboard();
- 
- // Show success message
- setTimeout(() => {
+        
+        // Update dashboard and leaderboard immediately
+        this.updateDashboard();
+        this.updateLeaderboard();
+        
+        // Show success message
+        setTimeout(() => {
  alert(`Saved successfully!\n\n${distanceKm.toFixed(2)} KM covered (~${steps.toLocaleString()} steps)\nCalories burned: ~${caloriesBurned} kcal\n\nYour leaderboard has been updated.`);
- }, 500);
- }
+        }, 500);
+    }
 
- showCounterNotification(message) {
- // Create temporary notification
- const notification = document.createElement('div');
- notification.style.cssText = `
- position: fixed;
- bottom: 20px;
- left: 50%;
- transform: translateX(-50%);
- background: linear-gradient(135deg, #003366 0%, #001a33 100%);
- color: white;
- padding: 15px 25px;
- border-radius: 12px;
- box-shadow: 0 8px 30px rgba(0, 51, 102, 0.4);
- z-index: 1000;
- animation: slideUp 0.3s ease-out, fadeOut 0.3s ease-out 2.7s;
- font-weight: 600;
- font-size: 0.95rem;
- max-width: 90%;
- text-align: center;
- `;
- notification.textContent = message;
- document.body.appendChild(notification);
+    showCounterNotification(message) {
+        // Create temporary notification
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #003366 0%, #001a33 100%);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0, 51, 102, 0.4);
+            z-index: 1000;
+            animation: slideUp 0.3s ease-out, fadeOut 0.3s ease-out 2.7s;
+            font-weight: 600;
+            font-size: 0.95rem;
+            max-width: 90%;
+            text-align: center;
+        `;
+        notification.textContent = message;
+        document.body.appendChild(notification);
 
- setTimeout(() => {
- notification.remove();
- }, 3000);
- }
+        setTimeout(() => {
+            notification.remove();
+        }, 3000);
+    }
 
- // Bot Protection Functions
- generateCaptcha(type = 'registration') {
- const captcha = this.generateCaptchaValue();
- const questionEl = document.getElementById(type === 'registration' ? 'captchaQuestion' : 'resetCaptchaQuestion');
- const answerEl = document.getElementById(type === 'registration' ? 'captchaAnswer' : 'resetCaptchaAnswer');
- 
- if (questionEl) {
- questionEl.textContent = captcha.question;
- questionEl.dataset.answer = captcha.answer;
- }
- 
- if (answerEl) {
- answerEl.value = '';
- answerEl.focus();
- }
- 
- return captcha;
- }
+    // Bot Protection Functions
+    generateCaptcha(type = 'registration') {
+        const captcha = this.generateCaptchaValue();
+        const questionEl = document.getElementById(type === 'registration' ? 'captchaQuestion' : 'resetCaptchaQuestion');
+        const answerEl = document.getElementById(type === 'registration' ? 'captchaAnswer' : 'resetCaptchaAnswer');
+        
+        if (questionEl) {
+            questionEl.textContent = captcha.question;
+            questionEl.dataset.answer = captcha.answer;
+        }
+        
+        if (answerEl) {
+            answerEl.value = '';
+            answerEl.focus();
+        }
+        
+        return captcha;
+    }
 
- generateCaptchaValue() {
- // Generate simple math CAPTCHA
- const num1 = Math.floor(Math.random() * 10) + 1; // 1-10
- const num2 = Math.floor(Math.random() * 10) + 1; // 1-10
- const operations = ['+', '-', '*'];
- const operation = operations[Math.floor(Math.random() * operations.length)];
- 
- let answer;
- let question;
- 
- switch(operation) {
- case '+':
- answer = num1 + num2;
- question = `${num1} + ${num2} = ?`;
- break;
- case '-':
- // Ensure positive result
- const larger = Math.max(num1, num2);
- const smaller = Math.min(num1, num2);
- answer = larger - smaller;
- question = `${larger} - ${smaller} = ?`;
- break;
- case '*':
- // Use smaller numbers for multiplication
- const n1 = Math.floor(Math.random() * 5) + 1; // 1-5
- const n2 = Math.floor(Math.random() * 5) + 1; // 1-5
- answer = n1 * n2;
+    generateCaptchaValue() {
+        // Generate simple math CAPTCHA
+        const num1 = Math.floor(Math.random() * 10) + 1; // 1-10
+        const num2 = Math.floor(Math.random() * 10) + 1; // 1-10
+        const operations = ['+', '-', '*'];
+        const operation = operations[Math.floor(Math.random() * operations.length)];
+        
+        let answer;
+        let question;
+        
+        switch(operation) {
+            case '+':
+                answer = num1 + num2;
+                question = `${num1} + ${num2} = ?`;
+                break;
+            case '-':
+                // Ensure positive result
+                const larger = Math.max(num1, num2);
+                const smaller = Math.min(num1, num2);
+                answer = larger - smaller;
+                question = `${larger} - ${smaller} = ?`;
+                break;
+            case '*':
+                // Use smaller numbers for multiplication
+                const n1 = Math.floor(Math.random() * 5) + 1; // 1-5
+                const n2 = Math.floor(Math.random() * 5) + 1; // 1-5
+                answer = n1 * n2;
  question = `${n1} x ${n2} = ?`;
- break;
- }
- 
- return { question, answer };
- }
+                break;
+        }
+        
+        return { question, answer };
+    }
 
- verifyCaptcha(type = 'registration') {
- const questionEl = document.getElementById(type === 'registration' ? 'captchaQuestion' : 'resetCaptchaQuestion');
- const answerEl = document.getElementById(type === 'registration' ? 'captchaAnswer' : 'resetCaptchaAnswer');
- 
- if (!questionEl || !answerEl) {
- return false;
- }
- 
- const correctAnswer = parseInt(questionEl.dataset.answer);
- const userAnswer = parseInt(answerEl.value);
- 
- return !isNaN(userAnswer) && userAnswer === correctAnswer;
- }
+    verifyCaptcha(type = 'registration') {
+        const questionEl = document.getElementById(type === 'registration' ? 'captchaQuestion' : 'resetCaptchaQuestion');
+        const answerEl = document.getElementById(type === 'registration' ? 'captchaAnswer' : 'resetCaptchaAnswer');
+        
+        if (!questionEl || !answerEl) {
+            return false;
+        }
+        
+        const correctAnswer = parseInt(questionEl.dataset.answer);
+        const userAnswer = parseInt(answerEl.value);
+        
+        return !isNaN(userAnswer) && userAnswer === correctAnswer;
+    }
 
- refreshResetCaptcha() {
- const modal = document.querySelector('.email-modal-overlay');
- if (modal) {
- const captcha = this.generateCaptchaValue();
- const questionEl = document.getElementById('resetCaptchaQuestion');
- const answerEl = document.getElementById('resetCaptchaAnswer');
- 
- if (questionEl) {
- questionEl.textContent = captcha.question;
- modal.dataset.captchaAnswer = captcha.answer;
- }
- 
- if (answerEl) {
- answerEl.value = '';
- }
- }
- }
+    refreshResetCaptcha() {
+        const modal = document.querySelector('.email-modal-overlay');
+        if (modal) {
+            const captcha = this.generateCaptchaValue();
+            const questionEl = document.getElementById('resetCaptchaQuestion');
+            const answerEl = document.getElementById('resetCaptchaAnswer');
+            
+            if (questionEl) {
+                questionEl.textContent = captcha.question;
+                modal.dataset.captchaAnswer = captcha.answer;
+            }
+            
+            if (answerEl) {
+                answerEl.value = '';
+            }
+        }
+    }
 
- checkRateLimit(type) {
- const now = Date.now();
- const oneHourAgo = now - (60 * 60 * 1000);
- const oneDayAgo = now - (24 * 60 * 60 * 1000);
- 
- const attempts = type === 'registration' ? this.registrationAttempts : this.passwordResetAttempts;
- 
- // Filter attempts within time windows
- const attemptsLastHour = attempts.filter(attempt => attempt.timestamp > oneHourAgo);
- const attemptsLastDay = attempts.filter(attempt => attempt.timestamp > oneDayAgo);
- 
- // Check limits
- if (attemptsLastHour.length >= this.maxAttemptsPerHour) {
- const nextAttemptTime = new Date(attemptsLastHour[0].timestamp + (60 * 60 * 1000));
- console.warn(`Rate limit exceeded: ${attemptsLastHour.length} attempts in the last hour`);
- return false;
- }
- 
- if (attemptsLastDay.length >= this.maxAttemptsPerDay) {
- console.warn(`Rate limit exceeded: ${attemptsLastDay.length} attempts in the last day`);
- return false;
- }
- 
- return true;
- }
+    checkRateLimit(type) {
+        const now = Date.now();
+        const oneHourAgo = now - (60 * 60 * 1000);
+        const oneDayAgo = now - (24 * 60 * 60 * 1000);
+        
+        const attempts = type === 'registration' ? this.registrationAttempts : this.passwordResetAttempts;
+        
+        // Filter attempts within time windows
+        const attemptsLastHour = attempts.filter(attempt => attempt.timestamp > oneHourAgo);
+        const attemptsLastDay = attempts.filter(attempt => attempt.timestamp > oneDayAgo);
+        
+        // Check limits
+        if (attemptsLastHour.length >= this.maxAttemptsPerHour) {
+            const nextAttemptTime = new Date(attemptsLastHour[0].timestamp + (60 * 60 * 1000));
+            console.warn(`Rate limit exceeded: ${attemptsLastHour.length} attempts in the last hour`);
+            return false;
+        }
+        
+        if (attemptsLastDay.length >= this.maxAttemptsPerDay) {
+            console.warn(`Rate limit exceeded: ${attemptsLastDay.length} attempts in the last day`);
+            return false;
+        }
+        
+        return true;
+    }
 
- recordAttempt(type, success) {
- const attempts = type === 'registration' ? this.registrationAttempts : this.passwordResetAttempts;
- 
- attempts.push({
- timestamp: Date.now(),
- success: success
- });
- 
- // Keep only last 24 hours of attempts
- const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
- const filteredAttempts = attempts.filter(attempt => attempt.timestamp > oneDayAgo);
- 
- if (type === 'registration') {
- this.registrationAttempts = filteredAttempts;
- localStorage.setItem('registrationAttempts', JSON.stringify(this.registrationAttempts));
- } else {
- this.passwordResetAttempts = filteredAttempts;
- localStorage.setItem('passwordResetAttempts', JSON.stringify(this.passwordResetAttempts));
- }
- }
+    recordAttempt(type, success) {
+        const attempts = type === 'registration' ? this.registrationAttempts : this.passwordResetAttempts;
+        
+        attempts.push({
+            timestamp: Date.now(),
+            success: success
+        });
+        
+        // Keep only last 24 hours of attempts
+        const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+        const filteredAttempts = attempts.filter(attempt => attempt.timestamp > oneDayAgo);
+        
+        if (type === 'registration') {
+            this.registrationAttempts = filteredAttempts;
+            localStorage.setItem('registrationAttempts', JSON.stringify(this.registrationAttempts));
+        } else {
+            this.passwordResetAttempts = filteredAttempts;
+            localStorage.setItem('passwordResetAttempts', JSON.stringify(this.passwordResetAttempts));
+        }
+    }
 }
 
 // Initialize the app and make it globally accessible
 try {
- const app = new StepathonApp();
- window.app = app; // Make app accessible globally for onclick handlers
- console.log('StepathonApp initialized successfully');
+    const app = new StepathonApp();
+    window.app = app; // Make app accessible globally for onclick handlers
+    console.log('StepathonApp initialized successfully');
 } catch (error) {
- console.error('Error initializing StepathonApp:', error);
- console.error('Error stack:', error.stack);
- // Still set window.app to null so admin.html can detect the error
- window.app = null;
+    console.error('Error initializing StepathonApp:', error);
+    console.error('Error stack:', error.stack);
+    // Still set window.app to null so admin.html can detect the error
+    window.app = null;
 }
