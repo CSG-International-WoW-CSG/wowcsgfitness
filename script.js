@@ -2446,30 +2446,31 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  <div class="email-modal">
  <div class="email-modal-header">
  <h3>Reset Password</h3>
- <button class="email-modal-close" onclick="this.closest('.email-modal-overlay').remove()"></button>
+ <button type="button" class="email-modal-close" id="resetModalCloseBtn" aria-label="Close">&times;</button>
  </div>
  <div class="email-modal-content">
- <p class="email-info">Enter your username, email, or Employee ID. We will email you a Firebase reset link. Passwords are never stored in this browser.</p>
- <form id="resetPasswordForm" onsubmit="event.preventDefault(); app.resetPasswordFirebase()">
+ <p class="email-info">Enter the <strong>CSG email</strong> you used to register. Firebase will email you a secure reset link (check Inbox and Spam).</p>
+ <form id="resetPasswordForm">
  <!-- Honeypot field -->
  <input type="text" id="resetWebsite" name="website" style="display: none;" tabindex="-1" autocomplete="off">
  
  <div class="form-group">
- <label for="resetIdentifier">Username / Email / Employee ID <span class="required">*</span></label>
- <input type="text" id="resetIdentifier" placeholder="Enter username, email, or Employee ID" required autocomplete="username">
+ <label for="resetIdentifier">CSG Email <span class="required">*</span></label>
+ <input type="email" id="resetIdentifier" placeholder="you@csgi.com" required autocomplete="email">
+ <small class="form-hint">Use your @csgi.com / @csg.com registration email (not username).</small>
  </div>
  <div class="form-group captcha-group">
  <label for="resetCaptchaAnswer">Security Check <span class="required">*</span></label>
  <div class="captcha-container">
  <div class="captcha-question" id="resetCaptchaQuestion">${captcha.question}</div>
  <input type="number" id="resetCaptchaAnswer" placeholder="Enter answer" required autocomplete="off" min="0">
- <button type="button" class="btn btn-secondary btn-small" onclick="app.refreshResetCaptcha()" title="Refresh CAPTCHA">Refresh</button>
+ <button type="button" class="btn btn-secondary btn-small" id="refreshResetCaptchaBtn" title="Refresh CAPTCHA">Refresh</button>
  </div>
  <small class="form-hint">Please solve the math problem to verify you're human.</small>
  </div>
  <div class="email-actions">
- <button type="submit" class="btn btn-primary">Send Reset Link</button>
- <button type="button" class="btn btn-secondary" onclick="this.closest('.email-modal-overlay').remove()">Cancel</button>
+ <button type="submit" class="btn btn-primary" id="sendResetLinkBtn">Send Reset Link</button>
+ <button type="button" class="btn btn-secondary" id="cancelResetBtn">Cancel</button>
  </div>
  </form>
  </div>
@@ -2480,10 +2481,19 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  // Store CAPTCHA answer in modal data
  modal.dataset.captchaAnswer = captcha.answer;
  
+ const close = () => modal.remove();
+ modal.querySelector('#resetModalCloseBtn').addEventListener('click', close);
+ modal.querySelector('#cancelResetBtn').addEventListener('click', close);
+ modal.querySelector('#refreshResetCaptchaBtn').addEventListener('click', () => this.refreshResetCaptcha());
+ modal.querySelector('#resetPasswordForm').addEventListener('submit', (e) => {
+ e.preventDefault();
+ this.resetPasswordFirebase();
+ });
+ 
  // Close on overlay click
  modal.addEventListener('click', (e) => {
  if (e.target === modal) {
- modal.remove();
+ close();
  }
  });
 
@@ -2493,7 +2503,24 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }, 100);
  }
 
+ getPasswordResetActionSettings() {
+ const continueUrl = (typeof window !== 'undefined' && window.location && window.location.origin)
+ ? `${window.location.origin}${window.location.pathname || '/'}`.replace(/admin\.html$/i, 'index.html')
+ : 'https://csg-international-wow-csg.github.io/wowcsgfitness/';
+ return {
+ url: continueUrl,
+ handleCodeInApp: false
+ };
+ }
+
  async resetPasswordFirebase() {
+ const sendBtn = document.getElementById('sendResetLinkBtn');
+ if (sendBtn) {
+ sendBtn.disabled = true;
+ sendBtn.textContent = 'Sending…';
+ }
+
+ try {
  // Bot protection: Check honeypot field
  const honeypot = document.getElementById('resetWebsite');
  if (honeypot && honeypot.value.trim() !== '') {
@@ -2504,48 +2531,98 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  // Bot protection: Rate limiting check
  if (!this.checkRateLimit('passwordReset')) {
- this.recordAttempt('passwordReset', false); // Record failed attempt
+ this.recordAttempt('passwordReset', false);
  alert('Too many password reset attempts. Please try again later.\n\nMaximum 5 attempts per hour and 10 attempts per day.');
  return;
  }
 
  // Bot protection: Verify CAPTCHA
  const modal = document.querySelector('.email-modal-overlay');
- const captchaAnswer = modal ? parseInt(modal.dataset.captchaAnswer) : null;
- const userAnswer = parseInt(document.getElementById('resetCaptchaAnswer').value);
+ const captchaAnswer = modal ? parseInt(modal.dataset.captchaAnswer, 10) : null;
+ const userAnswer = parseInt(document.getElementById('resetCaptchaAnswer').value, 10);
  
  if (!captchaAnswer || userAnswer !== captchaAnswer) {
- this.recordAttempt('passwordReset', false); // Record failed attempt
+ this.recordAttempt('passwordReset', false);
  alert('Security check failed. Please solve the math problem correctly.');
  this.refreshResetCaptcha();
  return;
  }
 
- const identifier = document.getElementById('resetIdentifier').value.trim();
+ const identifier = (document.getElementById('resetIdentifier').value || '').trim().toLowerCase();
  if (!identifier) {
- alert('Please enter your username, email, or Employee ID!');
+ alert('Please enter your CSG email address.');
  return;
  }
 
  let email = identifier;
  if (!this.isEmail(identifier)) {
- const participant = await this.lookupFirebaseParticipant(identifier);
- if (!participant || !participant.email) {
- alert('No account found for that username, email, or Employee ID.');
+ // Username / employee ID lookup needs Firestore auth; ask for email instead.
+ alert('Please enter the CSG email address used at registration (example: name@csgi.com).');
  document.getElementById('resetIdentifier').focus();
  return;
  }
- email = participant.email;
+
+ if (!this.isCorporateEmail(email)) {
+ alert('Password reset is only available for CSG corporate emails (@csgi.com / @csg.com).');
+ return;
+ }
+
+ if (!this.firebaseEnabled || !this.auth) {
+ alert('Firebase is not available. Contact ' + this.securityCfg().supportEmail);
+ return;
  }
 
  try {
- await this.auth.sendPasswordResetEmail(email);
+ await this.auth.sendPasswordResetEmail(email, this.getPasswordResetActionSettings());
  this.recordAttempt('passwordReset', true);
- document.querySelector('.email-modal-overlay').remove();
- this.showToast('Password reset email sent. Please check your inbox.');
+ if (modal) modal.remove();
+ alert(
+ 'If an account exists for that email, a password reset link has been sent.\n\n' +
+ '1) Check Inbox and Spam/Junk\n' +
+ '2) Open the link from Firebase / noreply\n' +
+ '3) Set a new password, then log in here\n\n' +
+ 'Still nothing after a few minutes? Contact ' + this.securityCfg().supportEmail
+ );
+ this.showToast('Password reset email requested. Check your inbox/spam.');
  } catch (error) {
  console.error('Firebase password reset error:', error);
- alert('Unable to send reset email. Please try again.');
+ this.recordAttempt('passwordReset', false);
+ const code = error && error.code ? String(error.code) : '';
+ let message = 'Unable to send reset email. Please try again.';
+ if (code === 'auth/user-not-found') {
+ // Avoid account enumeration wording while still guiding the user
+ message =
+ 'If this email is registered, a reset link will arrive shortly. ' +
+ 'If you never registered, create an account first. Check Spam too.';
+ } else if (code === 'auth/invalid-email') {
+ message = 'That email address looks invalid. Please check and try again.';
+ } else if (code === 'auth/too-many-requests') {
+ message = 'Too many reset attempts. Please wait a while and try again.';
+ } else if (code === 'auth/unauthorized-continue-uri' || code === 'auth/unauthorized-domain') {
+ // Retry without custom continue URL (Firebase default handler)
+ try {
+ await this.auth.sendPasswordResetEmail(email);
+ this.recordAttempt('passwordReset', true);
+ if (modal) modal.remove();
+ alert(
+ 'Password reset email sent (Firebase default link).\n\n' +
+ 'Check Inbox and Spam, then return here to log in.'
+ );
+ return;
+ } catch (retryErr) {
+ console.error('Password reset retry failed:', retryErr);
+ message = 'Reset link blocked by Auth domain settings. Contact ' + this.securityCfg().supportEmail;
+ }
+ } else if (error && error.message) {
+ message = 'Unable to send reset email: ' + error.message;
+ }
+ alert(message);
+ }
+ } finally {
+ if (sendBtn) {
+ sendBtn.disabled = false;
+ sendBtn.textContent = 'Send Reset Link';
+ }
  }
  }
 
