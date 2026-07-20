@@ -1486,25 +1486,77 @@ footer p {
   background:
     linear-gradient(135deg, rgba(13, 148, 136, 0.08), rgba(11, 61, 102, 0.06)),
     #fff !important;
+  position: relative;
+  z-index: 1;
+  clear: both;
 }
 
 .android-app-lead {
-  margin: 0 0 14px !important;
+  margin: 0 0 16px !important;
   color: #334155 !important;
   line-height: 1.5 !important;
   font-size: 0.95rem !important;
 }
 
 .android-app-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 14px;
+  display: flex !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
+  gap: 12px !important;
+  margin: 0 0 18px !important;
+  position: relative;
+  z-index: 1;
 }
 
-.android-app-actions .btn-large {
-  min-height: 46px !important;
+.android-app-actions .android-download-btn,
+.android-app-card .android-download-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: 48px !important;
+  margin: 0 !important;
+  padding: 14px 20px !important;
+  box-sizing: border-box !important;
+  position: relative !important;
+  float: none !important;
+  transform: none !important;
+  text-decoration: none !important;
+  text-align: center !important;
   font-weight: 700 !important;
+  line-height: 1.3 !important;
+  white-space: normal !important;
+}
+
+.android-app-actions .android-download-btn:hover,
+.android-app-actions .android-download-btn:active {
+  transform: translateY(-1px) !important;
+}
+
+.android-release-link {
+  display: block !important;
+  width: auto !important;
+  margin: 0 !important;
+  padding: 4px 2px !important;
+  position: relative !important;
+  float: none !important;
+  text-align: center !important;
+  text-decoration: underline !important;
+  color: #0b3d66 !important;
+  font-size: 0.9rem !important;
+  font-weight: 600 !important;
+  line-height: 1.4 !important;
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+}
+
+.android-release-link:hover {
+  color: #0d9488 !important;
 }
 
 .android-install-steps {
@@ -1513,6 +1565,7 @@ footer p {
   color: #334155 !important;
   line-height: 1.55 !important;
   font-size: 0.9rem !important;
+  clear: both;
 }
 
 .android-install-steps li {
@@ -1524,12 +1577,6 @@ footer p {
   font-size: 0.82rem !important;
   color: #64748b !important;
   line-height: 1.45 !important;
-}
-
-@media (max-width: 640px) {
-  .android-app-actions .btn {
-    width: 100%;
-    justify-content: center;
-  }
+  clear: both;
 }
 
