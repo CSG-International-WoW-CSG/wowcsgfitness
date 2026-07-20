@@ -53,6 +53,7 @@
                 <h1 class="animated-title">WOW-CSG 7 Days Fitness Challenge</h1>
                 <div class="hero-cta-row">
                     <a class="btn btn-primary" href="#loginCard">Join Challenge</a>
+                    <a class="btn btn-ghost" href="#androidAppCard">Get Android App</a>
                     <a class="btn btn-ghost" href="#dayPlanCard">7-Day Plan</a>
                 </div>
             </div>
@@ -77,6 +78,46 @@
                 </div>
             </div>
         </section>
+
+        <!-- Android app download -->
+        <div class="card android-app-card" id="androidAppCard">
+            <div class="challenge-header">
+                <div class="card-header-icon-wrapper">
+                    <div class="card-header-icon">&#128241;</div>
+                    <div class="icon-glow"></div>
+                </div>
+                <h2>Android App</h2>
+            </div>
+            <p class="android-app-lead">
+                For the best tracking on Android, install the WOW-CSG Fitness app.
+                The hardware step sensor keeps counting even when your phone is locked.
+            </p>
+            <div class="android-app-actions">
+                <a class="btn btn-primary btn-large"
+                   id="androidApkDownloadBtn"
+                   href="downloads/WOW-CSG-Fitness.apk"
+                   download="WOW-CSG-Fitness.apk">
+                    Download Android APK (v1.0.3)
+                </a>
+                <a class="btn btn-secondary"
+                   href="https://github.com/CSG-International-WoW-CSG/wowcsgfitness/releases/tag/v1.0.3"
+                   target="_blank"
+                   rel="noopener noreferrer">
+                    Release notes
+                </a>
+            </div>
+            <ol class="android-install-steps">
+                <li>Tap <strong>Download Android APK</strong> on your Android phone.</li>
+                <li>If prompted, allow <strong>Install unknown apps</strong> for Chrome or Files.</li>
+                <li>Open the downloaded APK and tap <strong>Install</strong>.</li>
+                <li>Open <strong>WOW-CSG Fitness</strong> and sign in with your <code>@csgi.com</code> account.</li>
+            </ol>
+            <p class="android-app-note">
+                Internal CSG challenge build only (not on Play Store).
+                Uninstall any older WOW-CSG Fitness build before installing this one.
+                iPhone users should continue using this website (Add to Home Screen).
+            </p>
+        </div>
 
         <!-- Challenge Over / Coming Soon Message (shown on main page) -->
         <div id="mainPageChallengeOverMessage" class="main-challenge-over-message" style="display: none;"></div>
@@ -472,11 +513,11 @@
                                 <div class="counter-tips">
                                     <h4>&#128161; Tracking tips:</h4>
                                     <ul>
-                                        <li><strong>Android app:</strong> hardware step sensor keeps counting while the phone is locked</li>
+                                        <li><strong>Android app:</strong> <a href="#androidAppCard">Download the APK</a> for hardware step counting while locked</li>
                                         <li><strong>Outdoor (web):</strong> KM uses GPS + step backup</li>
                                         <li><strong>Treadmill:</strong> set speed to match the machine (speed &times; time)</li>
                                         <li>Allow Location + Physical activity permissions when prompted</li>
-                                        <li>See <code>ANDROID.md</code> to build the APK for best lock-screen accuracy</li>
+                                        <li>iPhone: use this website (native iOS app needs a Mac to build)</li>
                                     </ul>
                                 </div>
                             </div>
@@ -602,9 +643,11 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-19-v32 | Capacitor Android</p>
+            <p class="footer-subtext">Site version: 2026-07-20-v37 | Android APK v1.0.3</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
+                <a href="#androidAppCard" class="help-link">Download Android App</a>
+                &nbsp;&middot;&nbsp;
                 <a href="#" id="footerHelpLink" class="help-link">&#10067; Need Help? Contact us at wow-csg@csgi.com</a>
             </p>
         </footer>
@@ -651,8 +694,12 @@
                             <p>A: Open to all CSG employees. There are 7 winners &mdash; one every day (26 July &ndash; 1 August). Whoever completes that day's KM challenge in the shortest time is the winner.</p>
                         </div>
                         <div class="faq-item">
+                            <strong>Q: How do I install the Android app?</strong>
+                            <p>A: On the home page, open <a href="#androidAppCard">Android App</a>, tap Download Android APK, allow install from unknown sources if asked, then Install. Sign in with your CSG email. Best for lock-screen step tracking.</p>
+                        </div>
+                        <div class="faq-item">
                             <strong>Q: What if I forgot my password?</strong>
-                            <p>A: Please contact support at wow-csg@csgi.com to reset your password.</p>
+                            <p>A: Use Forgot Password on the login form, or contact support at wow-csg@csgi.com.</p>
                         </div>
                         <div class="faq-item">
                             <strong>Q: How do I check my ranking?</strong>

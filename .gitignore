@@ -14,6 +14,8 @@ _probe-rules.js
 _retarget_collections.py
 *.apk
 *.aab
+!downloads/*.apk
+!downloads/*.aab
 .DS_Store
 .admin-bootstrap-secret.txt
 *-firebase-adminsdk-*.json

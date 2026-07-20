@@ -37,6 +37,16 @@ sdk.dir=C:\\Users\\ojhmim02\\AppData\\Local\\Android\\Sdk
 
 (Use your real username/path; this file is gitignored.)
 
+## Distribute to participants
+
+The live website links to the APK:
+
+- Site section: https://csg-international-wow-csg.github.io/wowcsgfitness/#androidAppCard
+- Direct APK: https://csg-international-wow-csg.github.io/wowcsgfitness/downloads/WOW-CSG-Fitness.apk
+- GitHub Release: https://github.com/CSG-International-WoW-CSG/wowcsgfitness/releases/tag/v1.0.3
+
+After rebuilding the APK, copy it to `downloads/WOW-CSG-Fitness.apk`, bump the version label on the web page, commit, and create a new GitHub Release.
+
 ## Requirements
 
 - Node.js 18+

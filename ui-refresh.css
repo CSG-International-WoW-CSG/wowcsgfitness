@@ -1479,3 +1479,57 @@ footer p {
   width: 100%;
 }
 
+/* Android APK download card */
+.android-app-card {
+  margin: 16px 0 20px !important;
+  border: 1px solid rgba(13, 148, 136, 0.28) !important;
+  background:
+    linear-gradient(135deg, rgba(13, 148, 136, 0.08), rgba(11, 61, 102, 0.06)),
+    #fff !important;
+}
+
+.android-app-lead {
+  margin: 0 0 14px !important;
+  color: #334155 !important;
+  line-height: 1.5 !important;
+  font-size: 0.95rem !important;
+}
+
+.android-app-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.android-app-actions .btn-large {
+  min-height: 46px !important;
+  font-weight: 700 !important;
+}
+
+.android-install-steps {
+  margin: 0 0 12px 1.1rem !important;
+  padding: 0 !important;
+  color: #334155 !important;
+  line-height: 1.55 !important;
+  font-size: 0.9rem !important;
+}
+
+.android-install-steps li {
+  margin-bottom: 6px;
+}
+
+.android-app-note {
+  margin: 0 !important;
+  font-size: 0.82rem !important;
+  color: #64748b !important;
+  line-height: 1.45 !important;
+}
+
+@media (max-width: 640px) {
+  .android-app-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+

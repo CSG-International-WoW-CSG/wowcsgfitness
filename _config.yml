@@ -1,0 +1,3 @@
+# Keep APK downloads available on GitHub Pages (Jekyll)
+include:
+  - downloads
