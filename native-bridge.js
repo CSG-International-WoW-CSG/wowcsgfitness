@@ -192,7 +192,7 @@
     try {
       // Slightly lower power than continuous max accuracy when possible
       bridge.watchId = await Geo.watchPosition(
-        { enableHighAccuracy: true, timeout: 25000, maximumAge: 2000 },
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 1000 },
         (pos, err) => {
           if (err) {
             if (onError) onError(err);

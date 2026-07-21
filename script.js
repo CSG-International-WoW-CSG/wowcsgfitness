@@ -5067,8 +5067,13 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (mode === 'outdoor') {
  this.initActivityMap();
  this.startGpsTracking();
- // Background GPS poll only while locked/hidden (saves battery when unlocked)
+ // Native Android: keep a GPS poll even while unlocked — MIUI often starves watchPosition.
+ // Web: poll only when locked/hidden (battery).
+ if (window.WowNative && window.WowNative.isNative) {
+ this.startBackgroundGpsPoll();
+ } else {
  this.stopBackgroundGpsPoll();
+ }
  } else {
  this.stopGpsTracking();
  this.stopBackgroundGpsPoll();
@@ -5096,7 +5101,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (this.boundHandleDeviceMotion) {
  window.removeEventListener('devicemotion', this.boundHandleDeviceMotion);
  }
- window.WowNative.startStepPolling((steps) => this.applyNativeStepCount(steps), 3000);
+ window.WowNative.startStepPolling((steps) => this.applyNativeStepCount(steps), 2000);
  window.WowNative.watchAppResume(({ steps }) => {
  this.applyNativeStepCount(steps);
  if (this.stepCounter.trackingMode === 'outdoor') {
@@ -5401,9 +5406,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.bindMotionListener();
  this.applyRunningActivityUi();
  this.startNativeTrackingHelpers().then(() => {
- if (!this.stepCounter.useNativeStepsOnly) {
  this.syncStepsFromDistance(true);
- }
  this.updateStepCounterDisplay();
  });
  this.initActivityMap();
@@ -5444,7 +5447,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
  if (this.stepCounter.trackingMode === 'outdoor') {
  this.startGpsTracking();
- if (isHidden) {
+ if (isHidden || (window.WowNative && window.WowNative.isNative)) {
  this.startBackgroundGpsPoll();
  } else {
  this.stopBackgroundGpsPoll();
@@ -5627,7 +5630,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  getTrackedDistanceKm() {
  const mode = this.stepCounter.trackingMode || 'outdoor';
- const stepKm = (this.stepCounter.stepCount || 0) / (this.challengeConfig.stepsPerKm || 1300);
+ const stepsPerKm = this.getStepsPerKmForTracking();
+ const stepKm = (this.stepCounter.stepCount || 0) / stepsPerKm;
 
  if (mode === 'treadmill') {
  const speedKm = this.stepCounter.treadmillDistanceKm || 0;
@@ -5635,8 +5639,21 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  const gpsKm = (this.stepCounter.distanceKm || 0) + (this.stepCounter.pendingSegmentKm || 0);
- // Use the better of GPS and step estimate so neither under-count wins alone
+ // Prefer the higher of GPS and step-derived KM so neither sensor alone under-counts
  return Math.max(gpsKm, stepKm);
+ }
+
+ /**
+ * Hardware pedometers report fewer steps than browser DeviceMotion.
+ * Use a slightly shorter stride (more KM per step) on native Android so outdoor
+ * distance stays comparable to iPhone web tracking for the same walk.
+ */
+ getStepsPerKmForTracking() {
+ const base = this.challengeConfig.stepsPerKm || 1300;
+ const isNative = !!(window.WowNative && window.WowNative.isNative);
+ // Hardware pedometer under-reports vs iPhone browser motion (~20% fewer steps).
+ // Use ~1040 steps/KM on Android so the same walk yields comparable KM.
+ return isNative ? Math.max(980, Math.round(base * 0.8)) : base;
  }
 
  /**
@@ -5645,14 +5662,14 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  */
  syncStepsFromDistance(force = false) {
  if (!this.stepCounter.isRunning) return;
- // Hardware pedometer is authoritative on Capacitor Android
- if (this.stepCounter.useNativeStepsOnly) return;
  const isHidden = document.visibilityState !== 'visible';
  if (!force && !isHidden) return;
 
- const dist = this.getTrackedDistanceKm();
+ // On native, still allow GPS→steps sync while locked so KM/steps stay aligned
+ // when the pedometer poll is slow. Never reduce hardware counts.
+ const dist = (this.stepCounter.distanceKm || 0) + (this.stepCounter.pendingSegmentKm || 0);
  if (dist <= 0) return;
- const estimated = Math.round(dist * (this.challengeConfig.stepsPerKm || 1300));
+ const estimated = Math.round(dist * this.getStepsPerKmForTracking());
  if (estimated > (this.stepCounter.stepCount || 0)) {
  this.stepCounter.stepCount = estimated;
  }
@@ -5673,10 +5690,15 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const b = path[i];
  const segmentKm = this.haversineKm(a.lat, a.lng, b.lat, b.lng);
  const dtSec = Math.max(1, ((b.t || 0) - (a.t || 0)) / 1000);
- const maxKm = Math.min(5.0, Math.max(0.35, (dtSec / 3600) * 22));
- // Drop only teleport/noise jumps
- if (segmentKm > 0 && segmentKm <= maxKm) {
+ const hours = dtSec / 3600;
+ // Allow brisk walk/jog; for long gaps credit capped pace instead of dropping to 0
+ const maxKm = Math.min(8.0, Math.max(0.5, hours * 14));
+ if (segmentKm <= 0) continue;
+ if (segmentKm <= maxKm) {
  total += segmentKm;
+ } else if (dtSec >= 20) {
+ // Sparse GPS after lock: credit at up to ~9 km/h rather than discard the gap
+ total += Math.min(segmentKm, hours * 9);
  }
  }
  this.stepCounter.distanceKm = total;
@@ -5922,16 +5944,19 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  startBackgroundGpsPoll() {
  this.stopBackgroundGpsPoll();
  if (this.stepCounter.trackingMode !== 'outdoor') return;
- // Only poll while locked/hidden — watchPosition covers the foreground case
- if (document.visibilityState === 'visible') return;
- // Longer interval cuts battery drain; browsers already throttle timers when locked
+ const isNative = !!(window.WowNative && window.WowNative.isNative);
+ // Web: poll only while locked. Native: also poll while unlocked (MIUI GPS gaps).
+ if (!isNative && document.visibilityState === 'visible') return;
+ const intervalMs = isNative
+ ? (document.visibilityState === 'visible' ? 4000 : 3000)
+ : 6000;
  this.bgGpsPollId = setInterval(() => {
- if (document.visibilityState === 'visible') {
+ if (!isNative && document.visibilityState === 'visible') {
  this.stopBackgroundGpsPoll();
  return;
  }
- this.pollGpsOnce(true);
- }, 6000);
+ this.pollGpsOnce(document.visibilityState !== 'visible');
+ }, intervalMs);
  }
 
  pollGpsOnce(fromBackground = false) {
@@ -5962,25 +5987,20 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  catchUpGpsAfterUnlock() {
  if (!this.stepCounter.isRunning || this.stepCounter.trackingMode !== 'outdoor') return;
  this.recalculateGpsDistanceFromPath();
- if (!this.stepCounter.useNativeStepsOnly) {
+ // Always sync — never reduces hardware steps; fills gaps when pedometer lagged
  this.syncStepsFromDistance(true);
- }
  this.updateStepCounterDisplay();
 
  const sample = () => {
  this.pollGpsOnce(true);
- if (!this.stepCounter.useNativeStepsOnly) {
  this.syncStepsFromDistance(true);
- }
  };
  sample();
  setTimeout(sample, 1500);
  setTimeout(sample, 3500);
  setTimeout(() => {
  this.recalculateGpsDistanceFromPath();
- if (!this.stepCounter.useNativeStepsOnly) {
  this.syncStepsFromDistance(true);
- }
  this.updateStepCounterDisplay();
  this.persistActivitySession(true);
  }, 5000);
@@ -6296,8 +6316,11 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  const { latitude, longitude, accuracy } = position.coords;
  const isBackground = fromResume || document.visibilityState !== 'visible';
- // Accept noisier fixes while locked — otherwise KM freezes outdoors
- const maxAccuracy = isBackground ? 180 : 100;
+ const isNative = !!(window.WowNative && window.WowNative.isNative);
+ // Android GPS often reports 80–150m accuracy while still usable for walking tracks
+ const maxAccuracy = isNative
+ ? (isBackground ? 280 : 160)
+ : (isBackground ? 180 : 100);
  if (accuracy && accuracy > maxAccuracy) {
  return;
  }
@@ -6308,19 +6331,38 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const segmentKm = this.haversineKm(last.lat, last.lng, point.lat, point.lng);
  const dtSec = Math.max(0.5, (point.t - (last.t || point.t)) / 1000);
  const hours = dtSec / 3600;
- // Allow realistic walking/running; wider catch-up after lock
- const maxKm = isBackground
- ? Math.min(12.0, Math.max(0.5, hours * 16))
+ // Wider limits on native / after unlock so sparse samples still credit distance
+ const maxKm = isBackground || isNative
+ ? Math.min(14.0, Math.max(0.6, hours * 18))
  : Math.min(4.0, Math.max(0.35, hours * 20));
 
  if (segmentKm > maxKm) {
- // Teleport / bad fix — skip point entirely (keep previous lastPosition)
+ if (dtSec >= 15) {
+ // Long gap (typical when phone was locked): credit capped walking/jogging pace
+ const creditKm = Math.min(segmentKm, hours * 9.5);
+ if (creditKm >= 0.005) {
+ this.stepCounter.distanceKm = (this.stepCounter.distanceKm || 0) + creditKm;
+ }
+ this.stepCounter.lastPosition = point;
+ this.stepCounter.path.push(point);
+ this.stepCounter.gpsReady = true;
+ if (isBackground || isNative) {
+ this.syncStepsFromDistance(true);
+ }
+ this.updateActivityMap(point);
+ this.updateStepCounterDisplay();
+ this.persistActivitySession(false);
+ }
  return;
  }
 
- // Bank tiny segments instead of discarding them (previous bug under-counted KM)
+ // Ignore GPS jitter under ~2.5 m unless enough time passed
+ if (segmentKm < 0.0025 && dtSec < 8) {
+ return;
+ }
+
  this.stepCounter.pendingSegmentKm = (this.stepCounter.pendingSegmentKm || 0) + segmentKm;
- if (this.stepCounter.pendingSegmentKm >= 0.002 || isBackground) {
+ if (this.stepCounter.pendingSegmentKm >= 0.001 || isBackground || isNative) {
  this.stepCounter.distanceKm += this.stepCounter.pendingSegmentKm;
  this.stepCounter.pendingSegmentKm = 0;
  }
@@ -6328,14 +6370,16 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  this.stepCounter.lastPosition = point;
  this.stepCounter.path.push(point);
- if (this.stepCounter.path.length > 500) {
- this.stepCounter.path = this.stepCounter.path.filter((_, idx, arr) => idx === 0 || idx === arr.length - 1 || idx % 2 === 0);
+ if (this.stepCounter.path.length > 800) {
+ this.stepCounter.path = this.stepCounter.path.filter((_, idx, arr) => {
+ if (idx === 0 || idx === arr.length - 1) return true;
+ return idx % 3 !== 1;
+ });
  this.recalculateGpsDistanceFromPath();
  }
 
  this.stepCounter.gpsReady = true;
- // While locked, motion sensors usually stop — estimate steps from GPS distance
- if (isBackground) {
+ if (isBackground || isNative) {
  this.syncStepsFromDistance(true);
  }
  this.updateActivityMap(point);
@@ -6346,7 +6390,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (hint) {
  hint.textContent = isBackground
  ? 'Lock-screen GPS update received. KM + steps still counting.'
- : 'Live GPS tracking ON. Steps also sync from distance if sensors pause.';
+ : 'Live GPS tracking ON. Distance uses GPS + step backup.';
  }
  }
 
