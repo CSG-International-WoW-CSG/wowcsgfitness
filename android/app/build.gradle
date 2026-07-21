@@ -4,20 +4,15 @@ android {
     namespace "com.csgi.wowcsgfitness"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.csgi.wowcsgfitness"
+        // New package id avoids leftover conflicts from older sideloaded builds
+        applicationId "com.csgi.wowcsg.fitness"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 6
-        versionName "1.0.5"
+        versionCode 7
+        versionName "1.0.6"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
-             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
-        }
-        // Universal APK for phones (arm) + emulators (x86)
-        ndk {
-            abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
         }
     }
     signingConfigs {
@@ -31,12 +26,14 @@ android {
     buildTypes {
         release {
             minifyEnabled false
+            shrinkResources false
+            debuggable false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
         }
         debug {
             minifyEnabled false
-            // Same key as release so sideload upgrades don't fail with "App not installed"
+            debuggable true
             signingConfig signingConfigs.release
         }
     }
@@ -44,6 +41,18 @@ android {
         jniLibs {
             useLegacyPackaging true
         }
+        // Unprotected META-INF junk triggers "App not installed" on some OEMs
+        exclude 'META-INF/*.version'
+        exclude 'META-INF/versions/**'
+        exclude 'META-INF/*.kotlin_module'
+        exclude 'META-INF/INDEX.LIST'
+        exclude 'META-INF/DEPENDENCIES'
+        exclude 'META-INF/LICENSE*'
+        exclude 'META-INF/NOTICE*'
+        exclude 'META-INF/ASL2.0'
+        exclude 'META-INF/proguard/**'
+        exclude 'META-INF/services/kotlinx.coroutines.*'
+        exclude 'META-INF/com/android/build/gradle/app-metadata.properties'
     }
 }
 
