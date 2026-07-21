@@ -1437,80 +1437,100 @@ footer p {
   position: fixed;
   inset: 0;
   z-index: 10000;
-  background: rgba(15, 28, 46, 0.55);
+  background: rgba(15, 28, 46, 0.62);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
-    max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 
+body.privacy-consent-open {
+  overflow: hidden;
+}
+
 .privacy-consent-inner {
-  width: min(560px, 100%);
-  max-height: min(88vh, 640px);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  width: min(420px, 100%);
   background: #fff;
-  border: 1px solid rgba(11, 61, 102, 0.15);
   border-radius: 16px;
-  padding: 18px 18px 16px;
+  padding: 20px 18px 18px;
   color: #0f1c2e;
   box-sizing: border-box;
-  box-shadow: 0 12px 40px rgba(15, 28, 46, 0.25);
+  box-shadow: 0 16px 48px rgba(15, 28, 46, 0.28);
 }
 
 .privacy-consent-inner strong {
   display: block;
-  font-family: var(--display, inherit);
-  font-size: 1.05rem;
-  margin-bottom: 8px;
+  font-size: 1.15rem;
+  margin-bottom: 6px;
 }
 
-.privacy-consent-inner p {
-  margin: 0 0 12px;
-  font-size: 0.9rem;
-  line-height: 1.45;
-  color: #4a5d72;
+.privacy-consent-lead {
+  margin: 0 0 14px !important;
+  font-size: 0.92rem !important;
+  color: #4a5d72 !important;
 }
 
 .privacy-consent-check {
   display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  font-size: 0.9rem;
-  margin-bottom: 12px;
-  padding: 10px;
-  background: #f4f7fa;
-  border-radius: 10px;
+  gap: 12px;
+  align-items: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 14px;
+  padding: 14px 12px;
+  background: #e8f6f4;
+  border: 2px solid #0d9488;
+  border-radius: 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 
-.privacy-consent-check input {
-  width: 20px;
-  height: 20px;
-  min-width: 20px;
-  margin-top: 2px;
+.privacy-consent-check input[type="checkbox"] {
+  -webkit-appearance: checkbox !important;
+  appearance: checkbox !important;
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  margin: 0 !important;
   flex-shrink: 0;
+  accent-color: #0d9488;
+  opacity: 1 !important;
+  position: static !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
 }
 
-.privacy-consent-scroll-hint {
-  margin: 10px 0 0 !important;
-  font-size: 0.78rem !important;
-  color: #6b7c8f !important;
-  text-align: center;
+.privacy-consent-check span {
+  flex: 1;
+  line-height: 1.35;
 }
 
-@media (max-height: 640px) {
-  .privacy-consent-inner {
-    max-height: 92vh;
-    padding: 14px;
-  }
-  .privacy-consent-inner p {
-    font-size: 0.84rem;
-    margin-bottom: 10px;
-  }
+.privacy-consent-inner .btn {
+  width: 100%;
+  min-height: 52px;
+  font-size: 1.05rem;
+}
+
+.privacy-consent-details {
+  margin-top: 14px;
+  font-size: 0.82rem;
+  color: #6b7c8f;
+}
+
+.privacy-consent-details summary {
+  cursor: pointer;
+  color: #0b3d66;
+  font-weight: 600;
+}
+
+.privacy-consent-details p {
+  margin: 8px 0 0 !important;
+  font-size: 0.82rem !important;
+  line-height: 1.4;
+  color: #4a5d72 !important;
 }
 
 /* Android APK download card */

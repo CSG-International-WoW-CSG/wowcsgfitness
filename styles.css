@@ -3683,8 +3683,10 @@ footer {
         opacity: 0.85;
     }
 
-    /* Prevent text size adjustment on iOS */
-    input, select, textarea {
+    /* Prevent text size adjustment on iOS — do not strip native checkbox/radio appearance */
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea {
         font-size: 16px !important; /* Prevents zoom on iOS */
         -webkit-appearance: none;
         appearance: none;
