@@ -7,8 +7,8 @@ android {
         applicationId "com.csgi.wowcsgfitness"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 5
-        versionName "1.0.4"
+        versionCode 6
+        versionName "1.0.5"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -20,13 +20,24 @@ android {
             abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
         }
     }
+    signingConfigs {
+        release {
+            storeFile file("keystore/wowcsg-release.jks")
+            storePassword "wowcsg-fitness-2026"
+            keyAlias "wowcsg"
+            keyPassword "wowcsg-fitness-2026"
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
         debug {
             minifyEnabled false
+            // Same key as release so sideload upgrades don't fail with "App not installed"
+            signingConfig signingConfigs.release
         }
     }
     packagingOptions {

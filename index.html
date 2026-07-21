@@ -14,10 +14,10 @@
     <!-- PWA Manifest -->
     <link rel="manifest" href="./manifest.json">
     <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=40">
-    <link rel="apple-touch-icon" href="favicon.svg?v=40">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=41">
+    <link rel="apple-touch-icon" href="favicon.svg?v=41">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="ui-refresh.css?v=40">
+    <link rel="stylesheet" href="ui-refresh.css?v=41">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -39,7 +39,7 @@
                 <div class="brand-lockup" aria-label="WOW-CSG Fitness Challenge">
                     <div class="brand-mark-wrap" aria-hidden="true">
                         <span class="brand-mark-orbit"></span>
-                        <img src="brand-mark.svg?v=40" alt="" class="brand-mark-img" width="60" height="60">
+                        <img src="brand-mark.svg?v=41" alt="" class="brand-mark-img" width="60" height="60">
                     </div>
                     <div class="brand-wordmark">
                         <span class="brand-wow">WOW-CSG</span>
@@ -97,10 +97,11 @@
                    id="androidApkDownloadBtn"
                    href="downloads/WOW-CSG-Fitness.apk"
                    download="WOW-CSG-Fitness.apk">
-                    Download Android APK (v1.0.4)
+                    Download Android APK (v1.0.5)
                 </a>
             </div>
             <ol class="android-install-steps">
+                <li><strong>Uninstall</strong> any older WOW-CSG Fitness app first (Settings → Apps → WOW-CSG Fitness → Uninstall). Required — otherwise install shows “App not installed”.</li>
                 <li>Tap <strong>Download Android APK</strong> on your Android phone.</li>
                 <li>If prompted, allow <strong>Install unknown apps</strong> for Chrome or Files.</li>
                 <li>Open the downloaded APK and tap <strong>Install</strong>.</li>
@@ -108,7 +109,6 @@
             </ol>
             <p class="android-app-note">
                 Internal CSG challenge build only (not on Play Store).
-                Uninstall any older WOW-CSG Fitness build before installing this one.
                 iPhone users should continue using this website (Add to Home Screen).
             </p>
         </div>
@@ -637,7 +637,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-21-v40 | Android APK v1.0.4</p>
+            <p class="footer-subtext">Site version: 2026-07-21-v41 | Android APK v1.0.5</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#androidAppCard" class="help-link">Download Android App</a>
@@ -689,7 +689,7 @@
                         </div>
                         <div class="faq-item">
                             <strong>Q: How do I install the Android app?</strong>
-                            <p>A: On the home page, open <a href="#androidAppCard">Android App</a>, tap Download Android APK, allow install from unknown sources if asked, then Install. Sign in with your CSG email. Best for lock-screen step tracking.</p>
+                            <p>A: First uninstall any older WOW-CSG Fitness app. Then open <a href="#androidAppCard">Android App</a>, tap Download Android APK, allow install from unknown sources if asked, then Install. Sign in with your CSG email. Best for lock-screen step tracking.</p>
                         </div>
                         <div class="faq-item">
                             <strong>Q: What if I forgot my password?</strong>
@@ -727,8 +727,8 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="firebase-config.js"></script>
     <script src="security-config.js"></script>
-    <script src="native-bridge.js?v=40"></script>
-    <script src="script.js?v=40"></script>
+    <script src="native-bridge.js?v=41"></script>
+    <script src="script.js?v=41"></script>
     
     <!-- Service Worker: force update + clear stale caches (fixes old garbled emoji pages) -->
     <script>
@@ -741,10 +741,10 @@
                 });
                 if (window.caches && caches.keys) {
                     caches.keys().then((keys) => {
-                        keys.filter((k) => k !== 'wowcsg-fitness-v40').forEach((k) => caches.delete(k));
+                        keys.filter((k) => k !== 'wowcsg-fitness-v41').forEach((k) => caches.delete(k));
                     });
                 }
-                navigator.serviceWorker.register('./service-worker.js?v=40')
+                navigator.serviceWorker.register('./service-worker.js?v=41')
                     .then((registration) => {
                         console.log('Service Worker registered:', registration);
                         if (registration.waiting) {
