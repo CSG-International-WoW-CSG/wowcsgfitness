@@ -14,10 +14,10 @@
     <!-- PWA Manifest -->
     <link rel="manifest" href="./manifest.json">
     <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=42">
-    <link rel="apple-touch-icon" href="favicon.svg?v=42">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=43">
+    <link rel="apple-touch-icon" href="favicon.svg?v=43">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="ui-refresh.css?v=42">
+    <link rel="stylesheet" href="ui-refresh.css?v=43">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -39,7 +39,7 @@
                 <div class="brand-lockup" aria-label="WOW-CSG Fitness Challenge">
                     <div class="brand-mark-wrap" aria-hidden="true">
                         <span class="brand-mark-orbit"></span>
-                        <img src="brand-mark.svg?v=42" alt="" class="brand-mark-img" width="60" height="60">
+                        <img src="brand-mark.svg?v=43" alt="" class="brand-mark-img" width="60" height="60">
                     </div>
                     <div class="brand-wordmark">
                         <span class="brand-wow">WOW-CSG</span>
@@ -97,14 +97,15 @@
                    id="androidApkDownloadBtn"
                    href="downloads/WOW-CSG-Fitness.apk"
                    download="WOW-CSG-Fitness.apk">
-                    Download Android APK (v1.0.6)
+                    Download Android APK (v1.0.7)
                 </a>
             </div>
             <ol class="android-install-steps">
-                <li><strong>Uninstall</strong> any older WOW-CSG Fitness app (Settings → Apps). Also check Dual Apps / Secure Folder / Work profile if your phone has them.</li>
-                <li>On the phone, open <strong>Play Protect</strong> (Play Store → profile → Play Protect) and temporarily turn off <strong>Scan apps with Play Protect</strong> if install is blocked.</li>
-                <li>Tap <strong>Download Android APK</strong>, then open the file with <strong>Files</strong> (not only Chrome) and tap Install.</li>
-                <li>If prompted, allow <strong>Install unknown apps</strong> for Files/Chrome.</li>
+                <li>Delete any old <code>WOW-CSG-Fitness.apk</code> from Downloads, then tap <strong>Download Android APK (v1.0.7)</strong>.</li>
+                <li>Settings → Privacy protection → Special permissions → <strong>Install unknown apps</strong> → enable for <strong>File Manager</strong> (and Chrome if needed).</li>
+                <li>Open the APK with <strong>File Manager</strong> (Mi File Manager), not only Chrome, then Install.</li>
+                <li><strong>Redmi / MIUI:</strong> Settings → Additional settings → Developer options → turn <strong>OFF</strong> “MIUI optimization” (if hidden: tap “Reset to default values” a few times at the bottom until it appears). Reboot, then install again.</li>
+                <li>Play Store → profile → Play Protect → turn off “Scan apps with Play Protect”, then retry install.</li>
                 <li>Open <strong>WOW-CSG Fitness</strong> and sign in with your <code>@csgi.com</code> account.</li>
             </ol>
             <p class="android-app-note">
@@ -637,7 +638,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-21-v42 | Android APK v1.0.6</p>
+            <p class="footer-subtext">Site version: 2026-07-21-v43 | Android APK v1.0.7</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#androidAppCard" class="help-link">Download Android App</a>
@@ -727,8 +728,8 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="firebase-config.js"></script>
     <script src="security-config.js"></script>
-    <script src="native-bridge.js?v=42"></script>
-    <script src="script.js?v=42"></script>
+    <script src="native-bridge.js?v=43"></script>
+    <script src="script.js?v=43"></script>
     
     <!-- Service Worker: force update + clear stale caches (fixes old garbled emoji pages) -->
     <script>
@@ -741,10 +742,10 @@
                 });
                 if (window.caches && caches.keys) {
                     caches.keys().then((keys) => {
-                        keys.filter((k) => k !== 'wowcsg-fitness-v42').forEach((k) => caches.delete(k));
+                        keys.filter((k) => k !== 'wowcsg-fitness-v43').forEach((k) => caches.delete(k));
                     });
                 }
-                navigator.serviceWorker.register('./service-worker.js?v=42')
+                navigator.serviceWorker.register('./service-worker.js?v=43')
                     .then((registration) => {
                         console.log('Service Worker registered:', registration);
                         if (registration.waiting) {
