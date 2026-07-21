@@ -251,7 +251,17 @@ class StepathonApp {
  if (typeof document === 'undefined') return;
  const version = this.securityCfg().privacyVersion;
  const key = 'wowcsg_privacy_consent_v';
- if (localStorage.getItem(key) === version) return;
+
+ // Clear any leftover overlay / scroll lock from older builds
+ document.body.classList.remove('privacy-consent-open');
+ document.body.style.overflow = '';
+ document.documentElement.style.overflow = '';
+
+ if (localStorage.getItem(key) === version) {
+ const stale = document.getElementById('privacyConsentBanner');
+ if (stale) stale.remove();
+ return;
+ }
  if (document.getElementById('privacyConsentBanner')) return;
 
  const banner = document.createElement('div');
@@ -263,39 +273,20 @@ class StepathonApp {
  banner.innerHTML = `
  <div class="privacy-consent-inner">
  <strong>Privacy notice</strong>
- <p class="privacy-consent-lead">CSG internal challenge — agree below to continue.</p>
- <label class="privacy-consent-check" for="privacyConsentCheck">
- <input type="checkbox" id="privacyConsentCheck">
- <span>I am a CSG employee and agree to this use of my data.</span>
- </label>
- <button type="button" class="btn btn-primary" id="privacyConsentAccept" disabled>Continue</button>
- <details class="privacy-consent-details">
- <summary>What data we store</summary>
- <p>Name, employee ID, CSG email, and activity (distance, time, steps). Outdoor mode may keep a shortened GPS path. Optional body weight stays on this device for calorie estimates. Contact ${this.escapeHtml(this.securityCfg().supportEmail)}.</p>
- </details>
+ <p class="privacy-consent-lead">This is a CSG internal challenge. We store your name, employee ID, CSG email, and activity data for the challenge only.</p>
+ <button type="button" class="btn btn-primary" id="privacyConsentAccept">I am a CSG employee — Agree &amp; Continue</button>
+ <p class="privacy-consent-fineprint">By continuing you agree to this use of your data. Contact ${this.escapeHtml(this.securityCfg().supportEmail)}.</p>
  </div>`;
  document.body.appendChild(banner);
- document.body.classList.add('privacy-consent-open');
- const check = banner.querySelector('#privacyConsentCheck');
  const btn = banner.querySelector('#privacyConsentAccept');
- const sync = () => {
- btn.disabled = !check.checked;
- btn.setAttribute('aria-disabled', check.checked ? 'false' : 'true');
- };
- check.addEventListener('change', sync);
- // Whole label is tappable; also allow tapping the row
- banner.querySelector('.privacy-consent-check').addEventListener('click', (e) => {
- if (e.target === check) return;
- // label already toggles input; force sync after click
- setTimeout(sync, 0);
- });
- btn.addEventListener('click', () => {
- if (!check.checked) return;
+ const dismiss = () => {
  localStorage.setItem(key, version);
  document.body.classList.remove('privacy-consent-open');
+ document.body.style.overflow = '';
+ document.documentElement.style.overflow = '';
  banner.remove();
- });
- sync();
+ };
+ btn.addEventListener('click', dismiss);
  }
 
  sanitizePathForCloud(path) {

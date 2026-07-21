@@ -1435,102 +1435,56 @@ footer p {
 
 .privacy-consent-banner {
   position: fixed;
-  inset: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 10000;
-  background: rgba(15, 28, 46, 0.62);
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
-  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  padding: 12px 12px max(12px, env(safe-area-inset-bottom));
   box-sizing: border-box;
-}
-
-body.privacy-consent-open {
-  overflow: hidden;
+  background: linear-gradient(to top, rgba(15, 28, 46, 0.45), transparent 85%);
+  pointer-events: none;
 }
 
 .privacy-consent-inner {
-  width: min(420px, 100%);
+  pointer-events: auto;
+  width: min(440px, 100%);
   background: #fff;
   border-radius: 16px;
-  padding: 20px 18px 18px;
+  padding: 18px 16px 14px;
   color: #0f1c2e;
   box-sizing: border-box;
-  box-shadow: 0 16px 48px rgba(15, 28, 46, 0.28);
+  box-shadow: 0 -8px 32px rgba(15, 28, 46, 0.2);
+  border: 1px solid rgba(11, 61, 102, 0.12);
 }
 
 .privacy-consent-inner strong {
   display: block;
-  font-size: 1.15rem;
+  font-size: 1.1rem;
   margin-bottom: 6px;
 }
 
 .privacy-consent-lead {
   margin: 0 0 14px !important;
-  font-size: 0.92rem !important;
+  font-size: 0.9rem !important;
+  line-height: 1.4;
   color: #4a5d72 !important;
-}
-
-.privacy-consent-check {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  font-size: 0.95rem;
-  font-weight: 600;
-  margin-bottom: 14px;
-  padding: 14px 12px;
-  background: #e8f6f4;
-  border: 2px solid #0d9488;
-  border-radius: 12px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  user-select: none;
-}
-
-.privacy-consent-check input[type="checkbox"] {
-  -webkit-appearance: checkbox !important;
-  appearance: checkbox !important;
-  width: 28px !important;
-  height: 28px !important;
-  min-width: 28px !important;
-  min-height: 28px !important;
-  margin: 0 !important;
-  flex-shrink: 0;
-  accent-color: #0d9488;
-  opacity: 1 !important;
-  position: static !important;
-  visibility: visible !important;
-  pointer-events: auto !important;
-}
-
-.privacy-consent-check span {
-  flex: 1;
-  line-height: 1.35;
 }
 
 .privacy-consent-inner .btn {
   width: 100%;
   min-height: 52px;
-  font-size: 1.05rem;
+  font-size: 1rem;
 }
 
-.privacy-consent-details {
-  margin-top: 14px;
-  font-size: 0.82rem;
-  color: #6b7c8f;
-}
-
-.privacy-consent-details summary {
-  cursor: pointer;
-  color: #0b3d66;
-  font-weight: 600;
-}
-
-.privacy-consent-details p {
-  margin: 8px 0 0 !important;
-  font-size: 0.82rem !important;
-  line-height: 1.4;
-  color: #4a5d72 !important;
+.privacy-consent-fineprint {
+  margin: 10px 0 0 !important;
+  font-size: 0.75rem !important;
+  line-height: 1.35;
+  color: #6b7c8f !important;
+  text-align: center;
 }
 
 /* Android APK download card */

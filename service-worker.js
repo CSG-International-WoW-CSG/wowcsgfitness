@@ -1,6 +1,6 @@
 // Service Worker for WOW-CSG 7 Days Fitness Challenge
 // Bump CACHE_NAME whenever HTML/JS content changes so clients drop stale pages.
-const CACHE_NAME = 'wowcsg-fitness-v47';
+const CACHE_NAME = 'wowcsg-fitness-v48';
 const urlsToCache = [
   './styles.css',
   './ui-refresh.css',
