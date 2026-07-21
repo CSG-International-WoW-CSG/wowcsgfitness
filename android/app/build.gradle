@@ -9,8 +9,8 @@ android {
         applicationId "com.csgi.wowcsgfitness2026"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 14
-        versionName "1.0.13"
+        versionCode 15
+        versionName "1.0.14"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
@@ -35,6 +35,12 @@ android {
         jniLibs {
             useLegacyPackaging true
         }
+        // Unprotected META-INF junk triggers Parse error / App not installed on some MIUI builds
+        exclude 'META-INF/services/**'
+        exclude 'META-INF/*.version'
+        exclude 'META-INF/com/android/build/gradle/app-metadata.properties'
+        exclude 'META-INF/kotlinx_coroutines_*.version'
+        exclude 'META-INF/androidx.*.version'
     }
 }
 

@@ -14,10 +14,10 @@
     <!-- PWA Manifest -->
     <link rel="manifest" href="./manifest.json">
     <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=52">
-    <link rel="apple-touch-icon" href="favicon.svg?v=52">
-    <link rel="stylesheet" href="styles.css?v=52">
-    <link rel="stylesheet" href="ui-refresh.css?v=52">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=53">
+    <link rel="apple-touch-icon" href="favicon.svg?v=53">
+    <link rel="stylesheet" href="styles.css?v=53">
+    <link rel="stylesheet" href="ui-refresh.css?v=53">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -39,7 +39,7 @@
                 <div class="brand-lockup" aria-label="WOW-CSG Fitness Challenge">
                     <div class="brand-mark-wrap" aria-hidden="true">
                         <span class="brand-mark-orbit"></span>
-                        <img src="brand-mark.svg?v=52" alt="" class="brand-mark-img" width="60" height="60">
+                        <img src="brand-mark.svg?v=53" alt="" class="brand-mark-img" width="60" height="60">
                     </div>
                     <div class="brand-wordmark">
                         <span class="brand-wow">WOW-CSG</span>
@@ -95,24 +95,25 @@
             <div class="android-app-actions">
                 <a class="btn btn-primary android-download-btn"
                    id="androidApkDownloadBtn"
-                   href="downloads/WOW-CSG-Fitness.apk"
-                   download="WOW-CSG-Fitness-v1.0.13.apk">
-                    Download Android APK (v1.0.13)
+                   href="downloads/WOW-CSG-Fitness-1.0.14.apk"
+                   download="WOW-CSG-Fitness-1.0.14.apk">
+                    Download Android APK (v1.0.14)
                 </a>
                 <a class="btn btn-secondary android-download-btn"
-                   href="downloads/WOW-CSG-Fitness.zip"
-                   download="WOW-CSG-Fitness-v1.0.13.zip"
+                   id="androidApkGithubBtn"
+                   href="https://github.com/CSG-International-WoW-CSG/wowcsgfitness/releases/download/v1.0.14/WOW-CSG-Fitness-1.0.14.apk"
+                   download="WOW-CSG-Fitness-1.0.14.apk"
                    style="margin-left:0.5rem;">
-                    Or download ZIP (if APK install fails)
+                    Alternate download (GitHub Release)
                 </a>
             </div>
             <ol class="android-install-steps">
-                <li><strong>Uninstall</strong> every old WOW-CSG Fitness app (Settings → Apps). Also check <strong>Dual apps</strong> and <strong>Second space</strong> and remove it there too.</li>
-                <li>Delete all old <code>WOW-CSG</code> files from Downloads / Chrome / Files.</li>
-                <li>Download <strong>v1.0.13</strong> (~4.5 MB). Prefer the <strong>ZIP</strong> if Chrome keeps failing: open ZIP → extract APK.</li>
-                <li>Open the APK with <strong>Mi File Manager</strong> (not Chrome’s installer) → Install.</li>
-                <li>Allow <strong>Install unknown apps</strong> for File Manager if asked.</li>
-                <li>If it still says “App not installed”, reboot the phone, then install again from File Manager.</li>
+                <li><strong>Best method (avoids Parse error):</strong> copy <code>WOW-CSG-Fitness-1.0.14.apk</code> from your PC to the phone by <strong>USB</strong> (File transfer mode), then open it in <strong>Mi File Manager</strong>.</li>
+                <li>On the phone: Settings → Apps → <strong>Manage apps</strong> → search <strong>WOW</strong> → Uninstall every match. Also clear <strong>Dual apps</strong> and <strong>Second space</strong>.</li>
+                <li>Delete every old WOW APK from phone Downloads / Chrome / WhatsApp.</li>
+                <li>Settings → Privacy protection → Special permissions → <strong>Install unknown apps</strong> → allow <strong>Mi File Manager</strong> (and Files). Do <strong>not</strong> install from Chrome.</li>
+                <li>Optional if Parse error continues: Settings → Additional settings → Developer options → turn <strong>MIUI optimization</strong> OFF → reboot → install → turn it back ON.</li>
+                <li>File size must be about <strong>4.5 MB</strong>. If it is a few KB, the download failed — use USB instead.</li>
                 <li>Open the app and sign in with your <code>@csgi.com</code> email.</li>
             </ol>
             <p class="android-app-note">
@@ -645,7 +646,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-21-v52 | Android APK v1.0.13</p>
+            <p class="footer-subtext">Site version: 2026-07-21-v53 | Android APK v1.0.14</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#androidAppCard" class="help-link">Download Android App</a>
@@ -735,14 +736,14 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="firebase-config.js"></script>
     <script src="security-config.js"></script>
-    <script src="native-bridge.js?v=52"></script>
-    <script src="script.js?v=52"></script>
+    <script src="native-bridge.js?v=53"></script>
+    <script src="script.js?v=53"></script>
     
     <!-- Force-clear stale SW/caches that can freeze scrolling with old overlays -->
     <script>
         (function () {
-            var CACHE = 'wowcsg-fitness-v52';
-            var FLAG = 'wowcsg_sw_purge_v52';
+            var CACHE = 'wowcsg-fitness-v53';
+            var FLAG = 'wowcsg_sw_purge_v53';
             function purgeAndReload() {
                 var tasks = [];
                 if ('serviceWorker' in navigator) {
@@ -764,7 +765,7 @@
                     sessionStorage.setItem(FLAG, '1');
                     purgeAndReload().then(function () {
                         if ('serviceWorker' in navigator) {
-                            return navigator.serviceWorker.register('./service-worker.js?v=52');
+                            return navigator.serviceWorker.register('./service-worker.js?v=53');
                         }
                     }).then(function () {
                         window.location.reload();
@@ -774,7 +775,7 @@
                     return;
                 }
                 if ('serviceWorker' in navigator) {
-                    navigator.serviceWorker.register('./service-worker.js?v=52').catch(function () {});
+                    navigator.serviceWorker.register('./service-worker.js?v=53').catch(function () {});
                 }
                 if (window.caches && caches.keys) {
                     caches.keys().then(function (keys) {
