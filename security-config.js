@@ -17,6 +17,6 @@ window.securityConfig = {
   /** Coarsen GPS before cloud sync (~110m). */
   gpsCoordDecimals: 3,
   maxGpsPointsCloud: 40,
-  privacyVersion: '2026-07-21',
+  privacyVersion: '2026-07-21b',
   supportEmail: 'wow-csg@csgi.com'
 };

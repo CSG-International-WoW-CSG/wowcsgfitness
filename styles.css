@@ -14,6 +14,9 @@ html {
 body, .card, .info-item, .stat-card {
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
+}
+
+.card, .info-item, .stat-card {
     -webkit-perspective: 1000px;
     perspective: 1000px;
 }

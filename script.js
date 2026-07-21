@@ -189,7 +189,7 @@ class StepathonApp {
  minPasswordLength: 8,
  gpsCoordDecimals: 3,
  maxGpsPointsCloud: 40,
- privacyVersion: '2026-07-21',
+ privacyVersion: '2026-07-21b',
  supportEmail: 'wow-csg@csgi.com'
  };
  }
@@ -252,41 +252,39 @@ class StepathonApp {
  const version = this.securityCfg().privacyVersion;
  const key = 'wowcsg_privacy_consent_v';
 
- // Clear any leftover overlay / scroll lock from older builds
+ // Always restore scrolling (older builds locked body overflow)
  document.body.classList.remove('privacy-consent-open');
  document.body.style.overflow = '';
+ document.body.style.position = '';
+ document.body.style.height = '';
+ document.body.style.touchAction = '';
  document.documentElement.style.overflow = '';
+ document.documentElement.style.height = '';
 
- if (localStorage.getItem(key) === version) {
- const stale = document.getElementById('privacyConsentBanner');
- if (stale) stale.remove();
- return;
- }
- if (document.getElementById('privacyConsentBanner')) return;
+ const existing = document.getElementById('privacyConsentBanner');
+ if (existing) existing.remove();
 
+ if (localStorage.getItem(key) === version) return;
+
+ // In-page banner (document flow) so scrolling never freezes
+ const host = document.querySelector('.container') || document.body;
  const banner = document.createElement('div');
  banner.id = 'privacyConsentBanner';
- banner.className = 'privacy-consent-banner';
- banner.setAttribute('role', 'dialog');
- banner.setAttribute('aria-modal', 'true');
+ banner.className = 'privacy-consent-inline';
+ banner.setAttribute('role', 'region');
  banner.setAttribute('aria-label', 'Privacy notice');
  banner.innerHTML = `
  <div class="privacy-consent-inner">
  <strong>Privacy notice</strong>
- <p class="privacy-consent-lead">This is a CSG internal challenge. We store your name, employee ID, CSG email, and activity data for the challenge only.</p>
+ <p class="privacy-consent-lead">CSG internal challenge — we store your name, employee ID, CSG email, and activity data for this challenge only.</p>
  <button type="button" class="btn btn-primary" id="privacyConsentAccept">I am a CSG employee — Agree &amp; Continue</button>
  <p class="privacy-consent-fineprint">By continuing you agree to this use of your data. Contact ${this.escapeHtml(this.securityCfg().supportEmail)}.</p>
  </div>`;
- document.body.appendChild(banner);
- const btn = banner.querySelector('#privacyConsentAccept');
- const dismiss = () => {
+ host.insertBefore(banner, host.firstChild);
+ banner.querySelector('#privacyConsentAccept').addEventListener('click', () => {
  localStorage.setItem(key, version);
- document.body.classList.remove('privacy-consent-open');
- document.body.style.overflow = '';
- document.documentElement.style.overflow = '';
  banner.remove();
- };
- btn.addEventListener('click', dismiss);
+ });
  }
 
  sanitizePathForCloud(path) {
