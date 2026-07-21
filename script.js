@@ -72,7 +72,11 @@ class StepathonApp {
  pendingSegmentKm: 0,
  lastAccelMagnitude: 0,
  stepPeakArmed: true,
- lockedStepEstimateAt: null
+ lockedStepEstimateAt: null,
+ /** Capacitor Android: hardware pedometer is source of truth (skip DeviceMotion). */
+ useNativeStepsOnly: false,
+ /** Steps already accrued before a pedometer restart (e.g. session restore). */
+ nativeStepBaseline: 0
  };
 
  this.activityMap = null;
@@ -5024,6 +5028,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.stepCounter.stepPeakArmed = true;
  this.stepCounter.lockedStepEstimateAt = null;
 
+ this.stepCounter.useNativeStepsOnly = false;
+ this.stepCounter.nativeStepBaseline = 0;
  this.bindMotionListener();
  this.applyRunningActivityUi();
 
@@ -5044,15 +5050,14 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.setupActivityKeepAlive();
  this.setupServiceWorkerTrackingBridge();
  this.notifyServiceWorkerTracking(true);
+ // Foreground: screen wake lock only. Heavy keep-alives start when the tab is hidden.
  this.requestWakeLock();
- this.startSilentAudioKeepAlive();
- this.startHtmlAudioKeepAlive();
- this.startKeepAwakeFallback();
 
  if (mode === 'outdoor') {
  this.initActivityMap();
  this.startGpsTracking();
- this.startBackgroundGpsPoll();
+ // Background GPS poll only while locked/hidden (saves battery when unlocked)
+ this.stopBackgroundGpsPoll();
  } else {
  this.stopGpsTracking();
  this.stopBackgroundGpsPoll();
@@ -5069,32 +5074,66 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (!window.WowNative) return;
  try {
  await window.WowNative.ready();
- if (!window.WowNative.isNative) return;
+ if (!window.WowNative.isNative) {
+ this.stepCounter.useNativeStepsOnly = false;
+ return;
+ }
  await window.WowNative.requestPermissions();
- const started = await window.WowNative.startPedometer();
- if (started) {
- window.WowNative.startStepPolling((steps) => this.applyNativeStepCount(steps));
+
+ const attachNativeStepUi = () => {
+ this.stepCounter.useNativeStepsOnly = true;
+ if (this.boundHandleDeviceMotion) {
+ window.removeEventListener('devicemotion', this.boundHandleDeviceMotion);
+ }
+ window.WowNative.startStepPolling((steps) => this.applyNativeStepCount(steps), 3000);
  window.WowNative.watchAppResume(({ steps }) => {
  this.applyNativeStepCount(steps);
- this.syncStepsFromDistance(true);
+ if (this.stepCounter.trackingMode === 'outdoor') {
  this.catchUpGpsAfterUnlock();
+ } else {
+ this.catchUpTreadmillAfterUnlock();
+ }
  this.updateStepCounterDisplay();
  this.persistActivitySession(true);
  this.updateCounterHint('Android hardware steps synced after unlock.');
  });
+ };
+
+ // Already running (e.g. after unlock) — do not call startCounting again
+ if (window.WowNative.pedometerStarted) {
+ attachNativeStepUi();
+ return;
+ }
+
+ const started = await window.WowNative.startPedometer();
+ if (started) {
+ // Process death / session restore: plugin restarts at 0; keep prior steps as baseline
+ if ((this.stepCounter.stepCount || 0) > 0) {
+ this.stepCounter.nativeStepBaseline = this.stepCounter.stepCount;
+ } else {
+ this.stepCounter.nativeStepBaseline = 0;
+ }
+ attachNativeStepUi();
  this.updateCounterStatus('Android app tracking ON — hardware steps count while locked.');
  this.showCounterNotification('Native step counter active (works while locked).');
+ } else {
+ this.stepCounter.useNativeStepsOnly = false;
+ this.bindMotionListener();
  }
  } catch (e) {
  console.warn('Native tracking helpers failed', e);
+ this.stepCounter.useNativeStepsOnly = false;
  }
  }
 
  applyNativeStepCount(nativeSteps) {
  if (!this.stepCounter.isRunning) return;
  const n = Math.max(0, Math.round(Number(nativeSteps) || 0));
- if (n > (this.stepCounter.stepCount || 0)) {
- this.stepCounter.stepCount = n;
+ const baseline = this.stepCounter.nativeStepBaseline || 0;
+ const total = baseline + n;
+ // Never go backwards mid-session
+ if (total >= (this.stepCounter.stepCount || 0)) {
+ this.stepCounter.stepCount = total;
  this.updateStepCounterDisplay();
  this.persistActivitySession(false);
  }
@@ -5159,11 +5198,26 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const now = Date.now();
  const last = this.stepCounter.lastTreadmillTickAt || now;
  const dtSec = Math.max(0, (now - last) / 1000);
+ if (dtSec <= 0) return;
+
+ const isHidden = document.visibilityState !== 'visible';
+ // While locked, browsers throttle timers (often 30s–minutes). Credit that time
+ // instead of dropping gaps > 30s (that was why treadmill stalled when locked).
+ let creditSec = dtSec;
+ if (isHidden) {
+ creditSec = Math.min(dtSec, 2 * 3600);
+ } else if (dtSec > 30) {
+ // Large gap while visible → wait for unlock catch-up path
+ return;
+ }
+
  this.stepCounter.lastTreadmillTickAt = now;
- if (dtSec <= 0 || dtSec > 30) return; // ignore huge gaps after deep sleep (catch-up below)
  const speed = this.getTreadmillSpeedKmh();
  this.stepCounter.treadmillSpeedKmh = speed;
- this.stepCounter.treadmillDistanceKm += (speed / 3600) * dtSec;
+ this.stepCounter.treadmillDistanceKm += (speed / 3600) * creditSec;
+ if (isHidden) {
+ this.syncStepsFromDistance(false);
+ }
  }
 
  /** After unlock in treadmill mode, credit missed time at current speed (capped) */
@@ -5176,22 +5230,24 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const creditSec = Math.min(dtSec, 2 * 3600);
  if (creditSec < 2) {
  this.stepCounter.lastTreadmillTickAt = now;
-            return;
-        }
+ return;
+ }
  const speed = this.getTreadmillSpeedKmh();
  this.stepCounter.treadmillDistanceKm += (speed / 3600) * creditSec;
  this.stepCounter.lastTreadmillTickAt = now;
+ this.syncStepsFromDistance(true);
  this.updateStepCounterDisplay();
  this.persistActivitySession(true);
  }
 
  bindMotionListener() {
+ if (this.stepCounter.useNativeStepsOnly) return;
  if (typeof DeviceMotionEvent === 'undefined') return;
  if (!this.boundHandleDeviceMotion) {
-        this.boundHandleDeviceMotion = this.handleDeviceMotion.bind(this);
+ this.boundHandleDeviceMotion = this.handleDeviceMotion.bind(this);
  }
  window.removeEventListener('devicemotion', this.boundHandleDeviceMotion);
-        window.addEventListener('devicemotion', this.boundHandleDeviceMotion);
+ window.addEventListener('devicemotion', this.boundHandleDeviceMotion);
  }
 
  applyRunningActivityUi() {
@@ -5315,6 +5371,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.stepCounter.accelerationHistory = [];
  this.stepCounter.lastAcceleration = { x: 0, y: 0, z: 0 };
  this.stepCounter.gpsReady = (this.stepCounter.path || []).length > 0;
+ this.stepCounter.useNativeStepsOnly = false;
 
  if (this.stepCounter.trackingMode === 'treadmill') {
  this.stepCounter.threshold = 0.85;
@@ -5332,6 +5389,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  this.bindMotionListener();
  this.applyRunningActivityUi();
+ this.startNativeTrackingHelpers().then(() => {
+ if (!this.stepCounter.useNativeStepsOnly) {
+ this.syncStepsFromDistance(true);
+ }
+ this.updateStepCounterDisplay();
+ });
  this.initActivityMap();
  if (this.stepCounter.path.length) {
  const latLngs = this.stepCounter.path.map((p) => [p.lat, p.lng]);
@@ -5349,7 +5412,6 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  this.ensureActivityRuntimeAlive('Activity restored after unlock — tracking continued.');
  this.recalculateGpsDistanceFromPath();
- this.syncStepsFromDistance(true);
  this.showCounterNotification('Activity restored. Your distance was kept after unlock.');
  this.updateCounterStatus('Resumed after unlock. Keep moving — tracking is active.');
  return true;
@@ -5362,12 +5424,20 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.notifyServiceWorkerTracking(true);
  this.startTimer(true);
  this.requestWakeLock();
+ this.startNativeTrackingHelpers();
+ const isHidden = document.visibilityState !== 'visible';
+ if (isHidden) {
  this.startSilentAudioKeepAlive();
  this.startHtmlAudioKeepAlive();
  this.startKeepAwakeFallback();
+ }
  if (this.stepCounter.trackingMode === 'outdoor') {
  this.startGpsTracking();
+ if (isHidden) {
  this.startBackgroundGpsPoll();
+ } else {
+ this.stopBackgroundGpsPoll();
+ }
  } else {
  this.stopGpsTracking();
  this.stopBackgroundGpsPoll();
@@ -5382,10 +5452,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (hintMessage) {
  this.updateCounterHint(hintMessage);
  }
-    }
+ }
 
-    handleDeviceMotion(event) {
-        if (!this.stepCounter.isRunning) return;
+ handleDeviceMotion(event) {
+ if (!this.stepCounter.isRunning) return;
+ // Android native pedometer already counting — DeviceMotion would double-count
+ if (this.stepCounter.useNativeStepsOnly) return;
 
         const acceleration = event.accelerationIncludingGravity || event.acceleration;
         if (!acceleration) return;
@@ -5468,6 +5540,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (window.WowNative && window.WowNative.isNative) {
  window.WowNative.stopPedometer();
  }
+ this.stepCounter.useNativeStepsOnly = false;
+ this.stepCounter.nativeStepBaseline = 0;
 
         const startBtn = document.getElementById('startCounterBtn');
         const stopBtn = document.getElementById('stopCounterBtn');
@@ -5560,6 +5634,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  */
  syncStepsFromDistance(force = false) {
  if (!this.stepCounter.isRunning) return;
+ // Hardware pedometer is authoritative on Capacitor Android
+ if (this.stepCounter.useNativeStepsOnly) return;
  const isHidden = document.visibilityState !== 'visible';
  if (!force && !isHidden) return;
 
@@ -5805,17 +5881,25 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.startSilentAudioKeepAlive();
  this.startHtmlAudioKeepAlive();
  this.startKeepAwakeFallback();
- this.startBackgroundGpsPoll();
- this.startGpsTracking();
  this.notifyServiceWorkerTracking(true);
+ if (this.stepCounter.trackingMode === 'outdoor') {
+ this.startGpsTracking();
+ this.startBackgroundGpsPoll();
+ } else {
+ this.stopGpsTracking();
+ this.stopBackgroundGpsPoll();
+ this.accumulateTreadmillDistance();
+ this.updateStepCounterDisplay();
+ }
  const hint = document.getElementById('mapHint');
- if (hint) {
+ if (hint && this.stepCounter.trackingMode === 'outdoor') {
  hint.textContent = 'Lock-screen tracking ON. Keep the site open in background — do not force-close the app.';
  }
  return;
  }
 
  // Visible again after unlock — reinstate timers/GPS + catch up missed distance
+ this.stopBackgroundGpsPoll();
  this.ensureActivityRuntimeAlive('Tracking active again after unlock.');
  if (this.stepCounter.trackingMode === 'outdoor') {
  this.catchUpGpsAfterUnlock();
@@ -5826,19 +5910,27 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  startBackgroundGpsPoll() {
  this.stopBackgroundGpsPoll();
- if (!navigator.geolocation) return;
- // Poll frequently while locked — browsers throttle timers, so keep interval short
+ if (this.stepCounter.trackingMode !== 'outdoor') return;
+ // Only poll while locked/hidden — watchPosition covers the foreground case
+ if (document.visibilityState === 'visible') return;
+ // Longer interval cuts battery drain; browsers already throttle timers when locked
  this.bgGpsPollId = setInterval(() => {
- this.pollGpsOnce(document.visibilityState !== 'visible');
- }, 2000);
+ if (document.visibilityState === 'visible') {
+ this.stopBackgroundGpsPoll();
+ return;
+ }
+ this.pollGpsOnce(true);
+ }, 6000);
  }
 
  pollGpsOnce(fromBackground = false) {
  if (!this.stepCounter.isRunning) return;
+ if (this.stepCounter.trackingMode !== 'outdoor') return;
  if (window.WowNative && window.WowNative.isNative) {
  window.WowNative.getCurrentPosition({
  enableHighAccuracy: true,
- timeout: fromBackground ? 15000 : 10000
+ timeout: fromBackground ? 15000 : 10000,
+ maximumAge: fromBackground ? 4000 : 1500
  }).then((pos) => {
  if (pos) this.handleGpsPosition(pos, fromBackground);
  });
@@ -5857,31 +5949,30 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  catchUpGpsAfterUnlock() {
- if (!this.stepCounter.isRunning) return;
+ if (!this.stepCounter.isRunning || this.stepCounter.trackingMode !== 'outdoor') return;
  this.recalculateGpsDistanceFromPath();
+ if (!this.stepCounter.useNativeStepsOnly) {
  this.syncStepsFromDistance(true);
+ }
  this.updateStepCounterDisplay();
- if (!navigator.geolocation) return;
- // Multiple samples help fill gap after OS paused GPS
+
  const sample = () => {
- navigator.geolocation.getCurrentPosition(
- (pos) => {
- this.handleGpsPosition(pos, true);
+ this.pollGpsOnce(true);
+ if (!this.stepCounter.useNativeStepsOnly) {
  this.syncStepsFromDistance(true);
- },
- () => {},
- { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
- );
+ }
  };
  sample();
- setTimeout(sample, 1200);
- setTimeout(sample, 3000);
+ setTimeout(sample, 1500);
+ setTimeout(sample, 3500);
  setTimeout(() => {
  this.recalculateGpsDistanceFromPath();
+ if (!this.stepCounter.useNativeStepsOnly) {
  this.syncStepsFromDistance(true);
+ }
  this.updateStepCounterDisplay();
  this.persistActivitySession(true);
- }, 4500);
+ }, 5000);
  }
 
  stopBackgroundGpsPoll() {
@@ -5893,22 +5984,41 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  startWakeLockWatchdog() {
  this.stopWakeLockWatchdog();
+ // 15s: enough for treadmill credit + wake lock refresh without burning battery
  this.wakeLockWatchdogId = setInterval(() => {
  if (!this.stepCounter.isRunning) return;
- this.startSilentAudioKeepAlive();
- this.startHtmlAudioKeepAlive();
- this.startKeepAwakeFallback();
+ const isHidden = document.visibilityState !== 'visible';
+ if (isHidden) {
+ // Only nudge media if it already stopped — avoid restarting every tick
+ this.ensureHiddenKeepAlives();
+ }
  if (this.stepCounter.trackingMode === 'outdoor') {
- this.pollGpsOnce(document.visibilityState !== 'visible');
+ if (isHidden) {
+ this.pollGpsOnce(true);
+ }
  } else {
  this.accumulateTreadmillDistance();
  this.updateStepCounterDisplay();
  }
  this.persistActivitySession(false);
- if (document.visibilityState === 'visible') {
+ if (!isHidden) {
  this.requestWakeLock();
  }
- }, 8000);
+ }, 15000);
+ }
+
+ /** Start lock-screen keep-alives only if not already running (battery-friendly). */
+ ensureHiddenKeepAlives() {
+ try {
+ const audioOk = this.keepAliveAudio && !this.keepAliveAudio.paused;
+ const oscOk = !!(this.silentOscillator && this.silentAudioCtx && this.silentAudioCtx.state === 'running');
+ if (!audioOk) this.startHtmlAudioKeepAlive();
+ if (!oscOk) this.startSilentAudioKeepAlive();
+ if (!this.keepAwakeVideo) this.startKeepAwakeFallback();
+ } catch (e) {
+ this.startSilentAudioKeepAlive();
+ this.startHtmlAudioKeepAlive();
+ }
  }
 
  stopWakeLockWatchdog() {
@@ -5972,13 +6082,16 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  navigator.serviceWorker.addEventListener('message', (event) => {
  if (!event.data || event.data.type !== 'TRACKING_TICK') return;
  if (!this.stepCounter.isRunning) return;
- this.pollGpsOnce(document.visibilityState !== 'visible');
- this.persistActivitySession(false);
- this.startHtmlAudioKeepAlive();
- this.startSilentAudioKeepAlive();
- if (this.stepCounter.trackingMode === 'treadmill') {
+ const isHidden = document.visibilityState !== 'visible';
+ if (this.stepCounter.trackingMode === 'outdoor' && isHidden) {
+ this.pollGpsOnce(true);
+ } else if (this.stepCounter.trackingMode === 'treadmill') {
  this.accumulateTreadmillDistance();
  this.updateStepCounterDisplay();
+ }
+ this.persistActivitySession(false);
+ if (isHidden) {
+ this.ensureHiddenKeepAlives();
  }
  });
  }
@@ -6067,9 +6180,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.stepCounter.wakeLock.addEventListener('release', () => {
  this.updateWakeLockUi();
  if (this.stepCounter.isRunning) {
- this.startSilentAudioKeepAlive();
+ if (document.visibilityState !== 'visible') {
+ this.ensureHiddenKeepAlives();
+ if (this.stepCounter.trackingMode === 'outdoor') {
  this.startBackgroundGpsPoll();
- if (document.visibilityState === 'visible') {
+ }
+ } else {
  this.requestWakeLock();
  }
  }
@@ -6081,7 +6197,6 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  console.warn('Wake Lock unavailable:', error);
  }
  this.startKeepAwakeFallback();
- this.startSilentAudioKeepAlive();
  this.updateWakeLockUi();
  return false;
  }

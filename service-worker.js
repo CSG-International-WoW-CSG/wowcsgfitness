@@ -1,6 +1,6 @@
-// Service Worker for WOW-CSG 7 Days Fitness Challenge
+﻿// Service Worker for WOW-CSG 7 Days Fitness Challenge
 // Bump CACHE_NAME whenever HTML/JS content changes so clients drop stale pages.
-const CACHE_NAME = 'wowcsg-fitness-v39';
+const CACHE_NAME = 'wowcsg-fitness-v40';
 const urlsToCache = [
   './styles.css',
   './ui-refresh.css',
@@ -22,14 +22,14 @@ function stopTrackingHeartbeat() {
 
 function startTrackingHeartbeat() {
   stopTrackingHeartbeat();
-  // Ping open pages so GPS can keep sampling while phone is locked (best-effort).
+  // Slower ping: less wake-ups = less battery; still enough for treadmill time credit
   trackingHeartbeatId = setInterval(() => {
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       clients.forEach((client) => {
         client.postMessage({ type: 'TRACKING_TICK', t: Date.now() });
       });
     });
-  }, 2500);
+  }, 8000);
 }
 
 self.addEventListener('message', (event) => {

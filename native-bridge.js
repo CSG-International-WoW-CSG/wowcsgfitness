@@ -8,11 +8,12 @@
     isNative: false,
     platform: 'web',
     pedometerStarted: false,
-    baselineSteps: null,
+    /** Session step count from plugin (delta since startCounting). */
     lastNativeSteps: 0,
     watchId: null,
     _pollId: null,
-    _appListener: null
+    _appListener: null,
+    _stepListener: null
   };
 
   function hasCapacitor() {
@@ -27,8 +28,11 @@
     }
   }
 
+  function pedometerPlugin() {
+    return plugin('CapacitorPedometer') || plugin('Pedometer') || plugin('TubblyCapacitorPedometer');
+  }
+
   bridge.ready = async function ready() {
-    // Capacitor injects at runtime; wait briefly if needed
     for (let i = 0; i < 40; i++) {
       if (hasCapacitor()) break;
       await new Promise((r) => setTimeout(r, 50));
@@ -52,14 +56,15 @@
     } catch (e) {
       console.warn('Geo permission failed', e);
     }
-    // Pedometer plugin requests ACTIVITY_RECOGNITION on start
     result.activity = 'pending-start';
     return result;
   };
 
   bridge.startPedometer = async function startPedometer() {
     if (!bridge.isNative) return false;
-    const Pedometer = plugin('CapacitorPedometer') || plugin('Pedometer') || plugin('TubblyCapacitorPedometer');
+    // Idempotent — restarting startCounting() resets the hardware session counter
+    if (bridge.pedometerStarted) return true;
+    const Pedometer = pedometerPlugin();
     if (!Pedometer) {
       console.warn('Pedometer plugin not found');
       return false;
@@ -68,9 +73,10 @@
       if (Pedometer.startCounting) await Pedometer.startCounting();
       else if (Pedometer.start) await Pedometer.start();
       bridge.pedometerStarted = true;
-      const count = await bridge.getNativeStepDelta(true);
-      bridge.baselineSteps = count;
       bridge.lastNativeSteps = 0;
+      // Tubbly returns session delta since startCounting — read once to sync
+      const first = await bridge.getNativeStepDelta();
+      bridge.lastNativeSteps = first;
       return true;
     } catch (e) {
       console.warn('startPedometer failed', e);
@@ -80,7 +86,13 @@
 
   bridge.stopPedometer = async function stopPedometer() {
     if (!bridge.isNative || !bridge.pedometerStarted) return;
-    const Pedometer = plugin('CapacitorPedometer') || plugin('Pedometer') || plugin('TubblyCapacitorPedometer');
+    const Pedometer = pedometerPlugin();
+    try {
+      if (bridge._stepListener && bridge._stepListener.remove) {
+        await bridge._stepListener.remove();
+      }
+    } catch (e) { /* ignore */ }
+    bridge._stepListener = null;
     try {
       if (Pedometer && Pedometer.stopCounting) await Pedometer.stopCounting();
       else if (Pedometer && Pedometer.stop) await Pedometer.stop();
@@ -88,7 +100,6 @@
       console.warn('stopPedometer failed', e);
     }
     bridge.pedometerStarted = false;
-    bridge.baselineSteps = null;
     bridge.lastNativeSteps = 0;
     if (bridge._pollId) {
       clearInterval(bridge._pollId);
@@ -97,50 +108,63 @@
   };
 
   /**
-   * Returns steps since startPedometer() (delta), using hardware counter when possible.
-   * Hardware TYPE_STEP_COUNTER keeps counting while the screen is locked;
-   * we read the cumulative value whenever the app wakes.
+   * Hardware TYPE_STEP_COUNTER keeps counting while locked.
+   * Tubbly CapacitorPedometer.getStepCount() returns steps since startCounting().
    */
-  bridge.getNativeStepDelta = async function getNativeStepDelta(absolute) {
+  bridge.getNativeStepDelta = async function getNativeStepDelta() {
     if (!bridge.isNative) return 0;
-    const Pedometer = plugin('CapacitorPedometer') || plugin('Pedometer') || plugin('TubblyCapacitorPedometer');
+    const Pedometer = pedometerPlugin();
     if (!Pedometer) return 0;
     try {
       let raw = 0;
       if (Pedometer.getStepCount) {
         const res = await Pedometer.getStepCount();
-        raw = Number(res && (res.steps != null ? res.steps : res.count != null ? res.count : res)) || 0;
+        raw = Number(res && (res.count != null ? res.count : res.steps != null ? res.steps : res)) || 0;
       } else if (Pedometer.getCurrentSteps) {
         const res = await Pedometer.getCurrentSteps();
-        raw = Number(res && (res.steps != null ? res.steps : res)) || 0;
+        raw = Number(res && (res.steps != null ? res.steps : res.count != null ? res.count : res)) || 0;
       }
-      if (absolute) return raw;
-      // Plugin may already return delta since startCounting
-      if (bridge.baselineSteps == null) {
-        bridge.baselineSteps = raw;
-        return 0;
-      }
-      // If values look like absolute-since-boot, convert to delta
-      if (raw >= bridge.baselineSteps && raw > 1000 && bridge.baselineSteps > 100) {
-        return Math.max(0, raw - bridge.baselineSteps);
-      }
-      return Math.max(0, raw);
+      return Math.max(0, Math.round(raw));
     } catch (e) {
       console.warn('getNativeStepDelta failed', e);
       return bridge.lastNativeSteps || 0;
     }
   };
 
-  bridge.startStepPolling = function startStepPolling(onSteps) {
+  bridge.startStepPolling = function startStepPolling(onSteps, intervalMs) {
     if (!bridge.isNative) return;
     if (bridge._pollId) clearInterval(bridge._pollId);
-    bridge._pollId = setInterval(async () => {
-      const steps = await bridge.getNativeStepDelta(false);
+    const ms = Math.max(2000, Number(intervalMs) || 3000);
+
+    const emit = async () => {
+      const steps = await bridge.getNativeStepDelta();
       if (steps > bridge.lastNativeSteps) {
         bridge.lastNativeSteps = steps;
         if (typeof onSteps === 'function') onSteps(steps);
+      } else if (steps > 0) {
+        bridge.lastNativeSteps = Math.max(bridge.lastNativeSteps, steps);
       }
-    }, 2000);
+    };
+
+    bridge._pollId = setInterval(emit, ms);
+    emit();
+
+    // Prefer native events when available (lower latency, less polling work)
+    const Pedometer = pedometerPlugin();
+    if (Pedometer && Pedometer.addListener && !bridge._stepListener) {
+      Pedometer.addListener('stepCountChange', (event) => {
+        const steps = Math.max(
+          0,
+          Math.round(Number(event && (event.count != null ? event.count : event.steps)) || 0)
+        );
+        if (steps > bridge.lastNativeSteps) {
+          bridge.lastNativeSteps = steps;
+          if (typeof onSteps === 'function') onSteps(steps);
+        }
+      }).then((handle) => {
+        bridge._stepListener = handle;
+      }).catch(() => {});
+    }
   };
 
   bridge.watchAppResume = function watchAppResume(onResume) {
@@ -152,7 +176,7 @@
     }
     App.addListener('appStateChange', async (state) => {
       if (state && state.isActive && typeof onResume === 'function') {
-        const steps = await bridge.getNativeStepDelta(false);
+        const steps = await bridge.getNativeStepDelta();
         bridge.lastNativeSteps = Math.max(bridge.lastNativeSteps, steps);
         onResume({ steps: bridge.lastNativeSteps });
       }
@@ -166,15 +190,15 @@
     const Geo = plugin('Geolocation');
     if (!Geo || !Geo.watchPosition) return null;
     try {
+      // Slightly lower power than continuous max accuracy when possible
       bridge.watchId = await Geo.watchPosition(
-        { enableHighAccuracy: true, timeout: 20000 },
+        { enableHighAccuracy: true, timeout: 25000, maximumAge: 2000 },
         (pos, err) => {
           if (err) {
             if (onError) onError(err);
             return;
           }
           if (!pos || !pos.coords) return;
-          // Normalize to browser GeolocationPosition-like shape
           onSuccess({
             coords: {
               latitude: pos.coords.latitude,
@@ -214,7 +238,11 @@
     const Geo = plugin('Geolocation');
     if (!Geo || !Geo.getCurrentPosition) return null;
     try {
-      const pos = await Geo.getCurrentPosition(options || { enableHighAccuracy: true, timeout: 20000 });
+      const pos = await Geo.getCurrentPosition(options || {
+        enableHighAccuracy: true,
+        timeout: 20000,
+        maximumAge: 3000
+      });
       return {
         coords: {
           latitude: pos.coords.latitude,
