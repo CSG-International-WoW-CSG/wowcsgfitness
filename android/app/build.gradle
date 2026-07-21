@@ -4,12 +4,13 @@ android {
     namespace "com.csgi.wowcsgfitness"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        // Same package id as the last known-installable build (v1.0.3)
-        applicationId "com.csgi.wowcsgfitness"
+        // Fresh package id so MIUI can install even when an old WOW-CSG build is stuck
+        // (Dual apps / Second space / signature conflict). Uninstall old app afterward.
+        applicationId "com.csgi.wowcsgfitness2026"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 13
-        versionName "1.0.12"
+        versionCode 14
+        versionName "1.0.13"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
@@ -22,8 +23,7 @@ android {
         release {
             minifyEnabled false
             shrinkResources false
-            // Use default debug keystore — same as v1.0.3 which installed on devices.
-            // Custom release keys + v3 signing break sideload on some MIUI Android 11 phones.
+            // Debug keystore — MIUI Android 11 rejects custom release keys + APK Signature v3.
             signingConfig signingConfigs.debug
         }
         debug {
