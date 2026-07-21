@@ -14,10 +14,10 @@
     <!-- PWA Manifest -->
     <link rel="manifest" href="./manifest.json">
     <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=49">
-    <link rel="apple-touch-icon" href="favicon.svg?v=49">
-    <link rel="stylesheet" href="styles.css?v=49">
-    <link rel="stylesheet" href="ui-refresh.css?v=49">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=50">
+    <link rel="apple-touch-icon" href="favicon.svg?v=50">
+    <link rel="stylesheet" href="styles.css?v=50">
+    <link rel="stylesheet" href="ui-refresh.css?v=50">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -39,7 +39,7 @@
                 <div class="brand-lockup" aria-label="WOW-CSG Fitness Challenge">
                     <div class="brand-mark-wrap" aria-hidden="true">
                         <span class="brand-mark-orbit"></span>
-                        <img src="brand-mark.svg?v=49" alt="" class="brand-mark-img" width="60" height="60">
+                        <img src="brand-mark.svg?v=50" alt="" class="brand-mark-img" width="60" height="60">
                     </div>
                     <div class="brand-wordmark">
                         <span class="brand-wow">WOW-CSG</span>
@@ -97,18 +97,18 @@
                    id="androidApkDownloadBtn"
                    href="downloads/WOW-CSG-Fitness.apk"
                    download="WOW-CSG-Fitness.apk">
-                    Download Android APK (v1.0.10)
+                    Download Android APK (v1.0.11)
                 </a>
             </div>
             <ol class="android-install-steps">
-                <li>Tap <strong>Download Android APK</strong> on your Android phone.</li>
-                <li>If prompted, allow <strong>Install unknown apps</strong> for Chrome or File Manager.</li>
-                <li>Open the downloaded APK and tap <strong>Install</strong>.</li>
-                <li>Open <strong>WOW-CSG Fitness</strong> and sign in with your <code>@csgi.com</code> account.</li>
+                <li><strong>Uninstall</strong> any existing WOW-CSG Fitness app first (Settings → Apps). Also check Dual apps / Second space.</li>
+                <li>Delete old APK files from Downloads, then tap <strong>Download Android APK (v1.0.11)</strong>. File size should be about <strong>4.5 MB</strong>.</li>
+                <li>Open the APK with <strong>Mi File Manager</strong> (not only Chrome) and tap Install.</li>
+                <li>Allow <strong>Install unknown apps</strong> for File Manager if asked.</li>
+                <li>Open the app and sign in with your <code>@csgi.com</code> email.</li>
             </ol>
             <p class="android-app-note">
                 Internal CSG challenge build only (not on Play Store).
-                If an older build is already installed, uninstall it first, then install this one.
                 iPhone users should continue using this website (Add to Home Screen).
             </p>
         </div>
@@ -637,7 +637,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-21-v49 | Android APK v1.0.10</p>
+            <p class="footer-subtext">Site version: 2026-07-21-v50 | Android APK v1.0.11</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#androidAppCard" class="help-link">Download Android App</a>
@@ -727,14 +727,14 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="firebase-config.js"></script>
     <script src="security-config.js"></script>
-    <script src="native-bridge.js?v=49"></script>
-    <script src="script.js?v=49"></script>
+    <script src="native-bridge.js?v=50"></script>
+    <script src="script.js?v=50"></script>
     
     <!-- Force-clear stale SW/caches that can freeze scrolling with old overlays -->
     <script>
         (function () {
-            var CACHE = 'wowcsg-fitness-v49';
-            var FLAG = 'wowcsg_sw_purge_v49';
+            var CACHE = 'wowcsg-fitness-v50';
+            var FLAG = 'wowcsg_sw_purge_v50';
             function purgeAndReload() {
                 var tasks = [];
                 if ('serviceWorker' in navigator) {
@@ -756,7 +756,7 @@
                     sessionStorage.setItem(FLAG, '1');
                     purgeAndReload().then(function () {
                         if ('serviceWorker' in navigator) {
-                            return navigator.serviceWorker.register('./service-worker.js?v=49');
+                            return navigator.serviceWorker.register('./service-worker.js?v=50');
                         }
                     }).then(function () {
                         window.location.reload();
@@ -766,7 +766,7 @@
                     return;
                 }
                 if ('serviceWorker' in navigator) {
-                    navigator.serviceWorker.register('./service-worker.js?v=49').catch(function () {});
+                    navigator.serviceWorker.register('./service-worker.js?v=50').catch(function () {});
                 }
                 if (window.caches && caches.keys) {
                     caches.keys().then(function (keys) {
