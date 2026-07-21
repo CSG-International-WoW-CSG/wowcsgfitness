@@ -262,13 +262,18 @@ class StepathonApp {
  banner.innerHTML = `
  <div class="privacy-consent-inner">
  <strong>Privacy notice (CSG internal challenge)</strong>
- <p>This app stores your name, employee ID, corporate email, and activity data (distance, time, steps). Outdoor mode may store a shortened, coarsened GPS path. Optional body weight stays on this device for calorie estimates. Data is for the WOW-CSG challenge only and can be wiped after the season. Contact ${this.escapeHtml(this.securityCfg().supportEmail)}.</p>
+ <p>We store your name, employee ID, CSG email, and activity (distance, time, steps) for this internal challenge only. Outdoor mode may keep a shortened GPS path. Optional body weight stays on this device for calorie estimates. Contact ${this.escapeHtml(this.securityCfg().supportEmail)}.</p>
  <label class="privacy-consent-check"><input type="checkbox" id="privacyConsentCheck"> I am a CSG employee and agree to this use of my data.</label>
  <button type="button" class="btn btn-primary" id="privacyConsentAccept" disabled>Continue</button>
+ <p class="privacy-consent-scroll-hint">If you do not see the checkbox, scroll inside this box.</p>
  </div>`;
  document.body.appendChild(banner);
  const check = banner.querySelector('#privacyConsentCheck');
  const btn = banner.querySelector('#privacyConsentAccept');
+ // Ensure the accept controls are in view on short Android screens
+ try {
+ check.scrollIntoView({ block: 'center', behavior: 'smooth' });
+ } catch (e) { /* ignore */ }
  check.addEventListener('change', () => { btn.disabled = !check.checked; });
  btn.addEventListener('click', () => {
  localStorage.setItem(key, version);
