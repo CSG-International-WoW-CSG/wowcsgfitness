@@ -99,20 +99,12 @@
                    download="WOW-CSG-Fitness-1.0.14.apk">
                     Download Android APK (v1.0.14)
                 </a>
-                <a class="btn btn-secondary android-download-btn"
-                   id="androidApkGithubBtn"
-                   href="https://github.com/CSG-International-WoW-CSG/wowcsgfitness/releases/download/v1.0.14/WOW-CSG-Fitness-1.0.14.apk"
-                   download="WOW-CSG-Fitness-1.0.14.apk"
-                   style="margin-left:0.5rem;">
-                    Alternate download (GitHub Release)
-                </a>
             </div>
             <ol class="android-install-steps">
-                <li><strong>Best method (avoids Parse error):</strong> copy <code>WOW-CSG-Fitness-1.0.14.apk</code> from your PC to the phone by <strong>USB</strong> (File transfer mode), then open it in <strong>Mi File Manager</strong>.</li>
-                <li>On the phone: Settings → Apps → <strong>Manage apps</strong> → search <strong>WOW</strong> → Uninstall every match. Also clear <strong>Dual apps</strong> and <strong>Second space</strong>.</li>
+                <li><strong>Best method (avoids Parse error):</strong> copy <code>WOW-CSG-Fitness-1.0.14.apk</code> from your PC to the phone by <strong>USB</strong> (File transfer mode), then open it in your phone&rsquo;s <strong>Files</strong> / file manager app.</li>
+                <li>On the phone: Settings → Apps → search <strong>WOW</strong> → Uninstall every match before installing the new build.</li>
                 <li>Delete every old WOW APK from phone Downloads / Chrome / WhatsApp.</li>
-                <li>Settings → Privacy protection → Special permissions → <strong>Install unknown apps</strong> → allow <strong>Mi File Manager</strong> (and Files). Do <strong>not</strong> install from Chrome.</li>
-                <li>Optional if Parse error continues: Settings → Additional settings → Developer options → turn <strong>MIUI optimization</strong> OFF → reboot → install → turn it back ON.</li>
+                <li>Settings → allow <strong>Install unknown apps</strong> for your Files / file manager app. Do <strong>not</strong> install from Chrome.</li>
                 <li>File size must be about <strong>4.5 MB</strong>. If it is a few KB, the download failed — use USB instead.</li>
                 <li>Open the app and sign in with your <code>@csgi.com</code> email.</li>
             </ol>
@@ -621,6 +613,18 @@
                     <div class="admin-stat-card">
                         <div class="admin-stat-value" id="rejectedCount">0</div>
                         <div class="admin-stat-label">Rejected Entries</div>
+                    </div>
+                    <div class="admin-stat-card">
+                        <div class="admin-stat-value" id="totalStepsCount">0</div>
+                        <div class="admin-stat-label">Total Steps (All Users)</div>
+                    </div>
+                    <div class="admin-stat-card">
+                        <div class="admin-stat-value" id="totalKmCount">0</div>
+                        <div class="admin-stat-label">Total KM Walked</div>
+                    </div>
+                    <div class="admin-stat-card">
+                        <div class="admin-stat-value" id="totalCaloriesCount">0</div>
+                        <div class="admin-stat-label">Total Calories Burnt</div>
                     </div>
                 </div>
 

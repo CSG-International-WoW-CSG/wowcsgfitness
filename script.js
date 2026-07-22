@@ -2975,25 +2975,49 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 else if (status === 'rejected') rejected++;
             }
             
-            // Cache total steps calculation - only recalculate if participants changed
-            if (!this._cachedTotalSteps || this._participantsVersion !== (this.participants?.length || 0)) {
-                this._cachedTotalSteps = (this.participants || []).reduce((sum, participant) => {
-                    return sum + (participant.totalSteps || 0);
-                }, 0);
-                this._participantsVersion = this.participants?.length || 0;
-            }
-            const totalSteps = this._cachedTotalSteps;
+            // Aggregate totals across all participants (fallback to step-based estimates)
+            const stepsPerKm = this.challengeConfig?.stepsPerKm || 1300;
+            let totalSteps = 0;
+            let totalKm = 0;
+            let totalCalories = 0;
+            (this.participants || []).forEach((participant) => {
+                if (!participant) return;
+                const steps = Number(participant.totalSteps) || 0;
+                totalSteps += steps;
+
+                let km = Number(participant.totalDistanceKm);
+                if (!Number.isFinite(km) || km < 0) {
+                    km = steps / stepsPerKm;
+                }
+                totalKm += km;
+
+                let calories = Number(participant.totalCalories);
+                if (!Number.isFinite(calories) || calories < 0) {
+                    calories = this.estimateCaloriesBurned(km, null, null);
+                }
+                totalCalories += calories;
+            });
 
             // Update stats immediately
             const pendingCountEl = document.getElementById('pendingCount');
             const approvedCountEl = document.getElementById('approvedCount');
             const rejectedCountEl = document.getElementById('rejectedCount');
             const totalStepsCountEl = document.getElementById('totalStepsCount');
+            const totalKmCountEl = document.getElementById('totalKmCount');
+            const totalCaloriesCountEl = document.getElementById('totalCaloriesCount');
             
             if (pendingCountEl) pendingCountEl.textContent = pending;
             if (approvedCountEl) approvedCountEl.textContent = approved;
             if (rejectedCountEl) rejectedCountEl.textContent = rejected;
             if (totalStepsCountEl) totalStepsCountEl.textContent = totalSteps.toLocaleString();
+            if (totalKmCountEl) {
+                totalKmCountEl.textContent = totalKm >= 100
+                    ? Math.round(totalKm).toLocaleString()
+                    : totalKm.toLocaleString(undefined, { maximumFractionDigits: 1, minimumFractionDigits: 0 });
+            }
+            if (totalCaloriesCountEl) {
+                totalCaloriesCountEl.textContent = Math.round(totalCalories).toLocaleString();
+            }
 
             // Get current filter or default to 'pending'
             const activeFilter = document.querySelector('.admin-filters .filter-btn.active');
