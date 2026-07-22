@@ -5124,23 +5124,47 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
  await window.WowNative.requestPermissions();
 
+ const mode = this.stepCounter.trackingMode || this.getTrackingMode();
+ const speed = this.getTreadmillSpeedKmh();
+
+ // Foreground service keeps hardware steps + KM alive while locked / backgrounded
+ const keepAliveOk = await window.WowNative.startKeepAliveTracking({
+ mode,
+ treadmillSpeedKmh: speed
+ });
+ if (keepAliveOk) {
+ window.WowNative.startKeepAlivePolling((snap) => this.applyKeepAliveSnapshot(snap), 1500);
+ }
+
  const attachNativeStepUi = () => {
  this.stepCounter.useNativeStepsOnly = true;
  if (this.boundHandleDeviceMotion) {
  window.removeEventListener('devicemotion', this.boundHandleDeviceMotion);
  }
- window.WowNative.startStepPolling((steps) => this.applyNativeStepCount(steps), 2000);
- window.WowNative.watchAppResume(({ steps }) => {
+ // Faster poll while tracking — WebView timers may stall when locked
+ const pollMs = document.visibilityState === 'visible' ? 1500 : 1000;
+ window.WowNative.startStepPolling((steps) => this.applyNativeStepCount(steps), pollMs);
+ window.WowNative.watchAppResume(
+ ({ steps, snapshot }) => {
  this.applyNativeStepCount(steps);
+ if (snapshot) this.applyKeepAliveSnapshot(snapshot);
  if (this.stepCounter.trackingMode === 'outdoor') {
  this.catchUpGpsAfterUnlock();
  } else {
  this.catchUpTreadmillAfterUnlock();
  }
+ this.syncStepsFromDistance(true);
  this.updateStepCounterDisplay();
  this.persistActivitySession(true);
  this.updateCounterHint('Android hardware steps synced after unlock.');
- });
+ },
+ ({ steps, snapshot }) => {
+ // Flush before OEM suspends the WebView
+ this.applyNativeStepCount(steps);
+ if (snapshot) this.applyKeepAliveSnapshot(snapshot);
+ this.persistActivitySession(true);
+ }
+ );
  };
 
  // Already running (e.g. after unlock) — do not call startCounting again
@@ -5150,7 +5174,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  const started = await window.WowNative.startPedometer();
- if (started) {
+ if (started || keepAliveOk) {
  // Process death / session restore: plugin restarts at 0; keep prior steps as baseline
  if ((this.stepCounter.stepCount || 0) > 0) {
  this.stepCounter.nativeStepBaseline = this.stepCounter.stepCount;
@@ -5158,8 +5182,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.stepCounter.nativeStepBaseline = 0;
  }
  attachNativeStepUi();
- this.updateCounterStatus('Android app tracking ON — hardware steps count while locked.');
- this.showCounterNotification('Native step counter active (works while locked).');
+ this.updateCounterStatus('Android lock-screen tracking ON — steps/KM continue in background.');
+ this.showCounterNotification('Background tracking active (notification stays while you walk).');
  } else {
  this.stepCounter.useNativeStepsOnly = false;
  this.bindMotionListener();
@@ -5168,6 +5192,30 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  console.warn('Native tracking helpers failed', e);
  this.stepCounter.useNativeStepsOnly = false;
  }
+ }
+
+ applyKeepAliveSnapshot(snap) {
+ if (!this.stepCounter.isRunning || !snap) return;
+ const serviceSteps = Math.max(0, Math.round(Number(snap.steps) || 0));
+ const tubblySteps = (window.WowNative && window.WowNative.lastNativeSteps) || 0;
+ const bestDelta = Math.max(serviceSteps, tubblySteps);
+ this.applyNativeStepCount(bestDelta);
+
+ const serviceKm = Number(snap.distanceKm);
+ if (!Number.isFinite(serviceKm) || serviceKm <= 0) return;
+
+ if (this.stepCounter.trackingMode === 'treadmill') {
+ this.stepCounter.treadmillDistanceKm = Math.max(
+ this.stepCounter.treadmillDistanceKm || 0,
+ serviceKm
+ );
+ } else {
+ // Outdoor: merge service GPS/step KM without shrinking local GPS track
+ this.stepCounter.distanceKm = Math.max(this.stepCounter.distanceKm || 0, serviceKm);
+ }
+ this.syncStepsFromDistance(false);
+ this.updateStepCounterDisplay();
+ this.persistActivitySession(false);
  }
 
  applyNativeStepCount(nativeSteps) {
@@ -5387,6 +5435,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  treadmillSpeedKmh: this.stepCounter.treadmillSpeedKmh || this.getTreadmillSpeedKmh(),
  trackingMode: this.stepCounter.trackingMode || 'outdoor',
  lastTreadmillTickAt: this.stepCounter.lastTreadmillTickAt || null,
+ nativeStepBaseline: this.stepCounter.nativeStepBaseline || 0,
+ useNativeStepsOnly: !!this.stepCounter.useNativeStepsOnly,
  path,
  lastPosition: this.stepCounter.lastPosition || null,
  savedAt: now
@@ -5454,6 +5504,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.stepCounter.lastTreadmillTickAt = data.lastTreadmillTickAt || data.savedAt || Date.now();
  this.stepCounter.path = Array.isArray(data.path) ? data.path : [];
  this.stepCounter.lastPosition = data.lastPosition || null;
+ this.stepCounter.nativeStepBaseline = Number(data.nativeStepBaseline) || 0;
+ this.stepCounter.useNativeStepsOnly = !!data.useNativeStepsOnly;
  this.stepCounter.stepHistory = [];
  this.stepCounter.accelerationHistory = [];
  this.stepCounter.lastAcceleration = { x: 0, y: 0, z: 0 };
@@ -5645,6 +5697,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         this.stopTimer();
  if (window.WowNative && window.WowNative.isNative) {
  window.WowNative.stopPedometer();
+ window.WowNative.stopKeepAliveTracking();
  }
  this.stepCounter.useNativeStepsOnly = false;
  this.stepCounter.nativeStepBaseline = 0;
@@ -5711,6 +5764,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.stepCounter.elapsedSecAtPause = 0;
  if (window.WowNative && window.WowNative.isNative) {
  window.WowNative.stopPedometer();
+ window.WowNative.stopKeepAliveTracking();
  }
         this.stepCounter.stepCount = 0;
         this.stepCounter.stepHistory = [];
@@ -6044,11 +6098,22 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  // Visible again after unlock — reinstate timers/GPS + catch up missed distance
  this.stopBackgroundGpsPoll();
  this.ensureActivityRuntimeAlive('Tracking active again after unlock.');
+ if (window.WowNative && window.WowNative.isNative) {
+ window.WowNative.getKeepAliveSnapshot().then((snap) => {
+ if (snap) this.applyKeepAliveSnapshot(snap);
+ }).catch(() => {});
+ window.WowNative.getNativeStepDelta().then((steps) => {
+ this.applyNativeStepCount(steps);
+ }).catch(() => {});
+ }
  if (this.stepCounter.trackingMode === 'outdoor') {
  this.catchUpGpsAfterUnlock();
  } else {
  this.catchUpTreadmillAfterUnlock();
  }
+ this.syncStepsFromDistance(true);
+ this.updateStepCounterDisplay();
+ this.persistActivitySession(true);
  }
 
  startBackgroundGpsPoll() {
@@ -6695,7 +6760,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.accumulateTreadmillDistance();
  const distanceKm = this.getTrackedDistanceKm();
  const motionSteps = this.stepCounter.stepCount || 0;
- const estimatedSteps = Math.round(distanceKm * (this.challengeConfig.stepsPerKm || 1300));
+ const estimatedSteps = Math.round(distanceKm * this.getStepsPerKmForTracking());
  const steps = Math.max(motionSteps, estimatedSteps);
  const mode = this.stepCounter.trackingMode || 'outdoor';
 

@@ -1,17 +1,20 @@
 /**
  * Native bridge for Capacitor Android.
  * On web browsers this is a no-op and the existing web tracking code runs.
- * On Android it uses hardware STEP_COUNTER + Capacitor Geolocation.
+ * On Android it uses hardware STEP_COUNTER + Capacitor Geolocation +
+ * a foreground TrackingKeepAlive service for lock-screen continuity.
  */
 (function initNativeBridge(global) {
   const bridge = {
     isNative: false,
     platform: 'web',
     pedometerStarted: false,
+    keepAliveStarted: false,
     /** Session step count from plugin (delta since startCounting). */
     lastNativeSteps: 0,
     watchId: null,
     _pollId: null,
+    _keepAlivePollId: null,
     _appListener: null,
     _stepListener: null
   };
@@ -30,6 +33,10 @@
 
   function pedometerPlugin() {
     return plugin('CapacitorPedometer') || plugin('Pedometer') || plugin('TubblyCapacitorPedometer');
+  }
+
+  function keepAlivePlugin() {
+    return plugin('TrackingKeepAlive');
   }
 
   bridge.ready = async function ready() {
@@ -56,8 +63,65 @@
     } catch (e) {
       console.warn('Geo permission failed', e);
     }
+    // Activity recognition is requested when TrackingKeepAlive / pedometer starts
     result.activity = 'pending-start';
     return result;
+  };
+
+  bridge.startKeepAliveTracking = async function startKeepAliveTracking(options) {
+    if (!bridge.isNative) return false;
+    const KeepAlive = keepAlivePlugin();
+    if (!KeepAlive || !KeepAlive.start) return false;
+    try {
+      await KeepAlive.start({
+        mode: (options && options.mode) || 'outdoor',
+        treadmillSpeedKmh: (options && options.treadmillSpeedKmh) || 5
+      });
+      bridge.keepAliveStarted = true;
+      return true;
+    } catch (e) {
+      console.warn('startKeepAliveTracking failed', e);
+      return false;
+    }
+  };
+
+  bridge.stopKeepAliveTracking = async function stopKeepAliveTracking() {
+    if (!bridge.isNative) return;
+    if (bridge._keepAlivePollId) {
+      clearInterval(bridge._keepAlivePollId);
+      bridge._keepAlivePollId = null;
+    }
+    const KeepAlive = keepAlivePlugin();
+    try {
+      if (KeepAlive && KeepAlive.stop) await KeepAlive.stop();
+    } catch (e) {
+      console.warn('stopKeepAliveTracking failed', e);
+    }
+    bridge.keepAliveStarted = false;
+  };
+
+  bridge.getKeepAliveSnapshot = async function getKeepAliveSnapshot() {
+    if (!bridge.isNative) return null;
+    const KeepAlive = keepAlivePlugin();
+    if (!KeepAlive || !KeepAlive.getSnapshot) return null;
+    try {
+      return await KeepAlive.getSnapshot();
+    } catch (e) {
+      console.warn('getKeepAliveSnapshot failed', e);
+      return null;
+    }
+  };
+
+  bridge.startKeepAlivePolling = function startKeepAlivePolling(onSnapshot, intervalMs) {
+    if (!bridge.isNative) return;
+    if (bridge._keepAlivePollId) clearInterval(bridge._keepAlivePollId);
+    const ms = Math.max(1000, Number(intervalMs) || 2000);
+    const emit = async () => {
+      const snap = await bridge.getKeepAliveSnapshot();
+      if (snap && typeof onSnapshot === 'function') onSnapshot(snap);
+    };
+    bridge._keepAlivePollId = setInterval(emit, ms);
+    emit();
   };
 
   bridge.startPedometer = async function startPedometer() {
@@ -74,7 +138,6 @@
       else if (Pedometer.start) await Pedometer.start();
       bridge.pedometerStarted = true;
       bridge.lastNativeSteps = 0;
-      // Tubbly returns session delta since startCounting — read once to sync
       const first = await bridge.getNativeStepDelta();
       bridge.lastNativeSteps = first;
       return true;
@@ -134,7 +197,7 @@
   bridge.startStepPolling = function startStepPolling(onSteps, intervalMs) {
     if (!bridge.isNative) return;
     if (bridge._pollId) clearInterval(bridge._pollId);
-    const ms = Math.max(2000, Number(intervalMs) || 3000);
+    const ms = Math.max(1000, Number(intervalMs) || 2000);
 
     const emit = async () => {
       const steps = await bridge.getNativeStepDelta();
@@ -143,13 +206,13 @@
         if (typeof onSteps === 'function') onSteps(steps);
       } else if (steps > 0) {
         bridge.lastNativeSteps = Math.max(bridge.lastNativeSteps, steps);
+        if (typeof onSteps === 'function') onSteps(bridge.lastNativeSteps);
       }
     };
 
     bridge._pollId = setInterval(emit, ms);
     emit();
 
-    // Prefer native events when available (lower latency, less polling work)
     const Pedometer = pedometerPlugin();
     if (Pedometer && Pedometer.addListener && !bridge._stepListener) {
       Pedometer.addListener('stepCountChange', (event) => {
@@ -167,7 +230,7 @@
     }
   };
 
-  bridge.watchAppResume = function watchAppResume(onResume) {
+  bridge.watchAppResume = function watchAppResume(onResume, onPause) {
     if (!bridge.isNative) return;
     const App = plugin('App');
     if (!App || !App.addListener) return;
@@ -175,10 +238,19 @@
       bridge._appListener.remove();
     }
     App.addListener('appStateChange', async (state) => {
-      if (state && state.isActive && typeof onResume === 'function') {
+      if (!state) return;
+      if (!state.isActive && typeof onPause === 'function') {
         const steps = await bridge.getNativeStepDelta();
         bridge.lastNativeSteps = Math.max(bridge.lastNativeSteps, steps);
-        onResume({ steps: bridge.lastNativeSteps });
+        const snap = await bridge.getKeepAliveSnapshot();
+        onPause({ steps: bridge.lastNativeSteps, snapshot: snap });
+        return;
+      }
+      if (state.isActive && typeof onResume === 'function') {
+        const steps = await bridge.getNativeStepDelta();
+        bridge.lastNativeSteps = Math.max(bridge.lastNativeSteps, steps);
+        const snap = await bridge.getKeepAliveSnapshot();
+        onResume({ steps: bridge.lastNativeSteps, snapshot: snap });
       }
     }).then((handle) => {
       bridge._appListener = handle;
@@ -190,7 +262,6 @@
     const Geo = plugin('Geolocation');
     if (!Geo || !Geo.watchPosition) return null;
     try {
-      // Slightly lower power than continuous max accuracy when possible
       bridge.watchId = await Geo.watchPosition(
         { enableHighAccuracy: true, timeout: 20000, maximumAge: 1000 },
         (pos, err) => {
