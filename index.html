@@ -428,7 +428,7 @@
                             <div class="step-counter-header-section">
                                 <div class="step-counter-icon">&#128694;</div>
                                 <h3>Live KM / Step Counter</h3>
-                                <p class="step-counter-subtitle">Count your walk/run in this app only â€” no manual entry or screenshots needed</p>
+                                <p class="step-counter-subtitle">Count your walk/run in this app only &mdash; no manual entry or screenshots needed</p>
                             </div>
 
                             <!-- Main Counter Display -->
@@ -489,9 +489,13 @@
                                     <span class="btn-icon">&#9208;&#65039;</span>
                                     <span class="btn-text">Stop Activity</span>
                                 </button>
-                                <button type="button" class="btn btn-counter-reset" id="resetCounterBtn">
-                                    <span class="btn-icon">&#128260;</span>
-                                    <span class="btn-text">Reset</span>
+                                <button type="button" class="btn btn-counter-resume" id="resumeCounterBtn" style="display: none;">
+                                    <span class="btn-icon">&#9654;&#65039;</span>
+                                    <span class="btn-text">Resume</span>
+                                </button>
+                                <button type="button" class="btn btn-success btn-counter-save" id="saveCounterStepsBtn" style="display: none;">
+                                    <span class="btn-icon">&#128190;</span>
+                                    <span class="btn-text">Save Activity</span>
                                 </button>
                             </div>
 
@@ -515,14 +519,6 @@
                                         <li>iPhone: use this website</li>
                                     </ul>
                                 </div>
-                            </div>
-
-                            <!-- Action Buttons -->
-                            <div class="step-counter-actions-section">
-                                <button type="button" class="btn btn-success btn-large" id="saveCounterStepsBtn" style="display: none;">
-                                    <span class="btn-icon">&#128190;</span>
-                                    <span class="btn-text">Save KM & Update Leaderboard</span>
-                                </button>
                             </div>
 
                             <!-- Permission Note -->

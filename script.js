@@ -51,6 +51,8 @@ class StepathonApp {
  // Step Counter + GPS map tracking
         this.stepCounter = {
             isRunning: false,
+            isPaused: false,
+            elapsedSecAtPause: 0,
             stepCount: 0,
             lastAcceleration: { x: 0, y: 0, z: 0 },
  threshold: 1.2,
@@ -665,10 +667,10 @@ class StepathonApp {
             });
         }
 
-        const resetCounterBtn = document.getElementById('resetCounterBtn');
-        if (resetCounterBtn) {
-            resetCounterBtn.addEventListener('click', () => {
-                this.resetStepCounter();
+        const resumeCounterBtn = document.getElementById('resumeCounterBtn');
+        if (resumeCounterBtn) {
+            resumeCounterBtn.addEventListener('click', () => {
+                this.resumeStepCounter();
             });
         }
 
@@ -5036,6 +5038,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const mode = this.getTrackingMode();
  this.stepCounter.trackingMode = mode;
         this.stepCounter.isRunning = true;
+        this.stepCounter.isPaused = false;
+        this.stepCounter.elapsedSecAtPause = 0;
         this.stepCounter.startTime = Date.now();
         this.stepCounter.lastAcceleration = { x: 0, y: 0, z: 0 };
         this.stepCounter.stepHistory = [];
@@ -5229,7 +5233,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  distLabel.textContent = mode === 'treadmill' ? 'Treadmill distance' : 'GPS distance';
  }
  if (modeRow) {
- modeRow.classList.toggle('is-locked', !!this.stepCounter.isRunning);
+ modeRow.classList.toggle('is-locked', !!this.stepCounter.isRunning || !!this.stepCounter.isPaused);
  }
  }
 
@@ -5293,17 +5297,55 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  applyRunningActivityUi() {
         const startBtn = document.getElementById('startCounterBtn');
         const stopBtn = document.getElementById('stopCounterBtn');
+        const resumeBtn = document.getElementById('resumeCounterBtn');
         const saveBtn = document.getElementById('saveCounterStepsBtn');
         const timerEl = document.getElementById('counterTimer');
         const pulseEl = document.getElementById('counterPulse');
  const valueEl = document.getElementById('liveKmCount');
         
         if (startBtn) startBtn.style.display = 'none';
-        if (stopBtn) stopBtn.style.display = 'inline-block';
+        if (stopBtn) stopBtn.style.display = 'inline-flex';
+        if (resumeBtn) resumeBtn.style.display = 'none';
         if (saveBtn) saveBtn.style.display = 'none';
         if (timerEl) timerEl.style.display = 'flex';
         if (pulseEl) pulseEl.classList.add('active');
         if (valueEl) valueEl.classList.add('active');
+ }
+
+ applyPausedActivityUi() {
+        const startBtn = document.getElementById('startCounterBtn');
+        const stopBtn = document.getElementById('stopCounterBtn');
+        const resumeBtn = document.getElementById('resumeCounterBtn');
+        const saveBtn = document.getElementById('saveCounterStepsBtn');
+        const pulseEl = document.getElementById('counterPulse');
+        const valueEl = document.getElementById('liveKmCount');
+        const timerEl = document.getElementById('counterTimer');
+
+        if (startBtn) startBtn.style.display = 'none';
+        if (stopBtn) stopBtn.style.display = 'none';
+        if (resumeBtn) resumeBtn.style.display = 'inline-flex';
+        if (saveBtn) saveBtn.style.display = 'inline-flex';
+        if (timerEl) timerEl.style.display = 'flex';
+        if (pulseEl) pulseEl.classList.remove('active');
+        if (valueEl) valueEl.classList.remove('active');
+ }
+
+ applyIdleActivityUi() {
+        const startBtn = document.getElementById('startCounterBtn');
+        const stopBtn = document.getElementById('stopCounterBtn');
+        const resumeBtn = document.getElementById('resumeCounterBtn');
+        const saveBtn = document.getElementById('saveCounterStepsBtn');
+        const timerEl = document.getElementById('counterTimer');
+        const pulseEl = document.getElementById('counterPulse');
+        const valueEl = document.getElementById('liveKmCount');
+
+        if (startBtn) startBtn.style.display = 'inline-flex';
+        if (stopBtn) stopBtn.style.display = 'none';
+        if (resumeBtn) resumeBtn.style.display = 'none';
+        if (saveBtn) saveBtn.style.display = 'none';
+        if (timerEl) timerEl.style.display = 'none';
+        if (pulseEl) pulseEl.classList.remove('active');
+        if (valueEl) valueEl.classList.remove('active');
  }
 
  getActivitySessionUserKey() {
@@ -5318,7 +5360,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  persistActivitySession(force = false) {
  try {
- if (!this.stepCounter.isRunning) return;
+ if (!this.stepCounter.isRunning && !this.stepCounter.isPaused) return;
  const now = Date.now();
  if (!force && now - (this._lastActivityPersistAt || 0) < 2000) return;
  this._lastActivityPersistAt = now;
@@ -5333,7 +5375,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }));
  const payload = {
  version: 1,
- isRunning: true,
+ isRunning: !!this.stepCounter.isRunning,
+ isPaused: !!this.stepCounter.isPaused,
+ elapsedSecAtPause: this.stepCounter.elapsedSecAtPause || 0,
  userKey,
  startTime: this.stepCounter.startTime,
  stepCount: this.stepCounter.stepCount || 0,
@@ -5358,7 +5402,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const raw = localStorage.getItem(this.activitySessionKey);
  if (!raw) return null;
  const data = JSON.parse(raw);
- if (!data || !data.isRunning || !data.startTime) return null;
+ if (!data || !data.startTime) return null;
+ if (!data.isRunning && !data.isPaused) return null;
  return data;
  } catch (error) {
  console.warn('Could not load activity session:', error);
@@ -5396,7 +5441,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  return false;
  }
 
- this.stepCounter.isRunning = true;
+ this.stepCounter.isRunning = !!data.isRunning && !data.isPaused;
+ this.stepCounter.isPaused = !!data.isPaused && !data.isRunning;
+ this.stepCounter.elapsedSecAtPause = Number(data.elapsedSecAtPause) || 0;
  this.stepCounter.startTime = data.startTime;
  this.stepCounter.stepCount = data.stepCount || 0;
  this.stepCounter.distanceKm = Number(data.distanceKm) || 0;
@@ -5427,12 +5474,6 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  speedInput.value = String(this.stepCounter.treadmillSpeedKmh);
  }
 
- this.bindMotionListener();
- this.applyRunningActivityUi();
- this.startNativeTrackingHelpers().then(() => {
- this.syncStepsFromDistance(true);
- this.updateStepCounterDisplay();
- });
  this.initActivityMap();
  if (this.stepCounter.path.length) {
  const latLngs = this.stepCounter.path.map((p) => [p.lat, p.lng]);
@@ -5447,6 +5488,27 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  } catch (e) { /* ignore */ }
  }
  }
+
+ if (this.stepCounter.isPaused) {
+ this.applyPausedActivityUi();
+ this.updateStepCounterDisplay();
+ const distance = this.getTrackedDistanceKm();
+ const elapsed = this.stepCounter.elapsedSecAtPause || 0;
+ const minutes = Math.floor(elapsed / 60);
+ const seconds = elapsed % 60;
+ const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+ this.updateCounterStatus(`Paused. Covered ${distance.toFixed(2)} KM in ${timeStr}.`);
+ this.updateCounterHint('Tap Resume to continue, or Save Activity to update the leaderboard.');
+ this.showCounterNotification('Paused activity restored. Resume or Save when ready.');
+ return true;
+ }
+
+ this.bindMotionListener();
+ this.applyRunningActivityUi();
+ this.startNativeTrackingHelpers().then(() => {
+ this.syncStepsFromDistance(true);
+ this.updateStepCounterDisplay();
+ });
 
  this.ensureActivityRuntimeAlive('Activity restored after unlock — tracking continued.');
  this.recalculateGpsDistanceFromPath();
@@ -5561,7 +5623,14 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
     stopStepCounter() {
         if (!this.stepCounter.isRunning) return;
 
+        this.accumulateTreadmillDistance();
+        const elapsedSec = this.stepCounter.startTime
+            ? Math.max(0, Math.floor((Date.now() - this.stepCounter.startTime) / 1000))
+            : (this.stepCounter.elapsedSecAtPause || 0);
+        this.stepCounter.elapsedSecAtPause = elapsedSec;
         this.stepCounter.isRunning = false;
+        this.stepCounter.isPaused = true;
+
         if (this.boundHandleDeviceMotion) {
             window.removeEventListener('devicemotion', this.boundHandleDeviceMotion);
         }
@@ -5574,38 +5643,58 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.stopKeepAwakeFallback();
  this.notifyServiceWorkerTracking(false);
         this.stopTimer();
- this.clearActivitySession();
  if (window.WowNative && window.WowNative.isNative) {
  window.WowNative.stopPedometer();
  }
  this.stepCounter.useNativeStepsOnly = false;
  this.stepCounter.nativeStepBaseline = 0;
 
-        const startBtn = document.getElementById('startCounterBtn');
-        const stopBtn = document.getElementById('stopCounterBtn');
-        const saveBtn = document.getElementById('saveCounterStepsBtn');
-        const pulseEl = document.getElementById('counterPulse');
- const valueEl = document.getElementById('liveKmCount');
-        
-        if (startBtn) startBtn.style.display = 'inline-block';
-        if (stopBtn) stopBtn.style.display = 'none';
-        if (pulseEl) pulseEl.classList.remove('active');
-        if (valueEl) valueEl.classList.remove('active');
-        
- const distance = this.getTrackedDistanceKm();
- if (distance > 0 || this.stepCounter.stepCount > 0) {
-            if (saveBtn) saveBtn.style.display = 'block';
-        }
+ this.applyPausedActivityUi();
+ this.persistActivitySession(true);
 
-        const duration = Math.round((Date.now() - this.stepCounter.startTime) / 1000);
-        const minutes = Math.floor(duration / 60);
-        const seconds = duration % 60;
+ const distance = this.getTrackedDistanceKm();
+        const minutes = Math.floor(elapsedSec / 60);
+        const seconds = elapsedSec % 60;
         const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+        const timerValue = document.getElementById('timerValue');
+        if (timerValue) {
+            timerValue.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
         
  this.updateCounterStatus(`Stopped. Covered ${distance.toFixed(2)} KM in ${timeStr}.`);
- this.updateCounterHint('Save to update your challenge progress and leaderboard.');
+ this.updateCounterHint('Tap Resume to continue, or Save Activity to update the leaderboard.');
  this.showCounterNotification(`Activity stopped: ${distance.toFixed(2)} KM`);
  this.updateStepCounterDisplay();
+    }
+
+    resumeStepCounter() {
+        if (this.stepCounter.isRunning) return;
+        const hasProgress = (this.stepCounter.stepCount || 0) > 0
+            || this.getTrackedDistanceKm() > 0.001
+            || (this.stepCounter.elapsedSecAtPause || 0) > 0
+            || !!this.stepCounter.startTime;
+        if (!hasProgress && !this.stepCounter.isPaused) {
+            this.startStepCounter();
+            return;
+        }
+
+        const elapsedSec = this.stepCounter.elapsedSecAtPause || 0;
+        this.stepCounter.startTime = Date.now() - (elapsedSec * 1000);
+        this.stepCounter.lastTreadmillTickAt = Date.now();
+        this.stepCounter.isPaused = false;
+        this.stepCounter.isRunning = true;
+        this.stepCounter.useNativeStepsOnly = false;
+        this.stepCounter.nativeStepBaseline = 0;
+
+        this.bindMotionListener();
+        this.applyRunningActivityUi();
+        this.startNativeTrackingHelpers();
+        this.ensureActivityRuntimeAlive('Tracking resumed. Keep moving.');
+        this.updateCounterStatus('Activity resumed. Tracking is active again.');
+        this.updateCounterHint('Tap Stop Activity when you are ready to save or pause again.');
+        this.showCounterNotification('Activity resumed.');
+        this.updateStepCounterDisplay();
+        this.persistActivitySession(true);
     }
 
     resetStepCounter() {
@@ -5618,6 +5707,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.stopKeepAwakeFallback();
  this.notifyServiceWorkerTracking(false);
  this.stepCounter.isRunning = false;
+ this.stepCounter.isPaused = false;
+ this.stepCounter.elapsedSecAtPause = 0;
  if (window.WowNative && window.WowNative.isNative) {
  window.WowNative.stopPedometer();
  }
@@ -5634,18 +5725,10 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.clearActivitySession();
  this.clearActivityMapTrack();
         this.updateStepCounterDisplay();
- this.updateCounterStatus('Reset. Ready to track your next walk/run.');
+ this.updateCounterStatus('Ready to track your next walk/run.');
  this.updateCounterHint('Start Activity to begin GPS map tracking.');
         
- const startBtn = document.getElementById('startCounterBtn');
- const stopBtn = document.getElementById('stopCounterBtn');
-        const saveBtn = document.getElementById('saveCounterStepsBtn');
-        const timerEl = document.getElementById('counterTimer');
-        
- if (startBtn) startBtn.style.display = 'inline-block';
- if (stopBtn) stopBtn.style.display = 'none';
-        if (saveBtn) saveBtn.style.display = 'none';
-        if (timerEl) timerEl.style.display = 'none';
+ this.applyIdleActivityUi();
         
         const timerValue = document.getElementById('timerValue');
         if (timerValue) timerValue.textContent = '00:00';
@@ -5786,6 +5869,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  getSessionDurationSec() {
+ if (this.stepCounter.isPaused) {
+ return Math.max(0, this.stepCounter.elapsedSecAtPause || 0);
+ }
  if (this.stepCounter.startTime) {
  return Math.max(0, Math.round((Date.now() - this.stepCounter.startTime) / 1000));
  }
@@ -6620,9 +6706,11 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             return;
         }
 
- const durationSec = this.stepCounter.startTime
+ const durationSec = this.stepCounter.isPaused
+ ? (this.stepCounter.elapsedSecAtPause || 0)
+ : (this.stepCounter.startTime
  ? Math.round((Date.now() - this.stepCounter.startTime) / 1000)
- : this.getSessionDurationSec();
+ : this.getSessionDurationSec());
  const caloriesBurned = this.estimateCaloriesBurned(distanceKm, durationSec, this.getBodyWeightKg());
 
  await this.saveStepsWithScreenshot(steps, null, true, {
