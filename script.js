@@ -3192,57 +3192,75 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         
         // Calculate activity statistics
         const totalActivitySteps = userActivities.reduce((sum, a) => sum + (a.steps || 0), 0);
+        const totalActivityKm = userActivities.reduce((sum, a) => sum + (Number(a.distanceKm) || 0), 0);
+        const totalActivityCalories = userActivities.reduce((sum, a) => sum + (Number(a.caloriesBurned) || 0), 0);
         const approvedActivities = userActivities.filter(a => a.status === 'approved').length;
         const pendingActivities = userActivities.filter(a => !a.status || a.status === 'pending').length;
         const rejectedActivities = userActivities.filter(a => a.status === 'rejected').length;
-        const activitiesWithScreenshots = userActivities.filter(a => a.screenshot).length;
+        const outdoorCount = userActivities.filter(a => (a.trackingMode || '') === 'outdoor' || a.source === 'gps-counter').length;
+        const treadmillCount = userActivities.filter(a => (a.trackingMode || '') === 'treadmill' || a.source === 'treadmill-counter').length;
         
         let activitiesHtml = '';
         if (userActivities.length > 0) {
             activitiesHtml = `
                 <div class="user-activities-section">
- <h3> Activity Details</h3>
+                    <h3>Activity Details</h3>
                     
                     <!-- Activity Statistics Summary -->
-                    <div class="activity-stats-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                    <div class="activity-stats-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 15px; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
                         <div class="stat-box">
                             <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #003366;">${userActivities.length}</div>
                             <div class="stat-label" style="font-size: 0.85rem; color: #666;">Total Entries</div>
                         </div>
                         <div class="stat-box">
                             <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #4caf50;">${approvedActivities}</div>
- <div class="stat-label" style="font-size: 0.85rem; color: #666;"> Approved</div>
+                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">Approved</div>
                         </div>
                         <div class="stat-box">
                             <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #ff9800;">${pendingActivities}</div>
- <div class="stat-label" style="font-size: 0.85rem; color: #666;"> Pending</div>
+                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">Pending</div>
                         </div>
                         <div class="stat-box">
                             <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #f44336;">${rejectedActivities}</div>
- <div class="stat-label" style="font-size: 0.85rem; color: #666;"> Rejected</div>
+                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">Rejected</div>
                         </div>
                         <div class="stat-box">
                             <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #2196f3;">${totalActivitySteps.toLocaleString()}</div>
                             <div class="stat-label" style="font-size: 0.85rem; color: #666;">Total Steps</div>
                         </div>
                         <div class="stat-box">
-                            <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #9c27b0;">${activitiesWithScreenshots}</div>
- <div class="stat-label" style="font-size: 0.85rem; color: #666;">| With Screenshots</div>
+                            <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #00897b;">${totalActivityKm.toFixed(2)}</div>
+                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">Total KM</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #e65100;">${Math.round(totalActivityCalories).toLocaleString()}</div>
+                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">Calories</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" style="font-size: 1.1rem; font-weight: bold; color: #5e35b1;">${outdoorCount} / ${treadmillCount}</div>
+                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">Outdoor / Treadmill</div>
                         </div>
                     </div>
                     
-                    <div class="activities-list" style="max-height: 500px; overflow-y: auto;">
+                    <div class="activities-list" style="max-height: 560px; overflow-y: auto;">
             `;
             
-            userActivities.forEach((activity, index) => {
+            userActivities.forEach((activity) => {
                 const date = new Date(activity.date);
                 const dateStr = date.toLocaleDateString();
                 const timeStr = date.toLocaleTimeString();
                 const status = activity.status || 'pending';
                 const statusClass = status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : 'pending';
- const statusIcon = status === 'approved' ? '' : status === 'rejected' ? '' : '';
+                const activityType = this.getActivityTypeLabel(activity);
+                const sourceDisplay = this.getActivitySourceLabel(activity);
+                const distanceKm = Number(activity.distanceKm);
+                const calories = Number(activity.caloriesBurned);
+                const durationLabel = this.formatDurationClock(activity.durationSec);
+                const pathPoints = Array.isArray(activity.path) ? activity.path.length : 0;
+                const speed = activity.treadmillSpeedKmh != null ? Number(activity.treadmillSpeedKmh) : null;
+                const safeActivityId = this.escapeHtml(activity.id || '');
+                const safeUserIdAttr = this.escapeHtml(String(actualUserId));
                 
-                // Format validation date if available
                 let validatedDateStr = '';
                 if (activity.validatedAt) {
                     try {
@@ -3252,7 +3270,6 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                     }
                 }
                 
-                // Format last modified date if available
                 let modifiedDateStr = '';
                 if (activity.lastModifiedAt) {
                     try {
@@ -3262,50 +3279,64 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                     }
                 }
                 
-                const sourceDisplay = activity.source === 'step-counter' ? 'Step Counter' : 
-                                     activity.source === 'manual' ? 'Manual Entry' : 
-                                     activity.source === 'screenshot' ? 'Screenshot Upload' : 
-                                     activity.source || 'Unknown';
-                
                 activitiesHtml += `
                     <div class="activity-entry ${statusClass}" style="border: 2px solid ${status === 'approved' ? '#4caf50' : status === 'rejected' ? '#f44336' : '#ff9800'}; border-radius: 8px; padding: 15px; margin-bottom: 15px; background: white;">
                         <div class="activity-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #eee;">
                             <div>
- <span class="activity-date" style="font-weight: bold; color: #003366; font-size: 1rem;"> ${dateStr} ${timeStr}</span>
+                                <span class="activity-date" style="font-weight: bold; color: #003366; font-size: 1rem;">${dateStr} ${timeStr}</span>
+                                <div style="margin-top: 6px;">
+                                    <span class="activity-type-badge">${this.escapeHtml(activityType)}</span>
+                                </div>
                                 <div style="font-size: 0.85rem; color: #666; margin-top: 4px;">
-                                    Entry ID: <code style="background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 0.8rem;">${activity.id || 'N/A'}</code>
+                                    Entry ID: <code style="background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 0.8rem;">${safeActivityId || 'N/A'}</code>
                                 </div>
                             </div>
                             <span class="activity-status ${statusClass}" style="padding: 6px 12px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; background: ${status === 'approved' ? '#e8f5e9' : status === 'rejected' ? '#ffebee' : '#fff3e0'}; color: ${status === 'approved' ? '#2e7d32' : status === 'rejected' ? '#c62828' : '#e65100'};">
-                                ${statusIcon} ${status.toUpperCase()}
+                                ${status.toUpperCase()}
                             </span>
                         </div>
-                        <div class="activity-details" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px;">
+                        <div class="activity-details" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 12px;">
                             <div class="detail-item">
- <strong style="color: #003366;"> Steps:</strong> 
+                                <strong style="color: #003366;">Activity:</strong>
+                                <span>${this.escapeHtml(activityType)}</span>
+                            </div>
+                            <div class="detail-item">
+                                <strong style="color: #003366;">Steps:</strong>
                                 <span style="font-size: 1.1rem; font-weight: bold; color: #2196f3;">${(activity.steps || 0).toLocaleString()}</span>
                             </div>
                             <div class="detail-item">
- <strong style="color: #003366;"> Source:</strong> 
-                                <span>${sourceDisplay}</span>
+                                <strong style="color: #003366;">Distance:</strong>
+                                <span style="font-weight: bold; color: #00897b;">${Number.isFinite(distanceKm) ? distanceKm.toFixed(3) : '0.000'} km</span>
                             </div>
-                            ${activity.userName || activity.name ? `
+                            <div class="detail-item">
+                                <strong style="color: #003366;">Calories:</strong>
+                                <span style="font-weight: bold; color: #e65100;">${Number.isFinite(calories) ? Math.round(calories).toLocaleString() : '0'} kcal</span>
+                            </div>
+                            <div class="detail-item">
+                                <strong style="color: #003366;">Duration:</strong>
+                                <span>${durationLabel}</span>
+                            </div>
+                            <div class="detail-item">
+                                <strong style="color: #003366;">Source:</strong>
+                                <span>${this.escapeHtml(sourceDisplay)}</span>
+                            </div>
+                            ${speed != null && Number.isFinite(speed) ? `
                                 <div class="detail-item">
- <strong style="color: #003366;"> User:</strong> 
-                                    <span>${this.escapeHtml(activity.userName || activity.name)}</span>
+                                    <strong style="color: #003366;">Treadmill Speed:</strong>
+                                    <span>${speed.toFixed(1)} km/h</span>
                                 </div>
                             ` : ''}
-                            ${activity.userEmail || activity.email ? `
+                            ${pathPoints > 0 ? `
                                 <div class="detail-item">
- <strong style="color: #003366;"> Email:</strong> 
-                                    <span>${this.escapeHtml(activity.userEmail || activity.email)}</span>
+                                    <strong style="color: #003366;">GPS Points:</strong>
+                                    <span>${pathPoints}</span>
                                 </div>
                             ` : ''}
                         </div>
                         
                         ${activity.screenshot ? `
                             <div class="screenshot-section" style="margin: 12px 0; padding: 12px; background: #f8f9fa; border-radius: 6px;">
- <strong style="color: #003366; display: block; margin-bottom: 8px;">| Screenshot:</strong>
+                                <strong style="color: #003366; display: block; margin-bottom: 8px;">Screenshot:</strong>
                                 <img src="${activity.screenshot}" 
                                      alt="Activity screenshot" 
                                      class="activity-screenshot" 
@@ -3314,44 +3345,40 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                                      title="Click to enlarge">
                                 <div style="margin-top: 8px; font-size: 0.85rem; color: #666;">Click image to enlarge</div>
                             </div>
-                        ` : `
-                            <div style="padding: 8px; background: #fff3cd; border-radius: 4px; font-size: 0.9rem; color: #856404;">
- No screenshot provided
-                            </div>
-                        `}
+                        ` : ''}
                         
                         ${activity.notes ? `
                             <div class="notes-section" style="margin: 12px 0; padding: 12px; background: #e3f2fd; border-radius: 6px; border-left: 4px solid #2196f3;">
- <strong style="color: #003366; display: block; margin-bottom: 6px;"> Notes:</strong>
+                                <strong style="color: #003366; display: block; margin-bottom: 6px;">Notes:</strong>
                                 <div style="color: #555; white-space: pre-wrap;">${this.escapeHtml(activity.notes)}</div>
                             </div>
                         ` : ''}
                         
                         ${activity.validatedBy ? `
                             <div class="validation-info" style="margin: 12px 0; padding: 10px; background: #f5f5f5; border-radius: 6px; font-size: 0.9rem;">
- <strong style="color: #003366;"> Validated by:</strong> ${this.escapeHtml(activity.validatedBy)}
+                                <strong style="color: #003366;">Validated by:</strong> ${this.escapeHtml(activity.validatedBy)}
                                 ${validatedDateStr ? ` on ${validatedDateStr}` : ''}
                             </div>
                         ` : ''}
                         
                         ${activity.lastModifiedBy ? `
                             <div class="modification-info" style="margin: 12px 0; padding: 10px; background: #f5f5f5; border-radius: 6px; font-size: 0.9rem;">
- <strong style="color: #003366;"> Last modified by:</strong> ${this.escapeHtml(activity.lastModifiedBy)}
+                                <strong style="color: #003366;">Last modified by:</strong> ${this.escapeHtml(activity.lastModifiedBy)}
                                 ${modifiedDateStr ? ` on ${modifiedDateStr}` : ''}
                             </div>
                         ` : ''}
                         
-                        <div class="activity-actions" style="display: flex; gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
+                        <div class="activity-actions" style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
                             ${status === 'pending' ? `
- <button class="btn btn-small btn-success" onclick="app.validateEntry('${activity.id}', 'approved'); app.viewUserDetails('${actualUserId}');" title="Approve this entry"> Approve</button>
- <button class="btn btn-small btn-danger" onclick="app.validateEntry('${activity.id}', 'rejected'); app.viewUserDetails('${actualUserId}');" title="Reject this entry"> Reject</button>
+                                <button type="button" class="btn btn-small btn-success" onclick="app.validateEntry('${safeActivityId}', 'approved', '${safeUserIdAttr}')" title="Approve this entry">Approve</button>
+                                <button type="button" class="btn btn-small btn-danger" onclick="app.validateEntry('${safeActivityId}', 'rejected', '${safeUserIdAttr}')" title="Reject this entry">Reject</button>
                             ` : status === 'approved' ? `
- <button class="btn btn-small btn-danger" onclick="app.validateEntry('${activity.id}', 'rejected'); app.viewUserDetails('${actualUserId}');" title="Reject this entry"> Reject</button>
-                            ` : status === 'rejected' ? `
- <button class="btn btn-small btn-success" onclick="app.validateEntry('${activity.id}', 'approved'); app.viewUserDetails('${actualUserId}');" title="Approve this entry"> Approve</button>
-                            ` : ''}
- <button class="btn btn-small btn-secondary" onclick="app.editEntrySteps('${activity.id}'); app.viewUserDetails('${actualUserId}');" title="Edit steps for this entry"> Edit Steps</button>
- <button class="btn btn-small btn-danger" onclick="if(confirm('Are you sure you want to delete this activity?')) { app.deleteUserActivity('${activity.id}', '${actualUserId}'); }" title="Delete this activity"> Delete</button>
+                                <button type="button" class="btn btn-small btn-danger" onclick="app.validateEntry('${safeActivityId}', 'rejected', '${safeUserIdAttr}')" title="Reject this entry">Reject</button>
+                            ` : `
+                                <button type="button" class="btn btn-small btn-success" onclick="app.validateEntry('${safeActivityId}', 'approved', '${safeUserIdAttr}')" title="Approve this entry">Approve</button>
+                            `}
+                            <button type="button" class="btn btn-small btn-secondary" onclick="app.openEditActivityModal('${safeActivityId}', '${safeUserIdAttr}')" title="Update activity details">Edit Activity</button>
+                            <button type="button" class="btn btn-small btn-danger" onclick="if(confirm('Are you sure you want to delete this activity?')) { app.deleteUserActivity('${safeActivityId}', '${safeUserIdAttr}'); }" title="Delete this activity">Delete</button>
                         </div>
                     </div>
                 `;
@@ -3364,7 +3391,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         } else {
             activitiesHtml = `
                 <div class="user-activities-section">
- <h3> Activity Details</h3>
+                    <h3>Activity Details</h3>
                     <div style="padding: 30px; text-align: center; background: #f8f9fa; border-radius: 8px; margin-top: 15px;">
                         <p style="font-size: 1.1rem; color: #666; margin: 0;">No activities recorded yet.</p>
                         <p style="font-size: 0.9rem; color: #999; margin-top: 8px;">This user hasn't submitted any step entries.</p>
@@ -3405,10 +3432,16 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 </div>
 
                 <div class="form-section">
- <h3> Statistics</h3>
+                    <h3>Statistics</h3>
                     <div class="user-stats-grid">
                         <div class="stat-item">
                             <strong>Total Steps:</strong> ${totalSteps.toLocaleString()}
+                        </div>
+                        <div class="stat-item">
+                            <strong>Total Distance:</strong> ${Number(user.totalDistanceKm || 0).toFixed(2)} km
+                        </div>
+                        <div class="stat-item">
+                            <strong>Total Calories:</strong> ${Math.round(user.totalCalories || 0).toLocaleString()} kcal
                         </div>
                         <div class="stat-item">
                             <strong>Active Days:</strong> ${dailyStepsCount}
@@ -3682,6 +3715,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
     deleteUserActivity(activityId, userId) {
+        if (!this.requireAdmin()) return;
         if (!confirm('Are you sure you want to delete this activity entry?')) {
             return;
         }
@@ -3690,30 +3724,23 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         const activity = this.stepEntries.find(e => e.id === activityId);
         
         if (activity) {
-            // Remove steps from user's total
-            const user = this.participants.find(p => (p.id === userId) || (p.employeeId === userId));
-            if (user) {
-                const entryDate = new Date(activity.date).toDateString();
-                if (user.dailySteps && user.dailySteps[entryDate]) {
-                    user.dailySteps[entryDate] = Math.max(0, user.dailySteps[entryDate] - activity.steps);
-                    if (user.dailySteps[entryDate] === 0) {
-                        delete user.dailySteps[entryDate];
-                    }
-                }
-                user.totalSteps = Math.max(0, (user.totalSteps || 0) - activity.steps);
+            const user = this.findParticipantForEntry(activity) ||
+                this.participants.find(p => (p.id === userId) || (p.employeeId === userId));
+            if (user && (activity.status || 'pending') === 'approved') {
+                this.applyEntryContribution(user, activity, -1);
                 this.saveParticipantsCache();
                 this.syncParticipantToFirebase(user);
             }
 
-            // Remove entry
             this.stepEntries = this.stepEntries.filter(e => e.id !== activityId);
             this.saveStepEntries();
             this.deleteStepEntryFromFirebase(activityId);
         }
 
         alert('Activity deleted successfully!');
-        this.viewUserDetails(userId); // Refresh the modal
+        this.viewUserDetails(userId);
         this.updateAdminDashboard();
+        this.updateLeaderboard();
     }
 
     closeUserDetailsModal() {
@@ -3826,10 +3853,15 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         const userEmail = entry.userEmail || entry.email || 'No email';
         const userId = entry.userId || entry.id || 'unknown';
         const steps = entry.steps || 0;
+        const distanceKm = Number(entry.distanceKm);
+        const calories = Number(entry.caloriesBurned);
         const entryDate = entry.date || new Date().toISOString();
         const entryStatus = entry.status || 'pending';
+        const activityType = this.getActivityTypeLabel(entry);
+        const sourceLabel = this.getActivitySourceLabel(entry);
+        const durationLabel = this.formatDurationClock(entry.durationSec);
+        const safeEntryId = this.escapeHtml(entry.id || '');
         
-        // Parse date safely
         let date;
         try {
             date = new Date(entryDate);
@@ -3839,9 +3871,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         }
         
         const statusClass = entryStatus === 'approved' ? 'approved' : entryStatus === 'rejected' ? 'rejected' : 'pending';
- const statusIcon = entryStatus === 'approved' ? '' : entryStatus === 'rejected' ? '' : '';
         
-        // Format date safely
         let formattedDate;
         try {
             formattedDate = date.toLocaleString();
@@ -3849,7 +3879,6 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             formattedDate = entryDate;
         }
         
-        // Format validated date safely
         let validatedDateStr = '';
         if (entry.validatedAt) {
             try {
@@ -3862,7 +3891,6 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             }
         }
         
-        // Format modified date safely
         let modifiedDateStr = '';
         if (entry.lastModifiedAt) {
             try {
@@ -3881,42 +3909,45 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                     <div class="entry-info">
                         <h4>${this.escapeHtml(userName)} (${this.escapeHtml(userEmail)})</h4>
                         <p class="entry-date">${formattedDate}</p>
-                        <p class="entry-id" style="font-size: 0.8rem; color: #666;">Entry ID: ${entry.id || 'N/A'}</p>
-                        <p class="entry-user-id" style="font-size: 0.8rem; color: #666;">User ID: ${userId}</p>
+                        <p class="entry-id" style="font-size: 0.8rem; color: #666;">Entry ID: ${safeEntryId || 'N/A'}</p>
+                        <p class="entry-user-id" style="font-size: 0.8rem; color: #666;">User ID: ${this.escapeHtml(String(userId))}</p>
+                        <p style="margin-top: 6px;"><span class="activity-type-badge">${this.escapeHtml(activityType)}</span></p>
                     </div>
                     <div class="entry-status ${statusClass}">
-                        ${statusIcon} ${entryStatus.toUpperCase()}
+                        ${entryStatus.toUpperCase()}
                     </div>
                 </div>
                 <div class="entry-details">
                     <div class="entry-steps">
-                        <strong>Steps:</strong> ${steps.toLocaleString()}
+                        <strong>Activity:</strong> ${this.escapeHtml(activityType)}
+                        &nbsp;|&nbsp; <strong>Steps:</strong> ${steps.toLocaleString()}
+                        &nbsp;|&nbsp; <strong>Distance:</strong> ${Number.isFinite(distanceKm) ? distanceKm.toFixed(3) : '0.000'} km
+                        &nbsp;|&nbsp; <strong>Calories:</strong> ${Number.isFinite(calories) ? Math.round(calories).toLocaleString() : '0'} kcal
+                        &nbsp;|&nbsp; <strong>Duration:</strong> ${durationLabel}
                     </div>
                     <div class="entry-screenshot">
                         <strong>Screenshot:</strong>
                         ${entry.screenshot ? `
                             <img src="${entry.screenshot}" alt="Step screenshot" class="validation-screenshot" onclick="this.classList.toggle('expanded')" style="cursor: pointer; max-width: 200px; border-radius: 8px; margin-top: 8px;">
                         ` : `
-                            <p class="no-screenshot">No screenshot provided (Step counter entry or manual entry without screenshot)</p>
+                            <p class="no-screenshot">No screenshot provided</p>
                         `}
                     </div>
-                    ${entry.source ? `<div class="entry-source" style="margin-top: 8px; font-size: 0.9rem; color: #666;"><strong>Source:</strong> ${entry.source === 'step-counter' ? 'Step Counter' : 'Manual Entry'}</div>` : ''}
+                    <div class="entry-source" style="margin-top: 8px; font-size: 0.9rem; color: #666;"><strong>Source:</strong> ${this.escapeHtml(sourceLabel)}</div>
                     ${entry.validatedBy ? `<div class="entry-validator" style="margin-top: 8px; font-size: 0.9rem; color: #666;"><strong>Validated by:</strong> ${this.escapeHtml(entry.validatedBy)}${validatedDateStr ? ` on ${validatedDateStr}` : ''}</div>` : ''}
                     ${entry.lastModifiedBy ? `<div class="entry-modifier" style="margin-top: 8px; font-size: 0.9rem; color: #666;"><strong>Last modified by:</strong> ${this.escapeHtml(entry.lastModifiedBy)}${modifiedDateStr ? ` on ${modifiedDateStr}` : ''}</div>` : ''}
                     ${entry.notes ? `<div class="entry-notes" style="margin-top: 8px; padding: 8px; background: #f5f5f5; border-radius: 4px; font-size: 0.9rem;"><strong>Notes:</strong> ${this.escapeHtml(entry.notes)}</div>` : ''}
                 </div>
                 <div class="entry-actions">
                     ${entryStatus === 'pending' ? `
-                        <button class="btn btn-success" onclick="app.validateEntry('${entry.id}', 'approved')">Approve</button>
-                        <button class="btn btn-danger" onclick="app.validateEntry('${entry.id}', 'rejected')">Reject</button>
+                        <button class="btn btn-success" onclick="app.validateEntry('${safeEntryId}', 'approved')">Approve</button>
+                        <button class="btn btn-danger" onclick="app.validateEntry('${safeEntryId}', 'rejected')">Reject</button>
                     ` : entryStatus === 'approved' ? `
-                        <button class="btn btn-success" onclick="app.validateEntry('${entry.id}', 'approved')">Re-approve</button>
-                        <button class="btn btn-danger" onclick="app.validateEntry('${entry.id}', 'rejected')">Reject</button>
-                    ` : entryStatus === 'rejected' ? `
-                        <button class="btn btn-success" onclick="app.validateEntry('${entry.id}', 'approved')">Approve</button>
-                        <button class="btn btn-danger" onclick="app.validateEntry('${entry.id}', 'rejected')">Reject Again</button>
-                    ` : ''}
- <button class="btn btn-edit" onclick="app.editEntrySteps('${entry.id}')"> Edit Steps</button>
+                        <button class="btn btn-danger" onclick="app.validateEntry('${safeEntryId}', 'rejected')">Reject</button>
+                    ` : `
+                        <button class="btn btn-success" onclick="app.validateEntry('${safeEntryId}', 'approved')">Approve</button>
+                    `}
+                    <button class="btn btn-edit" onclick="app.openEditActivityModal('${safeEntryId}')">Edit Activity</button>
                 </div>
             </div>
         `;
@@ -3929,169 +3960,293 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         return div.innerHTML;
     }
 
-    validateEntry(entryId, status) {
- if (!this.requireAdmin()) {
- return;
- }
+    validateEntry(entryId, status, refreshUserId = null) {
+        if (!this.requireAdmin()) {
+            return false;
+        }
         const entry = this.stepEntries.find(e => e.id === entryId);
-        if (!entry) return;
+        if (!entry) return false;
 
         const notes = prompt(status === 'approved' ? 'Add approval notes (optional):' : 'Add rejection reason (required):');
         
         if (status === 'rejected' && !notes) {
             alert('Please provide a reason for rejection!');
-            return;
+            return false;
+        }
+        if (notes === null && status === 'approved') {
+            // User cancelled optional notes prompt
+            return false;
         }
 
-        const previousStatus = entry.status;
-        const currentSteps = entry.steps;
+        const previousStatus = entry.status || 'pending';
+        const participant = this.findParticipantForEntry(entry);
+
+        // Remove totals if previously approved
+        if (previousStatus === 'approved' && participant) {
+            this.applyEntryContribution(participant, entry, -1);
+        }
 
         entry.status = status;
         entry.validatedBy = 'Admin';
         entry.validatedAt = new Date().toISOString();
         entry.notes = notes || null;
 
-        // If approving, update user's steps
-        if (status === 'approved') {
-            const participant = this.participants.find(p => p.id === entry.userId);
-            if (participant) {
-                const entryDate = new Date(entry.date).toDateString();
-                
-                // Handle different previous statuses
-                if (previousStatus === 'approved') {
-                    // Re-approval after edit (entry was reset to pending)
-                    // Steps were already removed in editEntrySteps, so just add current steps
-                    participant.dailySteps[entryDate] = (participant.dailySteps[entryDate] || 0) + currentSteps;
-                    participant.totalSteps = (participant.totalSteps || 0) + currentSteps;
-                } else if (previousStatus === 'rejected') {
-                    // Approving a previously rejected entry - add the steps
-                    participant.dailySteps[entryDate] = (participant.dailySteps[entryDate] || 0) + currentSteps;
-                    participant.totalSteps = (participant.totalSteps || 0) + currentSteps;
+        // Add totals if newly approved
+        if (status === 'approved' && participant) {
+            this.applyEntryContribution(participant, entry, 1);
+
+            const activity = (participant.activities || []).find(a => a.entryId === entryId);
+            if (activity) {
+                if (previousStatus === 'rejected') {
+                    activity.message = `Activity approved after rejection: ${(entry.steps || 0).toLocaleString()} steps / ${Number(entry.distanceKm || 0).toFixed(2)} km`;
                 } else {
-                    // First time approval (pending) - just add the steps
-                    participant.dailySteps[entryDate] = (participant.dailySteps[entryDate] || 0) + currentSteps;
-                    participant.totalSteps = (participant.totalSteps || 0) + currentSteps;
-                }
-                
-                // Update activity message
-                const activity = participant.activities.find(a => a.entryId === entryId);
-                if (activity) {
-                    if (previousStatus === 'approved') {
-                        activity.message = `Steps re-approved: ${currentSteps.toLocaleString()} steps (Approved)`;
-                    } else if (previousStatus === 'rejected') {
-                        activity.message = `Steps approved after rejection: ${currentSteps.toLocaleString()} steps (Approved)`;
-                    } else {
-                        activity.message = `Added ${currentSteps.toLocaleString()} steps (Approved)`;
-                    }
-                }
-
-                this.saveParticipantsCache();
-            }
-        } else if (status === 'rejected') {
-            // If rejecting a previously approved entry, subtract the steps
-            if (previousStatus === 'approved') {
-                const participant = this.participants.find(p => p.id === entry.userId);
-                if (participant) {
-                    const entryDate = new Date(entry.date).toDateString();
-                    participant.dailySteps[entryDate] = Math.max(0, (participant.dailySteps[entryDate] || 0) - currentSteps);
-                    participant.totalSteps = Math.max(0, (participant.totalSteps || 0) - currentSteps);
-                    
-                    // Update activity message
-                    const activity = participant.activities.find(a => a.entryId === entryId);
-                    if (activity) {
-                        activity.message = `Added ${currentSteps.toLocaleString()} steps (Rejected)`;
-                    }
-
-                    this.saveParticipantsCache();
+                    activity.message = `Activity approved: ${(entry.steps || 0).toLocaleString()} steps / ${Number(entry.distanceKm || 0).toFixed(2)} km`;
                 }
             }
-            // If rejecting a previously rejected entry, no change needed (steps were never added)
+            this.saveParticipantsCache();
+        } else if (status === 'rejected' && participant) {
+            const activity = (participant.activities || []).find(a => a.entryId === entryId);
+            if (activity) {
+                activity.message = `Activity rejected: ${(entry.steps || 0).toLocaleString()} steps / ${Number(entry.distanceKm || 0).toFixed(2)} km`;
+            }
+            this.saveParticipantsCache();
         }
 
         this.saveStepEntries();
         this.upsertStepEntryInFirebase(entry);
-        if (this.firebaseEnabled) {
-            const participant = this.participants.find(p => p.id === entry.userId || p.employeeId === entry.userId);
-            if (participant) {
-                this.syncParticipantToFirebase(participant);
-            }
+        if (this.firebaseEnabled && participant) {
+            this.syncParticipantToFirebase(participant);
         }
         this.updateAdminDashboard();
         this.updateLeaderboard();
         
-        if (status === 'approved' && previousStatus === 'approved') {
-            alert(`Entry re-approved successfully!\n\nSteps: ${currentSteps.toLocaleString()}\n\nLeaderboard has been updated.`);
-        } else if (status === 'approved' && previousStatus === 'rejected') {
-            alert(`Rejected entry approved successfully!\n\nSteps: ${currentSteps.toLocaleString()}\n\nLeaderboard has been updated.`);
-        } else {
-            alert(`Entry ${status} successfully!`);
+        alert(`Entry ${status} successfully!`);
+        if (refreshUserId) {
+            this.viewUserDetails(refreshUserId);
         }
+        return true;
     }
 
     editEntrySteps(entryId) {
+        // Backward-compatible alias
+        this.openEditActivityModal(entryId);
+    }
+
+    openEditActivityModal(entryId, refreshUserId = null) {
+        if (!this.requireAdmin()) return;
+        const entry = this.stepEntries.find(e => e.id === entryId);
+        if (!entry) {
+            alert('Activity entry not found.');
+            return;
+        }
+
+        this._editActivityContext = { entryId, refreshUserId };
+
+        const modal = document.getElementById('editActivityModal');
+        if (!modal) {
+            // Fallback if modal markup is missing (e.g. old cached admin page)
+            this.editEntryStepsPromptFallback(entryId, refreshUserId);
+            return;
+        }
+
+        document.getElementById('editActivityId').value = entry.id;
+        document.getElementById('editActivityType').value =
+            entry.trackingMode === 'treadmill' || entry.source === 'treadmill-counter' ? 'treadmill' : 'outdoor';
+        document.getElementById('editActivitySteps').value = entry.steps || 0;
+        document.getElementById('editActivityDistance').value = Number(entry.distanceKm || 0).toFixed(3);
+        document.getElementById('editActivityCalories').value = Math.round(Number(entry.caloriesBurned) || 0);
+        const durationSec = Number(entry.durationSec) || 0;
+        document.getElementById('editActivityDurationMin').value = Math.floor(durationSec / 60);
+        document.getElementById('editActivitySpeed').value =
+            entry.treadmillSpeedKmh != null ? Number(entry.treadmillSpeedKmh) : '';
+        document.getElementById('editActivityNotes').value = entry.notes || '';
+        document.getElementById('editActivityStatus').value = entry.status || 'pending';
+        document.getElementById('editActivityMeta').textContent =
+            `${this.getActivityTypeLabel(entry)} · ${this.getActivitySourceLabel(entry)} · ${new Date(entry.date).toLocaleString()}`;
+
+        modal.style.display = 'flex';
+    }
+
+    closeEditActivityModal() {
+        const modal = document.getElementById('editActivityModal');
+        if (modal) modal.style.display = 'none';
+        this._editActivityContext = null;
+    }
+
+    editEntryStepsPromptFallback(entryId, refreshUserId = null) {
         const entry = this.stepEntries.find(e => e.id === entryId);
         if (!entry) return;
 
         const currentSteps = entry.steps;
-        const newStepsStr = prompt(`Edit step count for this entry:\n\nCurrent steps: ${currentSteps.toLocaleString()}\n\nEnter new step count:`, currentSteps);
-        
-        if (newStepsStr === null) return; // User cancelled
-
-        const newSteps = parseInt(newStepsStr);
+        const newStepsStr = prompt(`Edit step count:\nCurrent: ${currentSteps}`, currentSteps);
+        if (newStepsStr === null) return;
+        const newSteps = parseInt(newStepsStr, 10);
         if (isNaN(newSteps) || newSteps < 0) {
             alert('Please enter a valid number of steps (0 or greater)!');
             return;
         }
 
-        if (newSteps === currentSteps) {
-            alert('Step count unchanged.');
+        const distanceStr = prompt(`Edit distance (km):\nCurrent: ${Number(entry.distanceKm || 0).toFixed(3)}`, Number(entry.distanceKm || 0).toFixed(3));
+        if (distanceStr === null) return;
+        const newDistance = parseFloat(distanceStr);
+        if (isNaN(newDistance) || newDistance < 0) {
+            alert('Please enter a valid distance.');
             return;
         }
 
-        const previousStatus = entry.status;
-        const previousSteps = entry.steps;
-        entry.steps = newSteps;
+        this.saveEditedActivityDetails({
+            entryId,
+            steps: newSteps,
+            distanceKm: newDistance,
+            caloriesBurned: entry.caloriesBurned,
+            durationSec: entry.durationSec,
+            trackingMode: entry.trackingMode || 'outdoor',
+            treadmillSpeedKmh: entry.treadmillSpeedKmh,
+            notes: entry.notes,
+            status: entry.status || 'pending',
+            refreshUserId
+        });
+    }
+
+    saveEditedActivityFromForm() {
+        if (!this.requireAdmin()) return;
+        const ctx = this._editActivityContext || {};
+        const entryId = document.getElementById('editActivityId')?.value || ctx.entryId;
+        if (!entryId) return;
+
+        const steps = parseInt(document.getElementById('editActivitySteps').value, 10);
+        const distanceKm = parseFloat(document.getElementById('editActivityDistance').value);
+        const caloriesBurned = parseFloat(document.getElementById('editActivityCalories').value);
+        const durationMin = parseFloat(document.getElementById('editActivityDurationMin').value);
+        const trackingMode = document.getElementById('editActivityType').value;
+        const speedRaw = document.getElementById('editActivitySpeed').value;
+        const notes = document.getElementById('editActivityNotes').value;
+        const status = document.getElementById('editActivityStatus').value;
+
+        if (isNaN(steps) || steps < 0) {
+            alert('Please enter a valid step count.');
+            return;
+        }
+        if (isNaN(distanceKm) || distanceKm < 0) {
+            alert('Please enter a valid distance (km).');
+            return;
+        }
+        if (isNaN(caloriesBurned) || caloriesBurned < 0) {
+            alert('Please enter valid calories.');
+            return;
+        }
+        if (isNaN(durationMin) || durationMin < 0) {
+            alert('Please enter a valid duration (minutes).');
+            return;
+        }
+
+        let treadmillSpeedKmh = null;
+        if (speedRaw !== '' && speedRaw != null) {
+            treadmillSpeedKmh = parseFloat(speedRaw);
+            if (isNaN(treadmillSpeedKmh) || treadmillSpeedKmh < 0) {
+                alert('Please enter a valid treadmill speed.');
+                return;
+            }
+        }
+
+        this.saveEditedActivityDetails({
+            entryId,
+            steps,
+            distanceKm: Number(distanceKm.toFixed(3)),
+            caloriesBurned: Math.round(caloriesBurned),
+            durationSec: Math.round(durationMin * 60),
+            trackingMode: trackingMode === 'treadmill' ? 'treadmill' : 'outdoor',
+            treadmillSpeedKmh,
+            notes: notes || null,
+            status,
+            refreshUserId: ctx.refreshUserId || null
+        });
+    }
+
+    saveEditedActivityDetails({
+        entryId,
+        steps,
+        distanceKm,
+        caloriesBurned,
+        durationSec,
+        trackingMode,
+        treadmillSpeedKmh,
+        notes,
+        status,
+        refreshUserId
+    }) {
+        const entry = this.stepEntries.find(e => e.id === entryId);
+        if (!entry) {
+            alert('Activity entry not found.');
+            return;
+        }
+
+        const participant = this.findParticipantForEntry(entry);
+        const previousStatus = entry.status || 'pending';
+        const previousSnapshot = {
+            steps: entry.steps,
+            distanceKm: entry.distanceKm,
+            caloriesBurned: entry.caloriesBurned,
+            durationSec: entry.durationSec,
+            date: entry.date
+        };
+
+        // Remove old approved contribution before mutating fields
+        if (previousStatus === 'approved' && participant) {
+            this.applyEntryContribution(participant, previousSnapshot, -1);
+        }
+
+        entry.steps = steps;
+        entry.distanceKm = Number(Number(distanceKm).toFixed(3));
+        entry.caloriesBurned = Number(caloriesBurned) || 0;
+        entry.durationSec = durationSec == null ? null : Number(durationSec);
+        entry.trackingMode = trackingMode === 'treadmill' ? 'treadmill' : 'outdoor';
+        if (entry.trackingMode === 'treadmill') {
+            entry.source = 'treadmill-counter';
+            entry.treadmillSpeedKmh = treadmillSpeedKmh;
+        } else {
+            if (entry.source === 'treadmill-counter') entry.source = 'gps-counter';
+            entry.treadmillSpeedKmh = null;
+        }
+        entry.notes = notes;
         entry.lastModifiedBy = 'Admin';
         entry.lastModifiedAt = new Date().toISOString();
+        entry.status = status || previousStatus;
 
-        // If entry was previously approved, remove the old steps from user totals
-        if (previousStatus === 'approved') {
-            const participant = this.participants.find(p => p.id === entry.userId);
+        if (entry.status === 'approved') {
+            entry.validatedBy = entry.validatedBy || 'Admin';
+            entry.validatedAt = entry.validatedAt || new Date().toISOString();
             if (participant) {
-                const entryDate = new Date(entry.date).toDateString();
-                
-                // Subtract old steps
-                participant.dailySteps[entryDate] = Math.max(0, (participant.dailySteps[entryDate] || 0) - previousSteps);
-                participant.totalSteps = Math.max(0, (participant.totalSteps || 0) - previousSteps);
-                
-                // Update activity message
-                const activity = participant.activities.find(a => a.entryId === entryId);
-                if (activity) {
- activity.message = `Steps updated: ${previousSteps.toLocaleString()} -> ${newSteps.toLocaleString()} (Pending re-approval)`;
-                }
-
-                this.saveParticipantsCache();
+                this.applyEntryContribution(participant, entry, 1);
             }
-            
-            // Reset status to pending so admin can re-approve
-            entry.status = 'pending';
-            entry.validatedBy = null;
-            entry.validatedAt = null;
-            entry.notes = null;
+        } else if (previousStatus === 'approved' && entry.status !== 'approved') {
+            entry.validatedBy = 'Admin';
+            entry.validatedAt = new Date().toISOString();
+        }
+
+        if (participant) {
+            const activity = (participant.activities || []).find(a => a.entryId === entryId);
+            if (activity) {
+                activity.steps = entry.steps;
+                activity.distanceKm = entry.distanceKm;
+                activity.caloriesBurned = entry.caloriesBurned;
+                activity.message = `Activity updated by admin: ${entry.steps.toLocaleString()} steps / ${entry.distanceKm.toFixed(2)} km (${entry.status})`;
+            }
+            this.saveParticipantsCache();
         }
 
         this.saveStepEntries();
         this.upsertStepEntryInFirebase(entry);
-        if (this.firebaseEnabled) {
-            const participant = this.participants.find(p => p.id === entry.userId || p.employeeId === entry.userId);
-            if (participant) {
-                this.syncParticipantToFirebase(participant);
-            }
+        if (this.firebaseEnabled && participant) {
+            this.syncParticipantToFirebase(participant);
         }
         this.updateAdminDashboard();
         this.updateLeaderboard();
-        
-        alert(`Step count updated successfully!\n\nPrevious: ${previousSteps.toLocaleString()}\nNew: ${newSteps.toLocaleString()}\nDifference: ${(newSteps - previousSteps).toLocaleString()}\n\nEntry status reset to PENDING. Please approve the entry to apply the changes to the leaderboard.`);
+        this.closeEditActivityModal();
+        alert('Activity details updated successfully.');
+        if (refreshUserId) {
+            this.viewUserDetails(refreshUserId);
+        }
     }
 
     showSuccessAnimation(steps) {
@@ -4301,6 +4456,102 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
  }
  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+ }
+
+ getActivityTypeLabel(entry) {
+ if (!entry) return 'Unknown';
+ const mode = entry.trackingMode;
+ if (mode === 'treadmill' || entry.source === 'treadmill-counter') return 'Treadmill';
+ if (mode === 'outdoor' || entry.source === 'gps-counter' || entry.source === 'step-counter') {
+ return 'Outdoor Walk / Run';
+ }
+ if (entry.source === 'native') return 'Native Tracking';
+ if (entry.source === 'manual') return 'Manual Entry';
+ if (entry.source === 'screenshot') return 'Screenshot Upload';
+ return entry.source || 'Activity';
+ }
+
+ getActivitySourceLabel(entry) {
+ const map = {
+ 'gps-counter': 'GPS Counter',
+ 'treadmill-counter': 'Treadmill Counter',
+ 'step-counter': 'Step Counter',
+ 'native': 'Native Keep-Alive',
+ 'manual': 'Manual Entry',
+ 'screenshot': 'Screenshot Upload'
+ };
+ return map[entry && entry.source] || (entry && entry.source) || 'Unknown';
+ }
+
+ findParticipantForEntry(entry) {
+ if (!entry) return null;
+ const uid = entry.userId;
+ return this.participants.find((p) =>
+ p.id === uid ||
+ p.employeeId === uid ||
+ String(p.id) === String(uid) ||
+ String(p.employeeId) === String(uid)
+ ) || null;
+ }
+
+ /**
+ * Add (sign=+1) or remove (sign=-1) an entry's contribution from participant totals.
+ */
+ applyEntryContribution(participant, entry, sign) {
+ if (!participant || !entry) return;
+ const s = sign >= 0 ? 1 : -1;
+ const entryDate = new Date(entry.date).toDateString();
+ const steps = Number(entry.steps) || 0;
+ const distanceKm = Number(entry.distanceKm) || 0;
+ const calories = Number(entry.caloriesBurned) || 0;
+ const durationSec = Number(entry.durationSec) || 0;
+
+ if (!participant.dailySteps) participant.dailySteps = {};
+ participant.dailySteps[entryDate] = Math.max(0, (participant.dailySteps[entryDate] || 0) + s * steps);
+ participant.totalSteps = Math.max(0, (participant.totalSteps || 0) + s * steps);
+
+ if (!participant.dailyDistanceKm) participant.dailyDistanceKm = {};
+ participant.dailyDistanceKm[entryDate] = Math.max(
+ 0,
+ Number(((participant.dailyDistanceKm[entryDate] || 0) + s * distanceKm).toFixed(3))
+ );
+ participant.totalDistanceKm = Math.max(
+ 0,
+ Number(((participant.totalDistanceKm || 0) + s * distanceKm).toFixed(3))
+ );
+
+ if (!participant.dailyCalories) participant.dailyCalories = {};
+ participant.dailyCalories[entryDate] = Math.max(0, (participant.dailyCalories[entryDate] || 0) + s * calories);
+ participant.totalCalories = Math.max(0, (participant.totalCalories || 0) + s * calories);
+
+ if (!participant.dailyStats) participant.dailyStats = {};
+ const day = participant.dailyStats[entryDate] || {
+ distanceKm: 0,
+ durationSec: 0,
+ steps: 0,
+ caloriesBurned: 0,
+ completed: false,
+ completionDurationSec: null,
+ completedAt: null,
+ goalKm: null,
+ challengeDay: null
+ };
+ day.distanceKm = Math.max(0, Number(((day.distanceKm || 0) + s * distanceKm).toFixed(3)));
+ day.durationSec = Math.max(0, (day.durationSec || 0) + s * durationSec);
+ day.steps = Math.max(0, (day.steps || 0) + s * steps);
+ day.caloriesBurned = Math.max(0, (day.caloriesBurned || 0) + s * calories);
+ const goalKm = day.goalKm != null ? day.goalKm : this.getDailyGoalKm(new Date(entry.date));
+ day.goalKm = goalKm;
+ if (day.distanceKm >= (goalKm - 0.01)) {
+ day.completed = true;
+ if (!day.completionDurationSec) day.completionDurationSec = day.durationSec;
+ if (!day.completedAt) day.completedAt = new Date().toISOString();
+ } else {
+ day.completed = false;
+ day.completionDurationSec = null;
+ day.completedAt = null;
+ }
+ participant.dailyStats[entryDate] = day;
  }
 
  /**

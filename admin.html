@@ -12,7 +12,7 @@
  <!-- Favicon -->
  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=35">
  <link rel="apple-touch-icon" href="favicon.svg?v=35">
- <link rel="stylesheet" href="styles.css">
+ <link rel="stylesheet" href="styles.css?v=40">
  <link rel="stylesheet" href="ui-refresh.css?v=35">
  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
  <!-- Microsoft Teams SDK (optional, only loads if in Teams) -->
@@ -160,6 +160,71 @@
  </div>
  <div class="modal-body" id="userDetailsContent">
  <!-- User details will be loaded here -->
+ </div>
+ </div>
+ </div>
+
+ <!-- Edit Activity Modal -->
+ <div class="modal-overlay" id="editActivityModal" style="display: none;">
+ <div class="modal-content edit-activity-modal">
+ <div class="modal-header">
+ <h2>Edit Activity</h2>
+ <button class="modal-close" onclick="app.closeEditActivityModal()">&times;</button>
+ </div>
+ <div class="modal-body">
+ <p id="editActivityMeta" class="form-hint" style="margin-bottom: 16px;"></p>
+ <form id="editActivityForm" onsubmit="event.preventDefault(); app.saveEditedActivityFromForm();">
+ <input type="hidden" id="editActivityId" value="">
+ <div class="form-group">
+ <label for="editActivityType">Activity Type</label>
+ <select id="editActivityType" required>
+ <option value="outdoor">Outdoor Walk / Run</option>
+ <option value="treadmill">Treadmill</option>
+ </select>
+ </div>
+ <div class="form-row-2">
+ <div class="form-group">
+ <label for="editActivitySteps">Steps</label>
+ <input type="number" id="editActivitySteps" min="0" step="1" required>
+ </div>
+ <div class="form-group">
+ <label for="editActivityDistance">Distance (km)</label>
+ <input type="number" id="editActivityDistance" min="0" step="0.001" required>
+ </div>
+ </div>
+ <div class="form-row-2">
+ <div class="form-group">
+ <label for="editActivityCalories">Calories (kcal)</label>
+ <input type="number" id="editActivityCalories" min="0" step="1" required>
+ </div>
+ <div class="form-group">
+ <label for="editActivityDurationMin">Duration (minutes)</label>
+ <input type="number" id="editActivityDurationMin" min="0" step="0.1" required>
+ </div>
+ </div>
+ <div class="form-row-2">
+ <div class="form-group">
+ <label for="editActivitySpeed">Treadmill Speed (km/h)</label>
+ <input type="number" id="editActivitySpeed" min="0" step="0.1" placeholder="Optional">
+ </div>
+ <div class="form-group">
+ <label for="editActivityStatus">Status</label>
+ <select id="editActivityStatus" required>
+ <option value="approved">Approved</option>
+ <option value="pending">Pending</option>
+ <option value="rejected">Rejected</option>
+ </select>
+ </div>
+ </div>
+ <div class="form-group">
+ <label for="editActivityNotes">Admin Notes</label>
+ <textarea id="editActivityNotes" rows="3" placeholder="Optional notes or rejection reason"></textarea>
+ </div>
+ <div class="form-actions">
+ <button type="submit" class="btn btn-primary">Save Activity</button>
+ <button type="button" class="btn btn-secondary" onclick="app.closeEditActivityModal()">Cancel</button>
+ </div>
+ </form>
  </div>
  </div>
  </div>
@@ -387,7 +452,7 @@
  }
 
  // Load script and initialize (cache-bust so Pages/SW cannot keep old admin/admin123 builds)
- loadScript('script.js?v=39')
+ loadScript('script.js?v=40')
  .then(() => {
  console.log('Script loaded, initializing admin page...');
  initAdminPage();
