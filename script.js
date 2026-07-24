@@ -28,6 +28,7 @@ class StepathonApp {
  // Firestore security rules only allow these collection names
  this.participantsCollection = 'participants';
  this.stepEntriesCollection = 'stepEntries';
+ this.activityFeedCollection = 'activityFeed';
  this.resetLocalUserDataIfNeeded();
 
         this.currentUser = null;
@@ -35,6 +36,9 @@ class StepathonApp {
         this.firebaseEnabled = false;
         this.auth = null;
         this.db = null;
+        this.storage = null;
+        this.pendingShareSave = null;
+        this.sharePhotoFile = null;
         this.isMigratingUsers = false;
         this.initFirebase();
         this.participants = this.loadParticipants();
@@ -154,6 +158,12 @@ class StepathonApp {
 
             this.auth = firebase.auth();
             this.db = firebase.firestore();
+            try {
+                this.storage = firebase.storage ? firebase.storage() : null;
+            } catch (storageErr) {
+                console.warn('Firebase Storage unavailable:', storageErr);
+                this.storage = null;
+            }
             this.firebaseEnabled = true;
 
             // Keep session in sync
@@ -339,6 +349,10 @@ class StepathonApp {
 
  stepEntriesCol() {
  return this.db.collection(this.stepEntriesCollection);
+ }
+
+ activityFeedCol() {
+ return this.db.collection(this.activityFeedCollection);
  }
 
  isCurrentSeasonParticipant(participant) {
@@ -687,6 +701,38 @@ class StepathonApp {
             saveCounterStepsBtn.addEventListener('click', () => {
                 this.saveCounterStepsDirectly();
             });
+        }
+
+        const refreshFeedBtn = document.getElementById('refreshFeedBtn');
+        if (refreshFeedBtn) {
+            refreshFeedBtn.addEventListener('click', () => this.loadActivityFeed(true));
+        }
+
+        const sharePhotoInput = document.getElementById('shareActivityPhoto');
+        if (sharePhotoInput) {
+            sharePhotoInput.addEventListener('change', (e) => {
+                this.handleSharePhotoSelected(e.target.files && e.target.files[0]);
+            });
+        }
+        const clearSharePhotoBtn = document.getElementById('clearSharePhotoBtn');
+        if (clearSharePhotoBtn) {
+            clearSharePhotoBtn.addEventListener('click', () => this.clearSharePhotoSelection());
+        }
+        const confirmShareSaveBtn = document.getElementById('confirmShareSaveBtn');
+        if (confirmShareSaveBtn) {
+            confirmShareSaveBtn.addEventListener('click', () => this.confirmShareAndSave());
+        }
+        const cancelShareSaveBtn = document.getElementById('cancelShareSaveBtn');
+        if (cancelShareSaveBtn) {
+            cancelShareSaveBtn.addEventListener('click', () => this.closeShareActivityModal());
+        }
+        const closeShareActivityBtn = document.getElementById('closeShareActivityBtn');
+        if (closeShareActivityBtn) {
+            closeShareActivityBtn.addEventListener('click', () => this.closeShareActivityModal());
+        }
+        const shareToFeedCheckbox = document.getElementById('shareToFeedCheckbox');
+        if (shareToFeedCheckbox) {
+            shareToFeedCheckbox.addEventListener('change', () => this.toggleSharePhotoGroups());
         }
 
  const bodyWeightInput = document.getElementById('bodyWeightKg');
@@ -2700,6 +2746,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         this.updateDates(); // This will call checkChallengeStatus
         
         this.updateDashboard();
+        this.loadActivityFeed();
  this.switchInputMethod('counter');
  setTimeout(() => {
  this.initActivityMap();
@@ -4052,6 +4099,11 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         this.updateLeaderboard();
         
         alert(`Entry ${status} successfully!`);
+        if (status === 'rejected') {
+            this.setFeedVisibilityForEntry(entryId, false);
+        } else if (status === 'approved') {
+            this.setFeedVisibilityForEntry(entryId, true);
+        }
         if (refreshUserId) {
             this.viewUserDetails(refreshUserId);
         }
@@ -7144,18 +7196,19 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  : this.getSessionDurationSec());
  const caloriesBurned = this.estimateCaloriesBurned(distanceKm, durationSec, this.getBodyWeightKg());
 
- await this.saveStepsWithScreenshot(steps, null, true, {
+ this.openShareActivityModal({
+ steps,
  distanceKm,
- path: mode === 'treadmill' ? [] : (this.stepCounter.path || []).map((p) => ({ lat: p.lat, lng: p.lng, t: p.t })),
  durationSec,
  caloriesBurned,
  bodyWeightKg: this.getBodyWeightKg(),
  trackingMode: mode,
- treadmillSpeedKmh: mode === 'treadmill' ? this.getTreadmillSpeedKmh() : null
+ treadmillSpeedKmh: mode === 'treadmill' ? this.getTreadmillSpeedKmh() : null,
+ path: mode === 'treadmill' ? [] : (this.stepCounter.path || []).map((p) => ({ lat: p.lat, lng: p.lng, t: p.t }))
  });
  }
 
- async saveStepsWithScreenshot(steps, screenshotData, fromStepCounter = false, trackMeta = null) {
+ async saveStepsWithScreenshot(steps, screenshotData, fromStepCounter = false, trackMeta = null, shareOptions = null) {
         const today = new Date().toDateString();
         const currentSteps = this.currentUser.dailySteps[today] || 0;
         this.currentUser.dailySteps[today] = currentSteps + steps;
@@ -7257,7 +7310,20 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         console.log('Total entries before save:', this.stepEntries.length);
         
         this.saveStepEntries();
-        this.upsertStepEntryInFirebase(stepEntry);
+        await this.upsertStepEntryInFirebase(stepEntry);
+
+        let shareNote = '';
+        if (shareOptions && shareOptions.shareToFeed) {
+            try {
+                await this.publishActivityFeedPost(stepEntry, shareOptions);
+                shareNote = shareOptions.photoFile
+                    ? '\n\nShared to the Team Activity Feed with your photo!'
+                    : '\n\nShared to the Team Activity Feed!';
+            } catch (shareErr) {
+                console.warn('Feed share failed:', shareErr);
+                shareNote = '\n\nActivity saved, but feed share failed. You can try again next time.';
+            }
+        }
         
         // Verify save immediately
         const verify = this.loadStepEntries();
@@ -7327,11 +7393,304 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         // Update dashboard and leaderboard immediately
         this.updateDashboard();
         this.updateLeaderboard();
+        this.loadActivityFeed();
         
         // Show success message
         setTimeout(() => {
- alert(`Saved successfully!\n\n${distanceKm.toFixed(2)} KM covered (~${steps.toLocaleString()} steps)\nCalories burned: ~${caloriesBurned} kcal\n\nYour leaderboard has been updated.`);
+ alert(`Saved successfully!\n\n${distanceKm.toFixed(2)} KM covered (~${steps.toLocaleString()} steps)\nCalories burned: ~${caloriesBurned} kcal\n\nYour leaderboard has been updated.${shareNote}`);
         }, 500);
+    }
+
+    openShareActivityModal(pending) {
+        this.pendingShareSave = pending;
+        this.clearSharePhotoSelection();
+        const modal = document.getElementById('shareActivityModal');
+        const summary = document.getElementById('shareActivitySummary');
+        const shareCb = document.getElementById('shareToFeedCheckbox');
+        const caption = document.getElementById('shareActivityCaption');
+        if (shareCb) shareCb.checked = true;
+        if (caption) caption.value = '';
+        if (summary) {
+            const modeLabel = pending.trackingMode === 'treadmill' ? 'Treadmill' : 'Outdoor';
+            summary.textContent =
+                `${modeLabel}: ${Number(pending.distanceKm || 0).toFixed(2)} KM · ` +
+                `${(pending.steps || 0).toLocaleString()} steps · ` +
+                `~${Math.round(pending.caloriesBurned || 0)} kcal · ` +
+                `${this.formatDurationClock(pending.durationSec)}`;
+        }
+        this.toggleSharePhotoGroups();
+        if (modal) modal.style.display = 'flex';
+    }
+
+    closeShareActivityModal() {
+        const modal = document.getElementById('shareActivityModal');
+        if (modal) modal.style.display = 'none';
+        this.pendingShareSave = null;
+        this.clearSharePhotoSelection();
+    }
+
+    toggleSharePhotoGroups() {
+        const shareCb = document.getElementById('shareToFeedCheckbox');
+        const enabled = !!(shareCb && shareCb.checked);
+        const photoGroup = document.getElementById('sharePhotoGroup');
+        const captionGroup = document.getElementById('shareCaptionGroup');
+        if (photoGroup) photoGroup.style.opacity = enabled ? '1' : '0.5';
+        if (captionGroup) captionGroup.style.opacity = enabled ? '1' : '0.5';
+        const photoInput = document.getElementById('shareActivityPhoto');
+        const caption = document.getElementById('shareActivityCaption');
+        if (photoInput) photoInput.disabled = !enabled;
+        if (caption) caption.disabled = !enabled;
+    }
+
+    handleSharePhotoSelected(file) {
+        if (!file) {
+            this.clearSharePhotoSelection();
+            return;
+        }
+        if (!file.type || !file.type.startsWith('image/')) {
+            alert('Please choose an image file.');
+            this.clearSharePhotoSelection();
+            return;
+        }
+        if (file.size > 12 * 1024 * 1024) {
+            alert('Photo is too large. Please choose an image under 12 MB.');
+            this.clearSharePhotoSelection();
+            return;
+        }
+        this.sharePhotoFile = file;
+        const preview = document.getElementById('sharePhotoPreview');
+        const wrap = document.getElementById('sharePhotoPreviewWrap');
+        if (preview) {
+            preview.src = URL.createObjectURL(file);
+        }
+        if (wrap) wrap.style.display = 'block';
+    }
+
+    clearSharePhotoSelection() {
+        this.sharePhotoFile = null;
+        const input = document.getElementById('shareActivityPhoto');
+        const preview = document.getElementById('sharePhotoPreview');
+        const wrap = document.getElementById('sharePhotoPreviewWrap');
+        if (input) input.value = '';
+        if (preview) {
+            if (preview.src && preview.src.startsWith('blob:')) {
+                try { URL.revokeObjectURL(preview.src); } catch (e) { /* ignore */ }
+            }
+            preview.removeAttribute('src');
+        }
+        if (wrap) wrap.style.display = 'none';
+    }
+
+    async confirmShareAndSave() {
+        if (!this.pendingShareSave) {
+            this.closeShareActivityModal();
+            return;
+        }
+        const pending = this.pendingShareSave;
+        const shareToFeed = !!(document.getElementById('shareToFeedCheckbox') && document.getElementById('shareToFeedCheckbox').checked);
+        const captionEl = document.getElementById('shareActivityCaption');
+        const caption = captionEl ? String(captionEl.value || '').trim().slice(0, 180) : '';
+        const shareOptions = {
+            shareToFeed,
+            caption: caption || null,
+            photoFile: shareToFeed ? this.sharePhotoFile : null
+        };
+
+        const confirmBtn = document.getElementById('confirmShareSaveBtn');
+        if (confirmBtn) {
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = 'Saving...';
+        }
+
+        try {
+            this.closeShareActivityModal();
+            await this.saveStepsWithScreenshot(pending.steps, null, true, {
+                distanceKm: pending.distanceKm,
+                path: pending.path || [],
+                durationSec: pending.durationSec,
+                caloriesBurned: pending.caloriesBurned,
+                bodyWeightKg: pending.bodyWeightKg,
+                trackingMode: pending.trackingMode,
+                treadmillSpeedKmh: pending.treadmillSpeedKmh
+            }, shareOptions);
+        } finally {
+            if (confirmBtn) {
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = 'Save Activity';
+            }
+        }
+    }
+
+    compressImageFile(file, maxWidth = 1280, quality = 0.72) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error('Could not read photo'));
+            reader.onload = () => {
+                const img = new Image();
+                img.onerror = () => reject(new Error('Could not load photo'));
+                img.onload = () => {
+                    const scale = Math.min(1, maxWidth / Math.max(img.width, img.height));
+                    const w = Math.max(1, Math.round(img.width * scale));
+                    const h = Math.max(1, Math.round(img.height * scale));
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, w, h);
+                    canvas.toBlob((blob) => {
+                        if (!blob) {
+                            reject(new Error('Could not compress photo'));
+                            return;
+                        }
+                        resolve(blob);
+                    }, 'image/jpeg', quality);
+                };
+                img.src = reader.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async uploadActivityPhoto(entryId, file) {
+        if (!this.firebaseEnabled || !this.storage || !this.auth || !this.auth.currentUser) {
+            throw new Error('Photo upload requires Firebase Storage sign-in.');
+        }
+        const uid = this.auth.currentUser.uid;
+        const blob = await this.compressImageFile(file);
+        const path = `activity-photos/${uid}/${entryId}.jpg`;
+        const ref = this.storage.ref().child(path);
+        await ref.put(blob, { contentType: 'image/jpeg' });
+        return await ref.getDownloadURL();
+    }
+
+    async publishActivityFeedPost(stepEntry, shareOptions) {
+        if (!this.firebaseEnabled || !this.db || !stepEntry) return;
+        const authUid = (this.auth && this.auth.currentUser && this.auth.currentUser.uid) || stepEntry.userUid;
+        if (!authUid) throw new Error('Not signed in');
+
+        let photoUrl = null;
+        if (shareOptions && shareOptions.photoFile) {
+            photoUrl = await this.uploadActivityPhoto(stepEntry.id, shareOptions.photoFile);
+        }
+
+        const postId = `FEED_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+        const post = {
+            id: postId,
+            entryId: stepEntry.id,
+            userUid: authUid,
+            userId: stepEntry.userId || null,
+            userName: stepEntry.userName || (this.currentUser && this.currentUser.name) || 'Teammate',
+            photoUrl,
+            caption: (shareOptions && shareOptions.caption) || null,
+            steps: stepEntry.steps || 0,
+            distanceKm: Number(stepEntry.distanceKm || 0),
+            caloriesBurned: Number(stepEntry.caloriesBurned || 0),
+            durationSec: stepEntry.durationSec == null ? null : Number(stepEntry.durationSec),
+            trackingMode: stepEntry.trackingMode || null,
+            source: stepEntry.source || null,
+            date: stepEntry.date || new Date().toISOString(),
+            season: this.dataSeason,
+            visible: true
+        };
+        await this.activityFeedCol().doc(postId).set(post);
+        return post;
+    }
+
+    async setFeedVisibilityForEntry(entryId, visible) {
+        if (!this.firebaseEnabled || !this.db || !entryId) return;
+        try {
+            const snap = await this.activityFeedCol()
+                .where('entryId', '==', entryId)
+                .where('season', '==', this.dataSeason)
+                .limit(5)
+                .get();
+            const writes = snap.docs.map((doc) => doc.ref.update({ visible: !!visible }));
+            await Promise.all(writes);
+        } catch (err) {
+            console.warn('Could not update feed visibility:', err);
+        }
+    }
+
+    async loadActivityFeed(force = false) {
+        const list = document.getElementById('teamFeedList');
+        if (!list) return;
+
+        if (!this.currentUser) {
+            list.innerHTML = '<p class="no-feed">Sign in to view the team activity feed.</p>';
+            return;
+        }
+        if (!this.firebaseEnabled || !this.db) {
+            list.innerHTML = '<p class="no-feed">Team feed requires an online connection.</p>';
+            return;
+        }
+
+        if (!force && list.dataset.loading === '1') return;
+        list.dataset.loading = '1';
+        list.innerHTML = '<p class="no-feed">Loading team feed...</p>';
+
+        try {
+            let snap;
+            try {
+                snap = await this.activityFeedCol()
+                    .where('season', '==', this.dataSeason)
+                    .where('visible', '==', true)
+                    .orderBy('date', 'desc')
+                    .limit(40)
+                    .get();
+            } catch (indexErr) {
+                // Fallback if composite index is not ready yet
+                snap = await this.activityFeedCol()
+                    .where('season', '==', this.dataSeason)
+                    .limit(80)
+                    .get();
+            }
+
+            let posts = snap.docs.map((d) => d.data()).filter((p) => p && p.visible !== false);
+            posts.sort((a, b) => new Date(b.date) - new Date(a.date));
+            posts = posts.slice(0, 40);
+            this.renderActivityFeed(posts);
+        } catch (err) {
+            console.warn('Failed to load activity feed:', err);
+            list.innerHTML = '<p class="no-feed">Could not load the team feed right now. Try Refresh.</p>';
+        } finally {
+            list.dataset.loading = '0';
+        }
+    }
+
+    renderActivityFeed(posts) {
+        const list = document.getElementById('teamFeedList');
+        if (!list) return;
+        if (!posts || posts.length === 0) {
+            list.innerHTML = '<p class="no-feed">No shared activities yet. Be the first — save an activity and share a photo!</p>';
+            return;
+        }
+
+        list.innerHTML = posts.map((post) => {
+            const mode = post.trackingMode === 'treadmill' ? 'Treadmill' : 'Outdoor';
+            const when = (() => {
+                try { return new Date(post.date).toLocaleString(); } catch (e) { return post.date || ''; }
+            })();
+            const caption = post.caption ? `<p class="feed-caption">${this.escapeHtml(post.caption)}</p>` : '';
+            const photo = post.photoUrl
+                ? `<div class="feed-photo-wrap"><img class="feed-photo" src="${this.escapeHtml(post.photoUrl)}" alt="Activity photo by ${this.escapeHtml(post.userName || 'teammate')}" loading="lazy"></div>`
+                : '';
+            return `
+                <article class="feed-post">
+                    <div class="feed-post-header">
+                        <strong class="feed-author">${this.escapeHtml(post.userName || 'Teammate')}</strong>
+                        <span class="feed-meta">${this.escapeHtml(mode)} · ${this.escapeHtml(when)}</span>
+                    </div>
+                    ${photo}
+                    ${caption}
+                    <div class="feed-stats">
+                        <span>${Number(post.distanceKm || 0).toFixed(2)} KM</span>
+                        <span>${(post.steps || 0).toLocaleString()} steps</span>
+                        <span>~${Math.round(post.caloriesBurned || 0)} kcal</span>
+                        <span>${this.formatDurationClock(post.durationSec)}</span>
+                    </div>
+                </article>
+            `;
+        }).join('');
     }
 
     showCounterNotification(message) {

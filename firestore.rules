@@ -82,6 +82,30 @@ service cloud.firestore {
         || (isCorporateEmail() && resource.data.userUid == request.auth.uid);
     }
 
+    // Team activity feed (optional photo posts after saving an activity)
+    match /activityFeed/{postId} {
+      allow read: if isCorporateEmail();
+
+      allow create: if isCorporateEmail()
+        && request.resource.data.userUid == request.auth.uid
+        && request.resource.data.keys().hasAll([
+          'id', 'userUid', 'userName', 'season', 'date', 'visible', 'entryId'
+        ])
+        && request.resource.data.season is string
+        && request.resource.data.visible == true
+        && !request.resource.data.keys().hasAny(['password', 'screenshot', 'photoBase64']);
+
+      allow update: if isAdmin()
+        || (
+          isCorporateEmail()
+          && resource.data.userUid == request.auth.uid
+          && request.resource.data.userUid == resource.data.userUid
+        );
+
+      allow delete: if isAdmin()
+        || (isCorporateEmail() && resource.data.userUid == request.auth.uid);
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
