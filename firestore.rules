@@ -94,6 +94,7 @@ service cloud.firestore {
         && request.resource.data.season is string
         && request.resource.data.visible == true
         && !request.resource.data.keys().hasAny(['password', 'screenshot', 'photoBase64']);
+        // photoUrl (Storage) and/or photoDataUrl (compressed JPEG data URL) are allowed
 
       allow update: if isAdmin()
         || (

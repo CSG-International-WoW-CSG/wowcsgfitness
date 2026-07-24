@@ -7551,16 +7551,51 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         });
     }
 
-    async uploadActivityPhoto(entryId, file) {
-        if (!this.firebaseEnabled || !this.storage || !this.auth || !this.auth.currentUser) {
-            throw new Error('Photo upload requires Firebase Storage sign-in.');
+    blobToDataUrl(blob) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error('Could not encode photo'));
+            reader.onload = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+        });
+    }
+
+    /**
+     * Prefer Firebase Storage when available; otherwise embed a compressed JPEG
+     * data URL in Firestore (Spark-plan friendly until Storage/Blaze is enabled).
+     */
+    async prepareFeedPhoto(entryId, file) {
+        const attempts = [
+            { maxWidth: 960, quality: 0.62 },
+            { maxWidth: 720, quality: 0.55 },
+            { maxWidth: 640, quality: 0.48 }
+        ];
+        let lastBlob = null;
+        for (const opts of attempts) {
+            lastBlob = await this.compressImageFile(file, opts.maxWidth, opts.quality);
+            if (lastBlob.size <= 650 * 1024) break;
         }
-        const uid = this.auth.currentUser.uid;
-        const blob = await this.compressImageFile(file);
-        const path = `activity-photos/${uid}/${entryId}.jpg`;
-        const ref = this.storage.ref().child(path);
-        await ref.put(blob, { contentType: 'image/jpeg' });
-        return await ref.getDownloadURL();
+        if (!lastBlob) throw new Error('Could not compress photo');
+
+        // Try Storage first (works after Blaze + default bucket are enabled)
+        if (this.storage && this.auth && this.auth.currentUser) {
+            try {
+                const uid = this.auth.currentUser.uid;
+                const path = `activity-photos/${uid}/${entryId}.jpg`;
+                const ref = this.storage.ref().child(path);
+                await ref.put(lastBlob, { contentType: 'image/jpeg' });
+                const photoUrl = await ref.getDownloadURL();
+                return { photoUrl, photoDataUrl: null };
+            } catch (storageErr) {
+                console.warn('Storage upload unavailable, using Firestore photo fallback:', storageErr);
+            }
+        }
+
+        if (lastBlob.size > 750 * 1024) {
+            throw new Error('Photo is still too large after compression. Try a smaller image.');
+        }
+        const photoDataUrl = await this.blobToDataUrl(lastBlob);
+        return { photoUrl: null, photoDataUrl };
     }
 
     async publishActivityFeedPost(stepEntry, shareOptions) {
@@ -7569,8 +7604,11 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         if (!authUid) throw new Error('Not signed in');
 
         let photoUrl = null;
+        let photoDataUrl = null;
         if (shareOptions && shareOptions.photoFile) {
-            photoUrl = await this.uploadActivityPhoto(stepEntry.id, shareOptions.photoFile);
+            const prepared = await this.prepareFeedPhoto(stepEntry.id, shareOptions.photoFile);
+            photoUrl = prepared.photoUrl;
+            photoDataUrl = prepared.photoDataUrl;
         }
 
         const postId = `FEED_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -7581,6 +7619,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             userId: stepEntry.userId || null,
             userName: stepEntry.userName || (this.currentUser && this.currentUser.name) || 'Teammate',
             photoUrl,
+            photoDataUrl,
             caption: (shareOptions && shareOptions.caption) || null,
             steps: stepEntry.steps || 0,
             distanceKm: Number(stepEntry.distanceKm || 0),
@@ -7671,8 +7710,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 try { return new Date(post.date).toLocaleString(); } catch (e) { return post.date || ''; }
             })();
             const caption = post.caption ? `<p class="feed-caption">${this.escapeHtml(post.caption)}</p>` : '';
-            const photo = post.photoUrl
-                ? `<div class="feed-photo-wrap"><img class="feed-photo" src="${this.escapeHtml(post.photoUrl)}" alt="Activity photo by ${this.escapeHtml(post.userName || 'teammate')}" loading="lazy"></div>`
+            const imgSrc = post.photoUrl || post.photoDataUrl || '';
+            const photo = imgSrc
+                ? `<div class="feed-photo-wrap"><img class="feed-photo" src="${this.escapeHtml(imgSrc)}" alt="Activity photo by ${this.escapeHtml(post.userName || 'teammate')}" loading="lazy"></div>`
                 : '';
             return `
                 <article class="feed-post">
