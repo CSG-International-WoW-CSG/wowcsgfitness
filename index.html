@@ -282,7 +282,8 @@
                     <form id="loginForm">
                         <div class="form-group">
                             <label for="loginUsername">Username / Email / Employee ID <span class="required">*</span></label>
-                            <input type="text" id="loginUsername" placeholder="Enter username, email, or Employee ID" required autocomplete="username">
+                            <input type="text" id="loginUsername" placeholder="Prefer CSG email after password reset" required autocomplete="username">
+                            <small class="form-hint">After Forgot Password, log in with your full <strong>@csgi.com email</strong> and the <strong>new</strong> password.</small>
                         </div>
                         <div class="form-group">
                             <label for="loginPassword">Password <span class="required">*</span></label>
@@ -673,7 +674,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-24-v59 | Android APK v1.0.18</p>
+            <p class="footer-subtext">Site version: 2026-07-24-v60 | Android APK v1.0.18</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#androidAppCard" class="help-link">Download Android App</a>
@@ -694,7 +695,7 @@
                     <div class="form-group">
                         <label class="checkbox-label">
                             <input type="checkbox" id="shareToFeedCheckbox" checked>
-                            Share this activity on the Team Feed
+                            Include a photo on the Team Feed (activity is always posted)
                         </label>
                     </div>
                     <div class="form-group" id="sharePhotoGroup">
@@ -805,7 +806,7 @@
     <script src="firebase-config.js"></script>
     <script src="security-config.js"></script>
     <script src="native-bridge.js?v=55"></script>
-    <script src="script.js?v=59"></script>
+    <script src="script.js?v=60"></script>
     
     <!-- Force-clear stale SW/caches that can freeze scrolling with old overlays -->
     <script>

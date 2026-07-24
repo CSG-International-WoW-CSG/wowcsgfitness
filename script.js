@@ -4864,18 +4864,24 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
     async handleFirebaseLogin(identifier, password) {
         try {
-            let email = identifier;
+            let raw = String(identifier || '').trim();
+            let email = raw;
             let participant = null;
 
-            if (!this.isEmail(identifier)) {
-                participant = await this.lookupFirebaseParticipant(identifier);
+            if (this.isEmail(raw)) {
+                email = raw.toLowerCase();
+            } else {
+                participant = await this.lookupFirebaseParticipant(raw);
                 if (!participant || !participant.email) {
- // Fall back: allow email login path only when identifier is email
- alert('No account found for that username, email, or Employee ID.\n\nIf your challenge data was reset, login with your email address.');
+                    alert(
+                        'No account found for that username or Employee ID.\n\n' +
+                        'After a password reset, log in with your full CSG email:\n' +
+                        'example: name@csgi.com\n\nand your NEW password.'
+                    );
                     document.getElementById('loginUsername').focus();
                     return;
                 }
-                email = participant.email;
+                email = String(participant.email).toLowerCase().trim();
             }
 
             const credential = await this.auth.signInWithEmailAndPassword(email, password);
@@ -4906,16 +4912,26 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             document.getElementById('loginForm').reset();
             this.showDashboard();
             this.updateLeaderboard();
+            this.loadActivityFeed(true);
         } catch (error) {
  if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential' || error.code === 'auth/invalid-login-credentials') {
-                alert('Invalid username or password!');
+                alert(
+                    'Login failed: email or password is incorrect.\n\n' +
+                    'After resetting your password:\n' +
+                    '1) Use your full CSG email (@csgi.com), not username\n' +
+                    '2) Use the NEW password from the reset link\n' +
+                    '3) Try Incognito/Private window or hard refresh (Ctrl+F5)\n\n' +
+                    'Still stuck? Email wow-csg@csgi.com'
+                );
                 document.getElementById('loginPassword').focus();
             } else if (error.code === 'auth/user-not-found') {
-                alert('No account found for that username, email, or Employee ID.');
+                alert('No Firebase account found for that email. Please register first, or contact wow-csg@csgi.com');
                 document.getElementById('loginUsername').focus();
+            } else if (error.code === 'auth/too-many-requests') {
+                alert('Too many failed login attempts. Please wait a few minutes, then try again with your CSG email and new password.');
             } else {
                 console.error('Firebase login error:', error);
-                alert('Login failed. Please try again.');
+                alert('Login failed. Please try again.\n\n' + (error.code || '') + ' ' + (error.message || ''));
             }
         }
     }
@@ -4992,8 +5008,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const collection = this.participantsCol();
 
  const pickCurrent = (snap) => {
- const match = snap.docs.map((d) => d.data()).find((p) => this.isCurrentSeasonParticipant(p));
- return match || null;
+ const all = snap.docs.map((d) => d.data());
+ // Prefer current season, but fall back to any match so password login can resolve email
+ return all.find((p) => this.isCurrentSeasonParticipant(p)) || all[0] || null;
  };
 
  const usernameSnap = await collection.where('usernameLower', '==', normalizedIdentifier).limit(25).get();
@@ -7313,16 +7330,21 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         await this.upsertStepEntryInFirebase(stepEntry);
 
         let shareNote = '';
-        if (shareOptions && shareOptions.shareToFeed) {
-            try {
-                await this.publishActivityFeedPost(stepEntry, shareOptions);
-                shareNote = shareOptions.photoFile
-                    ? '\n\nShared to the Team Activity Feed with your photo!'
-                    : '\n\nShared to the Team Activity Feed!';
-            } catch (shareErr) {
-                console.warn('Feed share failed:', shareErr);
-                shareNote = '\n\nActivity saved, but feed share failed. You can try again next time.';
-            }
+        // Always publish a team-feed summary so colleagues can see activity;
+        // photo/caption are optional extras from the share dialog.
+        try {
+            const opts = shareOptions || { shareToFeed: true, caption: null, photoFile: null };
+            await this.publishActivityFeedPost(stepEntry, {
+                shareToFeed: true,
+                caption: opts.caption || null,
+                photoFile: opts.shareToFeed ? (opts.photoFile || null) : null
+            });
+            shareNote = (opts.shareToFeed && opts.photoFile)
+                ? '\n\nShared to the Team Activity Feed with your photo!'
+                : '\n\nPosted to the Team Activity Feed.';
+        } catch (shareErr) {
+            console.warn('Feed share failed:', shareErr);
+            shareNote = '\n\nActivity saved, but Team Feed post failed: ' + (shareErr.message || 'unknown error');
         }
         
         // Verify save immediately
@@ -7566,14 +7588,14 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
      */
     async prepareFeedPhoto(entryId, file) {
         const attempts = [
-            { maxWidth: 960, quality: 0.62 },
             { maxWidth: 720, quality: 0.55 },
-            { maxWidth: 640, quality: 0.48 }
+            { maxWidth: 560, quality: 0.45 },
+            { maxWidth: 480, quality: 0.4 }
         ];
         let lastBlob = null;
         for (const opts of attempts) {
             lastBlob = await this.compressImageFile(file, opts.maxWidth, opts.quality);
-            if (lastBlob.size <= 650 * 1024) break;
+            if (lastBlob.size <= 400 * 1024) break;
         }
         if (!lastBlob) throw new Error('Could not compress photo');
 
@@ -7591,7 +7613,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             }
         }
 
-        if (lastBlob.size > 750 * 1024) {
+        if (lastBlob.size > 450 * 1024) {
             throw new Error('Photo is still too large after compression. Try a smaller image.');
         }
         const photoDataUrl = await this.blobToDataUrl(lastBlob);
@@ -7606,9 +7628,13 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         let photoUrl = null;
         let photoDataUrl = null;
         if (shareOptions && shareOptions.photoFile) {
-            const prepared = await this.prepareFeedPhoto(stepEntry.id, shareOptions.photoFile);
-            photoUrl = prepared.photoUrl;
-            photoDataUrl = prepared.photoDataUrl;
+            try {
+                const prepared = await this.prepareFeedPhoto(stepEntry.id, shareOptions.photoFile);
+                photoUrl = prepared.photoUrl;
+                photoDataUrl = prepared.photoDataUrl;
+            } catch (photoErr) {
+                console.warn('Photo attach failed; posting activity without photo:', photoErr);
+            }
         }
 
         const postId = `FEED_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -7631,7 +7657,20 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             season: this.dataSeason,
             visible: true
         };
-        await this.activityFeedCol().doc(postId).set(post);
+
+        try {
+            await this.activityFeedCol().doc(postId).set(post);
+        } catch (writeErr) {
+            // Retry without embedded photo if document too large / rules reject
+            if (photoDataUrl) {
+                console.warn('Feed write with photo failed, retrying text-only:', writeErr);
+                post.photoDataUrl = null;
+                post.photoUrl = null;
+                await this.activityFeedCol().doc(postId).set(post);
+            } else {
+                throw writeErr;
+            }
+        }
         return post;
     }
 
@@ -7668,29 +7707,85 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         list.innerHTML = '<p class="no-feed">Loading team feed...</p>';
 
         try {
-            let snap;
+            const byEntry = new Map();
+
+            // 1) Shared feed posts (photos / captions)
             try {
-                snap = await this.activityFeedCol()
-                    .where('season', '==', this.dataSeason)
-                    .where('visible', '==', true)
-                    .orderBy('date', 'desc')
-                    .limit(40)
-                    .get();
-            } catch (indexErr) {
-                // Fallback if composite index is not ready yet
-                snap = await this.activityFeedCol()
-                    .where('season', '==', this.dataSeason)
-                    .limit(80)
-                    .get();
+                let snap;
+                try {
+                    snap = await this.activityFeedCol()
+                        .where('season', '==', this.dataSeason)
+                        .where('visible', '==', true)
+                        .orderBy('date', 'desc')
+                        .limit(40)
+                        .get();
+                } catch (indexErr) {
+                    snap = await this.activityFeedCol()
+                        .where('season', '==', this.dataSeason)
+                        .limit(80)
+                        .get();
+                }
+                snap.docs.forEach((d) => {
+                    const p = d.data();
+                    if (!p || p.visible === false) return;
+                    const key = p.entryId || p.id;
+                    byEntry.set(key, p);
+                });
+            } catch (feedErr) {
+                console.warn('activityFeed query failed:', feedErr);
             }
 
-            let posts = snap.docs.map((d) => d.data()).filter((p) => p && p.visible !== false);
+            // 2) Fallback / supplement: recent approved activities so the feed is never empty
+            //    when people have saved workouts but feed posts failed earlier.
+            try {
+                let entrySnap;
+                try {
+                    entrySnap = await this.stepEntriesCol()
+                        .where('season', '==', this.dataSeason)
+                        .where('status', '==', 'approved')
+                        .orderBy('date', 'desc')
+                        .limit(40)
+                        .get();
+                } catch (idx2) {
+                    entrySnap = await this.stepEntriesCol()
+                        .where('season', '==', this.dataSeason)
+                        .limit(80)
+                        .get();
+                }
+                entrySnap.docs.forEach((d) => {
+                    const e = d.data();
+                    if (!e || (e.status && e.status === 'rejected')) return;
+                    const key = e.id;
+                    if (!key || byEntry.has(key)) return;
+                    byEntry.set(key, {
+                        id: `derived_${key}`,
+                        entryId: key,
+                        userName: e.userName || 'Teammate',
+                        photoUrl: null,
+                        photoDataUrl: null,
+                        caption: null,
+                        steps: e.steps || 0,
+                        distanceKm: Number(e.distanceKm || 0),
+                        caloriesBurned: Number(e.caloriesBurned || 0),
+                        durationSec: e.durationSec == null ? null : Number(e.durationSec),
+                        trackingMode: e.trackingMode || null,
+                        date: e.date,
+                        season: e.season,
+                        visible: true
+                    });
+                });
+            } catch (entryErr) {
+                console.warn('stepEntries feed supplement failed:', entryErr);
+            }
+
+            let posts = Array.from(byEntry.values());
             posts.sort((a, b) => new Date(b.date) - new Date(a.date));
-            posts = posts.slice(0, 40);
+            posts = posts.slice(0, 50);
             this.renderActivityFeed(posts);
         } catch (err) {
             console.warn('Failed to load activity feed:', err);
-            list.innerHTML = '<p class="no-feed">Could not load the team feed right now. Try Refresh.</p>';
+            list.innerHTML = '<p class="no-feed">Could not load the team feed right now. Try Refresh.<br><small>' +
+                this.escapeHtml(err.message || '') + '</small></p>';
         } finally {
             list.dataset.loading = '0';
         }
@@ -7700,7 +7795,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         const list = document.getElementById('teamFeedList');
         if (!list) return;
         if (!posts || posts.length === 0) {
-            list.innerHTML = '<p class="no-feed">No shared activities yet. Be the first — save an activity and share a photo!</p>';
+            list.innerHTML = '<p class="no-feed">No team activities yet. Save a walk/run to appear here for everyone.</p>';
             return;
         }
 
@@ -7711,8 +7806,11 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             })();
             const caption = post.caption ? `<p class="feed-caption">${this.escapeHtml(post.caption)}</p>` : '';
             const imgSrc = post.photoUrl || post.photoDataUrl || '';
-            const photo = imgSrc
-                ? `<div class="feed-photo-wrap"><img class="feed-photo" src="${this.escapeHtml(imgSrc)}" alt="Activity photo by ${this.escapeHtml(post.userName || 'teammate')}" loading="lazy"></div>`
+            const safeImg = (imgSrc.startsWith('https://') || imgSrc.startsWith('data:image/'))
+                ? imgSrc
+                : '';
+            const photo = safeImg
+                ? `<div class="feed-photo-wrap"><img class="feed-photo" src="${safeImg.replace(/"/g, '&quot;')}" alt="Activity photo by ${this.escapeHtml(post.userName || 'teammate')}" loading="lazy"></div>`
                 : '';
             return `
                 <article class="feed-post">
