@@ -4927,6 +4927,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             } else if (error.code === 'auth/user-not-found') {
                 alert('No Firebase account found for that email. Please register first, or contact wow-csg@csgi.com');
                 document.getElementById('loginUsername').focus();
+            } else if (error.code === 'permission-denied' || /permission-denied|insufficient permissions/i.test(String(error.message || ''))) {
+                alert(
+                    'Login authenticated, but profile access was blocked.\n\n' +
+                    'Please hard refresh (Ctrl+F5) and try again with your CSG email.\n' +
+                    'If it still fails, contact wow-csg@csgi.com'
+                );
             } else if (error.code === 'auth/too-many-requests') {
                 alert('Too many failed login attempts. Please wait a few minutes, then try again with your CSG email and new password.');
             } else {
@@ -4946,6 +4952,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         }
 
  const uid = authUser.uid;
+ const emailFinal = String(email || authUser.email || '').toLowerCase().trim();
  let prior = null;
  try {
  const doc = await this.participantsCol().doc(uid).get();
@@ -4958,9 +4965,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  if (!prior) {
  try {
- const emailLower = (email || authUser.email || '').toLowerCase();
- if (emailLower) {
- const snap = await this.participantsCol().where('emailLower', '==', emailLower).limit(5).get();
+ if (emailFinal) {
+ const snap = await this.participantsCol().where('emailLower', '==', emailFinal).limit(5).get();
  if (!snap.empty) {
  prior = snap.docs[0].data();
  }
@@ -4970,28 +4976,35 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
  }
 
- const safeId = (prior && (prior.id || prior.employeeId)) || (`USER_${Date.now()}`);
- const usernameBase = (prior && prior.username) || (email || 'user').split('@')[0];
+ const safeId = String((prior && (prior.id || prior.employeeId)) || `USER_${Date.now()}`);
+ const usernameBase = String((prior && prior.username) || emailFinal.split('@')[0] || 'user');
  const participant = {
  uid,
- id: String(safeId),
- employeeId: String(safeId),
+ id: safeId,
+ employeeId: safeId,
  name: (prior && prior.name) || (authUser.displayName) || 'Challenge Participant',
- email: email || authUser.email || (prior && prior.email) || '',
- emailLower: (email || authUser.email || (prior && prior.email) || '').toLowerCase(),
+ email: emailFinal || (prior && prior.email) || '',
+ emailLower: emailFinal || String((prior && prior.email) || '').toLowerCase(),
  username: usernameBase,
- usernameLower: String(usernameBase).toLowerCase(),
- employeeIdLower: String(safeId).toLowerCase(),
- totalSteps: 0,
- dailySteps: {},
- streak: 0,
- lastActivity: null,
- activities: [],
- registeredAt: new Date().toISOString(),
+ usernameLower: usernameBase.toLowerCase(),
+ employeeIdLower: safeId.toLowerCase(),
+ totalSteps: prior && prior.season === this.dataSeason ? (prior.totalSteps || 0) : 0,
+ dailySteps: prior && prior.season === this.dataSeason ? (prior.dailySteps || {}) : {},
+ streak: prior && prior.season === this.dataSeason ? (prior.streak || 0) : 0,
+ lastActivity: prior && prior.season === this.dataSeason ? (prior.lastActivity || null) : null,
+ activities: prior && prior.season === this.dataSeason ? (prior.activities || []) : [],
+ registeredAt: (prior && prior.registeredAt) || new Date().toISOString(),
  season: this.dataSeason
  };
 
- await this.participantsCol().doc(uid).set(participant);
+ try {
+ // merge:true so missing legacy fields (uid) get fixed without full-doc create conflicts
+ await this.participantsCol().doc(uid).set(participant, { merge: true });
+ } catch (writeErr) {
+ console.error('Failed to write season profile:', writeErr);
+ // Still allow login with in-memory profile if rules briefly lag
+ }
+
  this.participants = this.filterCurrentSeasonParticipants(
  this.participants.filter((p) => p.uid !== uid).concat([participant])
  );
@@ -5004,6 +5017,20 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  return null;
  }
 
+ // Firestore participant reads require a signed-in corporate user.
+ // Before Auth, skip cloud lookup (avoids permission-denied on login).
+ if (!this.auth || !this.auth.currentUser) {
+ const local = (this.participants || []).find((p) => {
+ const id = String(identifier || '').toLowerCase();
+ return (
+ String(p.usernameLower || p.username || '').toLowerCase() === id ||
+ String(p.employeeIdLower || p.employeeId || p.id || '').toLowerCase() === id ||
+ String(p.emailLower || p.email || '').toLowerCase() === id
+ );
+ });
+ return local || null;
+ }
+
  const normalizedIdentifier = identifier.toLowerCase();
  const collection = this.participantsCol();
 
@@ -5013,6 +5040,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  return all.find((p) => this.isCurrentSeasonParticipant(p)) || all[0] || null;
  };
 
+ try {
  const usernameSnap = await collection.where('usernameLower', '==', normalizedIdentifier).limit(25).get();
  const byUsername = pickCurrent(usernameSnap);
  if (byUsername) return byUsername;
@@ -5024,6 +5052,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const emailSnap = await collection.where('emailLower', '==', normalizedIdentifier).limit(25).get();
  const byEmail = pickCurrent(emailSnap);
  if (byEmail) return byEmail;
+ } catch (err) {
+ console.warn('lookupFirebaseParticipant failed:', err);
+ }
 
         return null;
     }

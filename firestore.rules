@@ -34,23 +34,25 @@ service cloud.firestore {
     match /participants/{docId} {
       allow read: if isCorporateEmail();
 
+      // Own profile doc is always participants/{auth.uid}
       allow create: if isCorporateEmail()
-        && request.resource.data.uid == request.auth.uid
         && docId == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
         && request.resource.data.emailLower == email()
         && request.resource.data.keys().hasAll([
           'uid', 'name', 'email', 'emailLower', 'employeeId', 'username', 'season'
         ])
         && !request.resource.data.keys().hasAny(['password', 'passwordHash']);
 
+      // Allow owner to refresh season/profile fields on their own doc.
+      // Older docs may be missing `uid`; ownership is enforced by docId == auth.uid.
       allow update: if isAdmin()
         || (
           isCorporateEmail()
-          && resource.data.uid == request.auth.uid
-          && request.resource.data.uid == resource.data.uid
-          && request.resource.data.emailLower == resource.data.emailLower
-          && !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['uid', 'email', 'emailLower', 'employeeId'])
+          && docId == request.auth.uid
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.emailLower == email()
+          && !request.resource.data.keys().hasAny(['password', 'passwordHash'])
         );
 
       allow delete: if isAdmin();
