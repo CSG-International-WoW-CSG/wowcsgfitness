@@ -14,6 +14,12 @@ class StepathonApp {
  endDay: 1,
  durationDays: 7,
  stepsPerKm: 1300, // approx. walking steps per KM for progress tracking
+ // Treadmill: distance = speed × time. Cap speeds so inflated "20 km/h walks" cannot farm KM.
+ // Typical walk 4–6, jog 7–10, fast run ~12. 20 km/h is elite race pace — not allowed.
+ treadmillSpeedMinKmh: 2,
+ treadmillSpeedMaxKmh: 12,
+ treadmillSpeedWalkMaxKmh: 7,
+ treadmillSpeedDefaultKmh: 5,
  dayGoalsKm: [1, 2, 3, 4, 5, 6, 7]
  };
 
@@ -704,19 +710,44 @@ class StepathonApp {
 
  const treadmillSpeedInput = document.getElementById('treadmillSpeedKmh');
  if (treadmillSpeedInput) {
+ const min = this.challengeConfig.treadmillSpeedMinKmh;
+ const max = this.challengeConfig.treadmillSpeedMaxKmh;
+ treadmillSpeedInput.min = String(min);
+ treadmillSpeedInput.max = String(max);
  const savedSpeed = parseFloat(localStorage.getItem('treadmillSpeedKmh') || '');
- if (Number.isFinite(savedSpeed) && savedSpeed >= 1 && savedSpeed <= 25) {
- treadmillSpeedInput.value = String(savedSpeed);
- this.stepCounter.treadmillSpeedKmh = savedSpeed;
- }
+ const initial = this.clampTreadmillSpeedKmh(savedSpeed);
+ treadmillSpeedInput.value = String(initial);
+ this.stepCounter.treadmillSpeedKmh = initial;
+ localStorage.setItem('treadmillSpeedKmh', String(initial));
  const syncSpeed = () => {
- const speed = this.getTreadmillSpeedKmh();
- this.stepCounter.treadmillSpeedKmh = speed;
- localStorage.setItem('treadmillSpeedKmh', String(speed));
+ const raw = parseFloat(treadmillSpeedInput.value);
+ const clamped = this.clampTreadmillSpeedKmh(raw);
+ if (Number.isFinite(raw) && Math.abs(raw - clamped) > 0.05) {
+ treadmillSpeedInput.value = String(clamped);
+ this.showTreadmillSpeedCapNotice(raw, clamped);
+ }
+ this.stepCounter.treadmillSpeedKmh = clamped;
+ localStorage.setItem('treadmillSpeedKmh', String(clamped));
+ this.updateTreadmillSpeedPaceLabel(clamped);
+ this.highlightTreadmillSpeedPreset(clamped);
  };
  treadmillSpeedInput.addEventListener('change', syncSpeed);
  treadmillSpeedInput.addEventListener('input', syncSpeed);
+ this.updateTreadmillSpeedPaceLabel(initial);
+ this.highlightTreadmillSpeedPreset(initial);
  }
+
+ document.querySelectorAll('#treadmillSpeedPresets .speed-preset-btn').forEach((btn) => {
+ btn.addEventListener('click', () => {
+ const speed = this.clampTreadmillSpeedKmh(parseFloat(btn.dataset.speed));
+ const input = document.getElementById('treadmillSpeedKmh');
+ if (input) input.value = String(speed);
+ this.stepCounter.treadmillSpeedKmh = speed;
+ localStorage.setItem('treadmillSpeedKmh', String(speed));
+ this.updateTreadmillSpeedPaceLabel(speed);
+ this.highlightTreadmillSpeedPreset(speed);
+ });
+ });
 
  const savedMode = localStorage.getItem('trackingMode');
  if (savedMode === 'treadmill' || savedMode === 'outdoor') {
@@ -4147,6 +4178,13 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 alert('Please enter a valid treadmill speed.');
                 return;
             }
+            const maxSpeed = this.challengeConfig.treadmillSpeedMaxKmh;
+            const minSpeed = this.challengeConfig.treadmillSpeedMinKmh;
+            if (treadmillSpeedKmh > maxSpeed || treadmillSpeedKmh < minSpeed) {
+                alert(`Treadmill speed must be between ${minSpeed} and ${maxSpeed} km/h.`);
+                return;
+            }
+            treadmillSpeedKmh = this.clampTreadmillSpeedKmh(treadmillSpeedKmh);
         }
 
         this.saveEditedActivityDetails({
@@ -5271,6 +5309,27 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
     }
 
     startStepCounter() {
+        const mode = this.getTrackingMode();
+        if (mode === 'treadmill') {
+            const speed = this.getTreadmillSpeedKmh();
+            const input = document.getElementById('treadmillSpeedKmh');
+            if (input) input.value = String(speed);
+            this.stepCounter.treadmillSpeedKmh = speed;
+            localStorage.setItem('treadmillSpeedKmh', String(speed));
+            this.updateTreadmillSpeedPaceLabel(speed);
+
+            const walkMax = this.challengeConfig.treadmillSpeedWalkMaxKmh;
+            if (speed > walkMax) {
+                const ok = confirm(
+                    `You set treadmill speed to ${speed.toFixed(1)} km/h (${this.getTreadmillPaceLabel(speed)}).\n\n` +
+                    `Walking is usually 4–6 km/h. Above ${walkMax} km/h is jogging/running pace.\n\n` +
+                    `Distance = speed × time, so a high speed creates a lot of KM quickly.\n\n` +
+                    `Continue with ${speed.toFixed(1)} km/h?`
+                );
+                if (!ok) return;
+            }
+        }
+
         if (!this.stepCounter.permissionGranted && typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
             this.requestMotionPermission().then(() => {
                 if (this.stepCounter.permissionGranted) {
@@ -5328,8 +5387,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  if (mode === 'treadmill') {
  this.updateCounterStatus('Treadmill mode — distance from speed x time + step backup.');
- this.updateCounterHint('Match treadmill speed on the display. Keep the phone on your body for step backup.');
- this.showCounterNotification('Treadmill tracking started. Set speed to match your machine.');
+ this.updateCounterHint(`Speed ${this.getTreadmillSpeedKmh().toFixed(1)} km/h (${this.getTreadmillPaceLabel(this.getTreadmillSpeedKmh())}). Keep phone on your body for step backup.`);
+ this.showCounterNotification(`Treadmill started at ${this.getTreadmillSpeedKmh().toFixed(1)} km/h.`);
  } else {
  this.updateCounterStatus('Tracking your route — works with screen off when possible.');
  this.updateCounterHint('Keep the app open (Home Screen recommended). Tracking continues while locked when the OS allows.');
@@ -5489,14 +5548,67 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  getTreadmillSpeedKmh() {
+ const min = this.challengeConfig.treadmillSpeedMinKmh;
+ const max = this.challengeConfig.treadmillSpeedMaxKmh;
+ const fallback = this.challengeConfig.treadmillSpeedDefaultKmh;
  const input = document.getElementById('treadmillSpeedKmh');
  const fromInput = input ? parseFloat(input.value) : NaN;
- if (Number.isFinite(fromInput) && fromInput >= 1 && fromInput <= 25) {
- return fromInput;
+ if (Number.isFinite(fromInput)) {
+ return this.clampTreadmillSpeedKmh(fromInput);
  }
  const stored = parseFloat(localStorage.getItem('treadmillSpeedKmh') || '');
- if (Number.isFinite(stored) && stored >= 1 && stored <= 25) return stored;
- return this.stepCounter.treadmillSpeedKmh || 5;
+ if (Number.isFinite(stored)) return this.clampTreadmillSpeedKmh(stored);
+ const current = Number(this.stepCounter.treadmillSpeedKmh);
+ if (Number.isFinite(current) && current >= min && current <= max) return current;
+ return fallback;
+ }
+
+ clampTreadmillSpeedKmh(raw) {
+ const min = this.challengeConfig.treadmillSpeedMinKmh;
+ const max = this.challengeConfig.treadmillSpeedMaxKmh;
+ const fallback = this.challengeConfig.treadmillSpeedDefaultKmh;
+ if (!Number.isFinite(raw)) return fallback;
+ return Math.min(max, Math.max(min, Math.round(raw * 10) / 10));
+ }
+
+ getTreadmillPaceLabel(speedKmh) {
+ const speed = this.clampTreadmillSpeedKmh(speedKmh);
+ const walkMax = this.challengeConfig.treadmillSpeedWalkMaxKmh;
+ if (speed < 3.5) return 'Slow walk';
+ if (speed <= walkMax) return 'Walking pace';
+ if (speed <= 10) return 'Jogging / easy run';
+ return 'Fast run (near challenge max)';
+ }
+
+ updateTreadmillSpeedPaceLabel(speedKmh) {
+ const el = document.getElementById('treadmillSpeedPace');
+ if (!el) return;
+ const speed = this.clampTreadmillSpeedKmh(speedKmh);
+ const walkMax = this.challengeConfig.treadmillSpeedWalkMaxKmh;
+ el.textContent = `${this.getTreadmillPaceLabel(speed)} · ${speed.toFixed(1)} km/h`;
+ el.classList.toggle('is-run-pace', speed > walkMax);
+ }
+
+ highlightTreadmillSpeedPreset(speedKmh) {
+ const speed = this.clampTreadmillSpeedKmh(speedKmh);
+ document.querySelectorAll('#treadmillSpeedPresets .speed-preset-btn').forEach((btn) => {
+ const preset = parseFloat(btn.dataset.speed);
+ btn.classList.toggle('active', Number.isFinite(preset) && Math.abs(preset - speed) < 0.05);
+ });
+ }
+
+ showTreadmillSpeedCapNotice(raw, clamped) {
+ const max = this.challengeConfig.treadmillSpeedMaxKmh;
+ const min = this.challengeConfig.treadmillSpeedMinKmh;
+ if (raw > max) {
+ alert(
+ `Treadmill speed capped at ${max} km/h.\n\n` +
+ `${raw} km/h is not realistic for this challenge (that is near elite race pace).\n` +
+ `Typical walk: 4–6 km/h · Jog: 7–10 km/h · Max allowed: ${max} km/h.`
+ );
+ } else if (raw < min) {
+ alert(`Treadmill speed must be at least ${min} km/h. Using ${clamped} km/h.`);
+ }
  }
 
  setTrackingMode(mode, silent = false) {
@@ -5515,6 +5627,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  btn.classList.toggle('active', btn.dataset.mode === mode);
  });
  this.applyTrackingModeUi();
+ if (mode === 'treadmill') {
+ this.updateTreadmillSpeedPaceLabel(this.getTreadmillSpeedKmh());
+ }
  }
 
  applyTrackingModeUi() {

@@ -2292,6 +2292,72 @@ header > * {
     font-family: 'Courier New', monospace;
 }
 
+.treadmill-speed-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 12px 0 16px;
+    padding: 14px;
+    background: #f4f8fc;
+    border: 1px solid rgba(0, 51, 102, 0.12);
+    border-radius: 12px;
+}
+
+.treadmill-speed-row label {
+    font-weight: 600;
+    color: #003366;
+}
+
+.treadmill-speed-row input[type="number"] {
+    max-width: 140px;
+    padding: 10px 12px;
+    border: 1px solid rgba(0, 51, 102, 0.25);
+    border-radius: 8px;
+    font-size: 1.05rem;
+}
+
+.treadmill-speed-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.speed-preset-btn {
+    border: 1px solid rgba(0, 51, 102, 0.25);
+    background: #fff;
+    color: #003366;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.speed-preset-btn.active,
+.speed-preset-btn:hover {
+    background: #003366;
+    color: #fff;
+    border-color: #003366;
+}
+
+.treadmill-speed-pace {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #0d9488;
+}
+
+.treadmill-speed-pace.is-run-pace {
+    color: #c05600;
+}
+
+.treadmill-speed-hint {
+    margin: 0;
+    font-size: 0.82rem;
+    color: #555;
+    line-height: 1.4;
+}
+
 /* Control Buttons Section */
 .step-counter-controls-section {
     display: flex;

@@ -35,6 +35,7 @@ public class TrackingKeepAlivePlugin extends Plugin {
     public void start(PluginCall call) {
         String mode = call.getString("mode", "outdoor");
         float speed = call.getFloat("treadmillSpeedKmh", 5f);
+        if (speed < 2f || speed > 12f) speed = 5f;
 
         if (Build.VERSION.SDK_INT >= 29
             && ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACTIVITY_RECOGNITION)
@@ -54,6 +55,7 @@ public class TrackingKeepAlivePlugin extends Plugin {
     private void activityPermCallback(PluginCall call) {
         String mode = call.getString("mode", "outdoor");
         float speed = call.getFloat("treadmillSpeedKmh", 5f);
+        if (speed < 2f || speed > 12f) speed = 5f;
         ActivityTrackingService.start(getContext(), mode, speed);
         JSObject ret = new JSObject();
         ret.put("started", true);

@@ -16,7 +16,7 @@
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=55">
     <link rel="apple-touch-icon" href="favicon.svg?v=55">
-    <link rel="stylesheet" href="styles.css?v=55">
+    <link rel="stylesheet" href="styles.css?v=57">
     <link rel="stylesheet" href="ui-refresh.css?v=55">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
@@ -458,8 +458,15 @@
 
                             <div class="treadmill-speed-row" id="treadmillSpeedRow" style="display: none;">
                                 <label for="treadmillSpeedKmh">Treadmill speed (km/h)</label>
-                                <input type="number" id="treadmillSpeedKmh" min="1" max="25" step="0.1" value="5.0" inputmode="decimal">
-                                <p class="treadmill-speed-hint">Set this to match your treadmill display. Distance is calculated from speed &times; time (plus phone step backup).</p>
+                                <input type="number" id="treadmillSpeedKmh" min="2" max="12" step="0.1" value="5.0" inputmode="decimal">
+                                <div class="treadmill-speed-presets" id="treadmillSpeedPresets" role="group" aria-label="Speed presets">
+                                    <button type="button" class="speed-preset-btn" data-speed="4">Walk 4</button>
+                                    <button type="button" class="speed-preset-btn" data-speed="5.5">Brisk 5.5</button>
+                                    <button type="button" class="speed-preset-btn" data-speed="8">Jog 8</button>
+                                    <button type="button" class="speed-preset-btn" data-speed="10">Run 10</button>
+                                </div>
+                                <p class="treadmill-speed-pace" id="treadmillSpeedPace">Walking pace</p>
+                                <p class="treadmill-speed-hint">Match your treadmill display. Allowed range: <strong>2–12 km/h</strong> (walk ~4–6, jog ~7–10). Speeds above 12 are blocked — 20 km/h is elite race pace, not a walk.</p>
                             </div>
 
                             <div class="calorie-weight-row">
@@ -514,7 +521,7 @@
                                     <ul>
                                         <li><strong>Android app:</strong> <a href="#androidAppCard">Download the APK</a> for hardware step counting while locked</li>
                                         <li><strong>Outdoor (web):</strong> KM uses GPS + step backup</li>
-                                        <li><strong>Treadmill:</strong> set speed to match the machine (speed &times; time)</li>
+                                        <li><strong>Treadmill:</strong> set real machine speed (2–12 km/h only; walk usually 4–6)</li>
                                         <li>Allow Location + Physical activity permissions when prompted</li>
                                         <li>iPhone: use this website</li>
                                     </ul>
@@ -737,7 +744,7 @@
     <script src="firebase-config.js"></script>
     <script src="security-config.js"></script>
     <script src="native-bridge.js?v=55"></script>
-    <script src="script.js?v=55"></script>
+    <script src="script.js?v=57"></script>
     
     <!-- Force-clear stale SW/caches that can freeze scrolling with old overlays -->
     <script>

@@ -75,7 +75,13 @@
     try {
       await KeepAlive.start({
         mode: (options && options.mode) || 'outdoor',
-        treadmillSpeedKmh: (options && options.treadmillSpeedKmh) || 5
+        treadmillSpeedKmh: (function () {
+          var s = Number((options && options.treadmillSpeedKmh) || 5);
+          if (!isFinite(s)) return 5;
+          if (s < 2) return 2;
+          if (s > 12) return 12;
+          return s;
+        })()
       });
       bridge.keepAliveStarted = true;
       return true;

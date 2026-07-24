@@ -82,7 +82,7 @@ public class ActivityTrackingService extends Service implements SensorEventListe
         if (intent != null) {
             mode = intent.getStringExtra(EXTRA_MODE) != null ? intent.getStringExtra(EXTRA_MODE) : "outdoor";
             treadmillSpeedKmh = intent.getFloatExtra(EXTRA_SPEED, 5f);
-            if (treadmillSpeedKmh < 1f || treadmillSpeedKmh > 25f) treadmillSpeedKmh = 5f;
+            if (treadmillSpeedKmh < 2f || treadmillSpeedKmh > 12f) treadmillSpeedKmh = 5f;
         }
 
         startAsForeground();
