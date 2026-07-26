@@ -11,32 +11,29 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com data:; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://unpkg.com https://cdn.jsdelivr.net https://statics.teams.cdn.office.net; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebase.com https://*.cloudfunctions.net wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://www.google-analytics.com https://unpkg.com https://cdn.jsdelivr.net; worker-src 'self' blob:;">
     <title>WOW-CSG 7 Days Fitness Challenge</title>
     <meta name="theme-color" content="#003366">
-    <!-- Crash recovery + mobile-safe boot (do not load Firebase/app until first paint / tap). -->
+    <!-- Crash recovery: if the previous tab died mid-load, clear SW/caches before heavy scripts. -->
     <script>
     (function () {
-      var KEY = 'wowcsg_boot_fails_v68';
+      var KEY = 'wowcsg_boot_fails_v67';
       try {
         var n = Number(sessionStorage.getItem(KEY) || '0');
         sessionStorage.setItem(KEY, String(n + 1));
         window.__WOWCSG_SAFE_BOOT__ = n >= 1;
-        window.__WOWCSG_MOBILE__ = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
         if (window.__WOWCSG_SAFE_BOOT__) {
           try {
             localStorage.removeItem('stepEntries');
             localStorage.removeItem('stepEntries_cache');
-            localStorage.removeItem('participants_cache');
           } catch (e1) {}
-        }
-        // Always kill service workers — they were causing open→reload→crash loops on phones.
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.getRegistrations().then(function (regs) {
-            regs.forEach(function (r) { r.unregister(); });
-          }).catch(function () {});
-        }
-        if (window.caches && caches.keys) {
-          caches.keys().then(function (keys) {
-            return Promise.all(keys.map(function (k) { return caches.delete(k); }));
-          }).catch(function () {});
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function (regs) {
+              regs.forEach(function (r) { r.unregister(); });
+            }).catch(function () {});
+          }
+          if (window.caches && caches.keys) {
+            caches.keys().then(function (keys) {
+              keys.forEach(function (k) { caches.delete(k); });
+            }).catch(function () {});
+          }
         }
         window.addEventListener('load', function () {
           try { sessionStorage.setItem(KEY, '0'); } catch (e2) {}
@@ -52,17 +49,12 @@
     <link rel="stylesheet" href="styles.css?v=58">
     <link rel="stylesheet" href="ui-refresh.css?v=55">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-    <!-- Leaflet CSS only; JS loads on demand when map opens. -->
+    <!-- Leaflet CSS only at start; JS loads on demand when map opens (saves mobile RAM). -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+    <!-- Teams / EmailJS / Tesseract / Leaflet JS are deferred — loading them all crashed phones. -->
+    <script src="teams-integration.js" defer></script>
 </head>
 <body>
-    <div id="appBootGate" style="position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;background:#0f172a;color:#e2e8f0;font-family:system-ui,sans-serif;text-align:center;">
-        <div style="max-width:360px;">
-            <p id="appBootStatus" style="margin:0 0 16px;font-size:1.05rem;line-height:1.4;">Opening WOW-CSG Fitness…</p>
-            <button id="appBootBtn" type="button" style="display:none;width:100%;padding:14px 16px;border:0;border-radius:10px;background:#f97316;color:#111;font-size:1rem;font-weight:700;cursor:pointer;">Tap to open challenge</button>
-            <p style="margin:14px 0 0;font-size:0.85rem;color:#94a3b8;">If this screen keeps returning, open <a href="./recover.html" style="color:#38bdf8;">Repair site access</a>.</p>
-        </div>
-    </div>
     <div class="container">
         <div class="email-warning" id="firebaseIssueBanner">
             <p>Note: Firebase issue resolved: please create your account again and reupload your step entries.</p>
@@ -832,85 +824,37 @@
         </div>
     </div>
 
-    <!-- Deferred app boot: Firebase + script.js load AFTER first paint (or after tap on mobile/safe-boot). -->
+    <!-- Firebase (optional - enables cross-device login) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="security-config.js"></script>
+    <script src="native-bridge.js?v=55"></script>
+    <script src="script.js?v=67"></script>
+    
+    <!-- Safe SW register — never purge+reload. Navigations/JS are not intercepted (v67). -->
     <script>
-    (function () {
-      var gate = document.getElementById('appBootGate');
-      var statusEl = document.getElementById('appBootStatus');
-      var btn = document.getElementById('appBootBtn');
-      var started = false;
-
-      function setStatus(msg) {
-        if (statusEl) statusEl.textContent = msg;
-      }
-
-      function loadScript(src) {
-        return new Promise(function (resolve, reject) {
-          var s = document.createElement('script');
-          s.src = src;
-          s.async = false;
-          s.onload = function () { resolve(); };
-          s.onerror = function () { reject(new Error('Failed to load ' + src)); };
-          document.body.appendChild(s);
-        });
-      }
-
-      function hideGate() {
-        if (gate) gate.style.display = 'none';
-      }
-
-      async function bootApp() {
-        if (started) return;
-        started = true;
-        if (btn) btn.style.display = 'none';
-        setStatus('Loading challenge…');
-        try {
-          // Skip Firebase Storage on cold start — only needed for photo share later
-          await loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
-          await loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js');
-          await loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js');
-          setStatus('Starting app…');
-          await loadScript('firebase-config.js');
-          await loadScript('security-config.js');
-          await loadScript('native-bridge.js?v=55');
-          await loadScript('script.js?v=68');
-          hideGate();
-        } catch (err) {
-          console.error(err);
-          setStatus('Could not load the app. Tap below to retry, or use Repair.');
-          started = false;
-          if (btn) {
-            btn.style.display = 'block';
-            btn.textContent = 'Retry';
-          }
-        }
-      }
-
-      function scheduleBoot() {
-        var needsTap = !!(window.__WOWCSG_SAFE_BOOT__ || window.__WOWCSG_MOBILE__ || /(?:^|[?&])boot=tap(?:&|$)/.test(location.search));
-        if (needsTap) {
-          setStatus('Phone browser ready. Tap once to open the challenge (avoids auto-crash on some devices).');
-          if (btn) {
-            btn.style.display = 'block';
-            btn.onclick = function () { bootApp(); };
-          }
-          return;
-        }
-        // Desktop: boot after first paint
-        if (window.requestAnimationFrame) {
-          requestAnimationFrame(function () { setTimeout(bootApp, 30); });
-        } else {
-          setTimeout(bootApp, 50);
-        }
-      }
-
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', scheduleBoot);
-      } else {
-        scheduleBoot();
-      }
-    })();
+        (function () {
+            var CURRENT_CACHE = 'wowcsg-fitness-v67';
+            window.addEventListener('load', function () {
+                document.body.style.overflow = '';
+                document.documentElement.style.overflow = '';
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.register('./service-worker.js?v=67').catch(function () {});
+                }
+                if (window.caches && caches.keys) {
+                    caches.keys().then(function (keys) {
+                        keys.forEach(function (k) {
+                            if (k !== CURRENT_CACHE) caches.delete(k);
+                        });
+                    }).catch(function () {});
+                }
+            });
+        })();
     </script>
+    
 </body>
 </html>
 

@@ -130,7 +130,7 @@ class StepathonApp {
             requestAnimationFrame(() => {
                 // Check challenge status immediately on page load
                 this.updateDates();
-                // Do NOT start keep-alive/audio on cold start — that crashed some phones
+ this.setupActivityKeepAlive();
                 
                 this.checkCurrentUser();
                 // Paint from local cache first — avoid triple Firebase sync on cold start (iOS crash)
@@ -141,7 +141,7 @@ class StepathonApp {
  // Defer cloud sync — cold-start Firebase full sync was crashing mobile Chrome
  setTimeout(() => {
  this.syncParticipantsFromFirebase({ skipEntries: !this.currentUser });
- }, window.__WOWCSG_SAFE_BOOT__ ? 5000 : 3000);
+ }, window.__WOWCSG_SAFE_BOOT__ ? 4000 : 2500);
  } else {
  this.restoreAdminSessionIfAuthorized();
             this.syncStepEntriesFromFirebase();
@@ -212,23 +212,6 @@ class StepathonApp {
         return typeof emailjs !== 'undefined';
     }
 
-    async ensureFirebaseStorageLoaded() {
-        if (this.storage) return true;
-        if (typeof firebase === 'undefined') return false;
-        try {
-            if (!firebase.storage) {
-                await this.loadScriptOnce('https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js');
-            }
-            if (firebase.storage) {
-                this.storage = firebase.storage();
-                return true;
-            }
-        } catch (err) {
-            console.warn('Firebase Storage load skipped:', err);
-        }
-        return false;
-    }
-
     initFirebase() {
         try {
             if (typeof firebase === 'undefined') {
@@ -245,8 +228,12 @@ class StepathonApp {
 
             this.auth = firebase.auth();
             this.db = firebase.firestore();
-            // Storage SDK is loaded on demand (photo share) to reduce cold-start crashes
-            this.storage = null;
+            try {
+                this.storage = firebase.storage ? firebase.storage() : null;
+            } catch (storageErr) {
+                console.warn('Firebase Storage unavailable:', storageErr);
+                this.storage = null;
+            }
             this.firebaseEnabled = true;
 
             // Keep session in sync
@@ -8064,7 +8051,6 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         if (!lastBlob) throw new Error('Could not compress photo');
 
         // Try Storage first (works after Blaze + default bucket are enabled)
-        await this.ensureFirebaseStorageLoaded();
         if (this.storage && this.auth && this.auth.currentUser) {
             try {
                 const uid = this.auth.currentUser.uid;
