@@ -1682,3 +1682,10 @@ body.is-logged-in .container {
   margin: 4px 0 0 !important;
 }
 
+.leaderboard-public-note {
+  margin: 0 0 12px !important;
+  font-size: 0.9rem !important;
+  color: #0f766e !important;
+  font-weight: 600 !important;
+}
+

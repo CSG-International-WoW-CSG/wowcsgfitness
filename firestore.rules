@@ -30,9 +30,10 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Employee profiles — corporate auth only; full wipe only by admin
+    // Employee profiles — public READ for live leaderboard (unsigned visitors);
+    // writes still require corporate auth / admin
     match /participants/{docId} {
-      allow read: if isCorporateEmail();
+      allow read: if true;
 
       // Own profile doc is always participants/{auth.uid}
       allow create: if isCorporateEmail()
@@ -58,9 +59,9 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Activity entries — owners create; status/validation changes admin-only
+    // Activity entries — public READ for day/overall boards; writes remain auth-gated
     match /stepEntries/{entryId} {
-      allow read: if isCorporateEmail();
+      allow read: if true;
 
       allow create: if isCorporateEmail()
         && request.resource.data.userUid == request.auth.uid

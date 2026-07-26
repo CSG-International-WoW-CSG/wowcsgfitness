@@ -49,7 +49,7 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=55">
     <link rel="apple-touch-icon" href="favicon.svg?v=55">
     <link rel="stylesheet" href="styles.css?v=58">
-    <link rel="stylesheet" href="ui-refresh.css?v=70">
+    <link rel="stylesheet" href="ui-refresh.css?v=71">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <!-- Leaflet CSS only; JS loads when map opens. -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
@@ -78,6 +78,7 @@
                 <h1 class="animated-title">WOW-CSG 7 Days Fitness Challenge</h1>
                 <div class="hero-cta-row">
                     <a class="btn btn-primary" href="#loginCard">Join Challenge</a>
+                    <a class="btn btn-ghost" href="#leaderboardCard">View Leaderboard</a>
                     <a class="btn btn-ghost" href="#androidAppCard">Get Android App</a>
                     <a class="btn btn-ghost" href="#dayPlanCard">7-Day Plan</a>
                     <a class="btn btn-ghost" href="./recover.html">Site won&rsquo;t open? Repair</a>
@@ -522,9 +523,10 @@
                 </div>
             </div>
 
-            <!-- Leaderboard Section -->
-            <div class="card leaderboard-card">
+            <!-- Leaderboard (public — visible without signing in) -->
+            <div class="card leaderboard-card" id="leaderboardCard">
                 <h2>&#127941; Leaderboard</h2>
+                <p class="leaderboard-public-note">No login needed to view rankings. Sign in only to log your activity.</p>
                 <div class="leaderboard-filters">
                     <button type="button" class="filter-btn active" data-filter="total">Total Steps</button>
                     <button type="button" class="filter-btn" data-filter="today">Today</button>
@@ -545,8 +547,8 @@
                 <div class="leaderboard-list" id="leaderboardList">
                     <div class="leaderboard-item">
                         <div class="rank">1</div>
-                        <div class="name">No participants yet</div>
-                        <div class="steps">0 steps</div>
+                        <div class="name">Loading rankings&hellip;</div>
+                        <div class="steps"></div>
                     </div>
                 </div>
             </div>
@@ -785,7 +787,7 @@
     <script src="firebase-config.js"></script>
     <script src="security-config.js"></script>
     <script src="native-bridge.js?v=55"></script>
-    <script src="script.js?v=70"></script>
+    <script src="script.js?v=71"></script>
     <script>
         (function () {
             window.addEventListener('load', function () {

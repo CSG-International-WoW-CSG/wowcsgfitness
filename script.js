@@ -135,13 +135,13 @@ class StepathonApp {
                 this.checkCurrentUser();
                 // Paint from local cache first — avoid triple Firebase sync on cold start
                 setTimeout(() => {
-                    this.updateLeaderboard(null, { skipRemoteSync: true });
+                    this.ensurePublicLeaderboardReady();
                 }, 100);
             });
- // Defer cloud sync so first paint can finish on phones
+ // Always sync participants + entries for public leaderboard (signed-out visitors included)
  setTimeout(() => {
- this.syncParticipantsFromFirebase({ skipEntries: !this.currentUser });
- }, window.__WOWCSG_SAFE_BOOT__ ? 4500 : 3000);
+ this.syncParticipantsFromFirebase({ skipEntries: false });
+ }, window.__WOWCSG_SAFE_BOOT__ ? 4500 : 2500);
  } else {
  this.restoreAdminSessionIfAuthorized();
             this.syncStepEntriesFromFirebase();
@@ -2835,6 +2835,18 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         document.querySelectorAll('.guest-only').forEach((el) => {
             el.style.display = isLoggedIn ? 'none' : '';
         });
+    }
+
+    /**
+     * Show today's (or latest) day board for everyone — including signed-out visitors.
+     */
+    ensurePublicLeaderboardReady() {
+        const dayNum = this.getChallengeDayNumber();
+        const filter = dayNum >= 1 && dayNum <= 7 ? `day-${dayNum}` : 'total';
+        document.querySelectorAll('.filter-btn, .day-filter-btn').forEach((b) => b.classList.remove('active'));
+        const btn = document.querySelector(`.day-filter-btn[data-filter="${filter}"], .filter-btn[data-filter="${filter}"]`);
+        if (btn) btn.classList.add('active');
+        this.updateLeaderboard(filter, { skipRemoteSync: true });
     }
 
     updateDashboard() {
