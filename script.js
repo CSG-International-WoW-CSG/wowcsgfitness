@@ -46,18 +46,21 @@ class StepathonApp {
         this.initFirebase();
         this.participants = this.loadParticipants();
         
-        // Initialize stepEntries - ensure it's always an array
-        this.stepEntries = this.loadStepEntries();
-        if (!Array.isArray(this.stepEntries)) {
-            console.warn('stepEntries was not an array, initializing as empty array');
-            this.stepEntries = [];
-            this.saveStepEntries(); // Save empty array to localStorage
-        }
+        // Avoid OOM on phones: drop oversized entry caches before JSON.parse
+        this.stepEntries = this.loadStepEntriesSafely();
         console.log('StepathonApp initialized - stepEntries count:', this.stepEntries.length);
         
         // Bot protection: Rate limiting
-        this.registrationAttempts = JSON.parse(localStorage.getItem('registrationAttempts') || '[]');
-        this.passwordResetAttempts = JSON.parse(localStorage.getItem('passwordResetAttempts') || '[]');
+        try {
+            this.registrationAttempts = JSON.parse(localStorage.getItem('registrationAttempts') || '[]');
+        } catch (e) {
+            this.registrationAttempts = [];
+        }
+        try {
+            this.passwordResetAttempts = JSON.parse(localStorage.getItem('passwordResetAttempts') || '[]');
+        } catch (e) {
+            this.passwordResetAttempts = [];
+        }
         this.maxAttemptsPerHour = 5; // Maximum 5 attempts per hour
         this.maxAttemptsPerDay = 10; // Maximum 10 attempts per day
         
@@ -135,16 +138,78 @@ class StepathonApp {
                     this.updateLeaderboard(null, { skipRemoteSync: true });
                 }, 100);
             });
+ // Defer cloud sync — cold-start Firebase full sync was crashing mobile Chrome
+ setTimeout(() => {
+ this.syncParticipantsFromFirebase({ skipEntries: !this.currentUser });
+ }, window.__WOWCSG_SAFE_BOOT__ ? 4000 : 2500);
  } else {
  this.restoreAdminSessionIfAuthorized();
-        }
-
-        // One background sync refreshes participants + entries + leaderboard
-        this.syncParticipantsFromFirebase();
-
-        if (window.location.pathname.includes('admin.html')) {
             this.syncStepEntriesFromFirebase();
         }
+    }
+
+    loadStepEntriesSafely() {
+        try {
+            const storageKey = this.firebaseEnabled ? 'stepEntries_cache' : 'stepEntries';
+            const raw = localStorage.getItem(storageKey);
+            // ~1.5MB+ JSON.parse regularly OOM-kills mobile Chrome tabs
+            if (raw && raw.length > 1500000) {
+                console.warn('Dropping oversized stepEntries cache:', raw.length);
+                localStorage.removeItem(storageKey);
+                return [];
+            }
+        } catch (e) {
+            /* ignore */
+        }
+        const entries = this.loadStepEntries();
+        return Array.isArray(entries) ? entries : [];
+    }
+
+    loadScriptOnce(src) {
+        return new Promise((resolve, reject) => {
+            if (!src) {
+                reject(new Error('Missing script src'));
+                return;
+            }
+            const existing = document.querySelector(`script[data-wowcsg-src="${src}"]`);
+            if (existing) {
+                if (existing.dataset.loaded === '1') {
+                    resolve();
+                    return;
+                }
+                existing.addEventListener('load', () => resolve());
+                existing.addEventListener('error', () => reject(new Error('Failed to load ' + src)));
+                return;
+            }
+            const s = document.createElement('script');
+            s.src = src;
+            s.async = true;
+            s.dataset.wowcsgSrc = src;
+            s.onload = () => {
+                s.dataset.loaded = '1';
+                resolve();
+            };
+            s.onerror = () => reject(new Error('Failed to load ' + src));
+            document.head.appendChild(s);
+        });
+    }
+
+    async ensureLeafletLoaded() {
+        if (typeof L !== 'undefined') return true;
+        await this.loadScriptOnce('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js');
+        return typeof L !== 'undefined';
+    }
+
+    async ensureTesseractLoaded() {
+        if (typeof Tesseract !== 'undefined') return true;
+        await this.loadScriptOnce('https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js');
+        return typeof Tesseract !== 'undefined';
+    }
+
+    async ensureEmailJsLoaded() {
+        if (typeof emailjs !== 'undefined') return true;
+        await this.loadScriptOnce('https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js');
+        return typeof emailjs !== 'undefined';
     }
 
     initFirebase() {
@@ -956,6 +1021,10 @@ class StepathonApp {
         extractedResult.style.display = 'none';
 
         try {
+            const ok = await this.ensureTesseractLoaded();
+            if (!ok) {
+                throw new Error('OCR library failed to load');
+            }
             let steps = 0;
             let ocrText = '';
             let ocrWords = [];
@@ -2450,7 +2519,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         }
 
         try {
-            if (typeof emailjs === 'undefined') {
+            if (!(await this.ensureEmailJsLoaded())) {
                 alert('EmailJS SDK not loaded. Please refresh the page.');
                 return;
             }
@@ -5460,7 +5529,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         }
     }
 
-    async syncParticipantsFromFirebase() {
+    async syncParticipantsFromFirebase(options = {}) {
         if (!this.firebaseEnabled || !this.db) {
             return;
         }
@@ -5469,9 +5538,11 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.participants = this.filterCurrentSeasonParticipants(
  snapshot.docs.map((doc) => this.stripSecretsFromParticipant(doc.data()))
  );
+ if (!options.skipEntries) {
  // Always refresh entries first — local cache can still say "approved" after admin reject
  await this.syncStepEntriesFromFirebase();
  this.recalculateAllParticipantTotalsFromApproved();
+ }
             if (!window.location.pathname.includes('admin.html')) {
                 await this.updateLeaderboard(null, { skipRemoteSync: true });
             }
@@ -6732,9 +6803,16 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
  }
 
- initActivityMap() {
+ async initActivityMap() {
  const mapEl = document.getElementById('activityMap');
- if (!mapEl || typeof L === 'undefined') {
+ if (!mapEl) return;
+ try {
+ await this.ensureLeafletLoaded();
+ } catch (err) {
+ console.warn('Leaflet failed to load:', err);
+ return;
+ }
+ if (typeof L === 'undefined') {
  return;
  }
  if (!this.activityMap) {

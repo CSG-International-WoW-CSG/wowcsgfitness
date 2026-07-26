@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Repair WOW-CSG Fitness</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 24px; background: #0f172a; color: #e2e8f0; line-height: 1.45; }
+    .card { max-width: 420px; margin: 40px auto; padding: 24px; background: #1e293b; border-radius: 12px; }
+    h1 { font-size: 1.25rem; margin: 0 0 12px; }
+    p { margin: 0 0 14px; color: #cbd5e1; font-size: 0.95rem; }
+    button, a.btn {
+      display: block; width: 100%; box-sizing: border-box; margin: 10px 0 0;
+      padding: 14px 16px; border: 0; border-radius: 10px; font-size: 1rem; font-weight: 600;
+      text-align: center; text-decoration: none; cursor: pointer;
+    }
+    button { background: #f97316; color: #111; }
+    a.btn { background: #334155; color: #fff; }
+    #log { margin-top: 16px; font-size: 0.85rem; color: #94a3b8; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Repair site access</h1>
+    <p>If Chrome/Safari shows “Can’t open this page” or keeps crashing, clear the broken offline cache on this phone, then reopen the challenge.</p>
+    <button type="button" id="repairBtn">Clear cache &amp; reopen</button>
+    <a class="btn" href="./index.html">Skip — open site</a>
+    <div id="log"></div>
+  </div>
+  <script>
+    (function () {
+      var logEl = document.getElementById('log');
+      function log(msg) { logEl.textContent += msg + '\n'; }
+      document.getElementById('repairBtn').addEventListener('click', function () {
+        var tasks = [];
+        log('Clearing…');
+        try {
+          ['stepEntries', 'stepEntries_cache', 'participants_cache', 'wowcsg_sw_purge_v55', 'wowcsg_boot_fails']
+            .forEach(function (k) { localStorage.removeItem(k); sessionStorage.removeItem(k); });
+          log('Cleared heavy local data');
+        } catch (e) { log('localStorage: ' + e); }
+        if ('serviceWorker' in navigator) {
+          tasks.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+            return Promise.all(regs.map(function (r) { return r.unregister(); }));
+          }).then(function () { log('Removed service workers'); }));
+        }
+        if (window.caches && caches.keys) {
+          tasks.push(caches.keys().then(function (keys) {
+            return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+          }).then(function () { log('Cleared caches'); }));
+        }
+        Promise.all(tasks).then(function () {
+          log('Done. Opening site…');
+          setTimeout(function () { location.replace('./index.html?recovered=1'); }, 400);
+        }).catch(function (err) {
+          log('Error: ' + err);
+          setTimeout(function () { location.replace('./index.html?recovered=1'); }, 800);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

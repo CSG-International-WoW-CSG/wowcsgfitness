@@ -1,6 +1,6 @@
 ﻿// Service Worker for WOW-CSG 7 Days Fitness Challenge
-// Bump CACHE_NAME whenever HTML/JS content changes so clients drop stale pages.
-const CACHE_NAME = 'wowcsg-fitness-v66';
+// v67: do NOT intercept navigations / HTML / JS (prevents mobile Chrome crash loops).
+const CACHE_NAME = 'wowcsg-fitness-v67';
 const urlsToCache = [
   './styles.css',
   './ui-refresh.css',
@@ -22,7 +22,6 @@ function stopTrackingHeartbeat() {
 
 function startTrackingHeartbeat() {
   stopTrackingHeartbeat();
-  // Slower ping: less wake-ups = less battery; still enough for treadmill time credit
   trackingHeartbeatId = setInterval(() => {
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       clients.forEach((client) => {
@@ -58,7 +57,6 @@ self.addEventListener('activate', (event) => {
       Promise.all(
         cacheNames.map((cacheName) => {
           if (cacheName !== CACHE_NAME) {
-            console.log('Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           }
         })
@@ -67,35 +65,23 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Network-first for HTML/JS so challenge updates are never stuck behind old cache.
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') {
-    return;
-  }
+  if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
-  const isSameOrigin = url.origin === self.location.origin;
-  const isHtmlOrJs =
+  if (url.origin !== self.location.origin) return;
+
+  // Critical: never touch navigations or script/document responses.
+  // Intercepting these caused "Can't open this page" / Safari crash loops on phones.
+  if (
     event.request.mode === 'navigate' ||
     event.request.destination === 'document' ||
+    event.request.destination === 'script' ||
     url.pathname.endsWith('.html') ||
     url.pathname.endsWith('.js') ||
-    url.pathname.endsWith('/');
-
-  if (!isSameOrigin) {
-    return;
-  }
-
-  if (isHtmlOrJs) {
-    event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          return response;
-        })
-        .catch(() => caches.match(event.request))
-    );
+    url.pathname.endsWith('/') ||
+    url.pathname.endsWith('/wowcsgfitness')
+  ) {
     return;
   }
 
@@ -104,10 +90,12 @@ self.addEventListener('fetch', (event) => {
       return (
         cached ||
         fetch(event.request).then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          if (response && response.ok && response.type === 'basic') {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
           return response;
-        })
+        }).catch(() => cached)
       );
     })
   );

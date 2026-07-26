@@ -11,6 +11,36 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com data:; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://unpkg.com https://cdn.jsdelivr.net https://statics.teams.cdn.office.net; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebase.com https://*.cloudfunctions.net wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://www.google-analytics.com https://unpkg.com https://cdn.jsdelivr.net; worker-src 'self' blob:;">
     <title>WOW-CSG 7 Days Fitness Challenge</title>
     <meta name="theme-color" content="#003366">
+    <!-- Crash recovery: if the previous tab died mid-load, clear SW/caches before heavy scripts. -->
+    <script>
+    (function () {
+      var KEY = 'wowcsg_boot_fails_v67';
+      try {
+        var n = Number(sessionStorage.getItem(KEY) || '0');
+        sessionStorage.setItem(KEY, String(n + 1));
+        window.__WOWCSG_SAFE_BOOT__ = n >= 1;
+        if (window.__WOWCSG_SAFE_BOOT__) {
+          try {
+            localStorage.removeItem('stepEntries');
+            localStorage.removeItem('stepEntries_cache');
+          } catch (e1) {}
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function (regs) {
+              regs.forEach(function (r) { r.unregister(); });
+            }).catch(function () {});
+          }
+          if (window.caches && caches.keys) {
+            caches.keys().then(function (keys) {
+              keys.forEach(function (k) { caches.delete(k); });
+            }).catch(function () {});
+          }
+        }
+        window.addEventListener('load', function () {
+          try { sessionStorage.setItem(KEY, '0'); } catch (e2) {}
+        });
+      } catch (e) {}
+    })();
+    </script>
     <!-- PWA Manifest -->
     <link rel="manifest" href="./manifest.json">
     <!-- Favicon -->
@@ -19,15 +49,10 @@
     <link rel="stylesheet" href="styles.css?v=58">
     <link rel="stylesheet" href="ui-refresh.css?v=55">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <!-- Leaflet CSS only at start; JS loads on demand when map opens (saves mobile RAM). -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <!-- Microsoft Teams SDK (optional, only loads if in Teams) -->
-    <script src="https://statics.teams.cdn.office.net/sdk/v1.11.0/js/MicrosoftTeams.min.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
-    <!-- EmailJS SDK -->
-    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-    <!-- Teams Integration (optional) -->
-    <script src="teams-integration.js"></script>
+    <!-- Teams / EmailJS / Tesseract / Leaflet JS are deferred — loading them all crashed phones. -->
+    <script src="teams-integration.js" defer></script>
 </head>
 <body>
     <div class="container">
@@ -55,6 +80,7 @@
                     <a class="btn btn-primary" href="#loginCard">Join Challenge</a>
                     <a class="btn btn-ghost" href="#androidAppCard">Get Android App</a>
                     <a class="btn btn-ghost" href="#dayPlanCard">7-Day Plan</a>
+                    <a class="btn btn-ghost" href="./recover.html">Site won&rsquo;t open? Repair</a>
                 </div>
             </div>
         </header>
@@ -111,6 +137,10 @@
             <p class="android-app-note">
                 Internal CSG challenge build only (not on Play Store).
                 iPhone users should continue using this website (Add to Home Screen).
+            </p>
+            <p class="android-app-note">
+                Phone shows &ldquo;Can&rsquo;t open this page&rdquo;?
+                Open <a href="./recover.html"><strong>Repair site access</strong></a>, tap Clear cache &amp; reopen, then try again.
             </p>
         </div>
 
@@ -802,17 +832,17 @@
     <script src="firebase-config.js"></script>
     <script src="security-config.js"></script>
     <script src="native-bridge.js?v=55"></script>
-    <script src="script.js?v=66"></script>
+    <script src="script.js?v=67"></script>
     
-    <!-- Safe SW register only — never purge+reload (that crashed iOS Safari in a loop). -->
+    <!-- Safe SW register — never purge+reload. Navigations/JS are not intercepted (v67). -->
     <script>
         (function () {
-            var CURRENT_CACHE = 'wowcsg-fitness-v66';
+            var CURRENT_CACHE = 'wowcsg-fitness-v67';
             window.addEventListener('load', function () {
                 document.body.style.overflow = '';
                 document.documentElement.style.overflow = '';
                 if ('serviceWorker' in navigator) {
-                    navigator.serviceWorker.register('./service-worker.js?v=66').catch(function () {});
+                    navigator.serviceWorker.register('./service-worker.js?v=67').catch(function () {});
                 }
                 if (window.caches && caches.keys) {
                     caches.keys().then(function (keys) {
