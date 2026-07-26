@@ -23,9 +23,10 @@
 <body>
   <div class="card">
     <h1>Repair site access</h1>
-    <p>If Chrome/Safari shows “Can’t open this page” or keeps crashing, clear the broken offline cache on this phone, then reopen the challenge.</p>
-    <button type="button" id="repairBtn">Clear cache &amp; reopen</button>
-    <a class="btn" href="./index.html">Skip — open site</a>
+    <p>Use this if the challenge page opens, reloads, then shows “Can’t open this page” — even in Incognito.</p>
+    <p>This clears broken offline data on the phone, then opens a <strong>tap-to-start</strong> version of the site (more stable on mobile Chrome).</p>
+    <button type="button" id="repairBtn">Clear cache &amp; open (tap to start)</button>
+    <a class="btn" href="./index.html?boot=tap">Skip clear — open tap-to-start</a>
     <div id="log"></div>
   </div>
   <script>
@@ -36,9 +37,16 @@
         var tasks = [];
         log('Clearing…');
         try {
-          ['stepEntries', 'stepEntries_cache', 'participants_cache', 'wowcsg_sw_purge_v55', 'wowcsg_boot_fails']
-            .forEach(function (k) { localStorage.removeItem(k); sessionStorage.removeItem(k); });
-          log('Cleared heavy local data');
+          var keys = [];
+          for (var i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i));
+          keys.forEach(function (k) {
+            if (!k) return;
+            if (/stepEntries|participants|wowcsg|firebase|boot/i.test(k)) {
+              localStorage.removeItem(k);
+            }
+          });
+          sessionStorage.clear();
+          log('Cleared local site data');
         } catch (e) { log('localStorage: ' + e); }
         if ('serviceWorker' in navigator) {
           tasks.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
@@ -51,11 +59,11 @@
           }).then(function () { log('Cleared caches'); }));
         }
         Promise.all(tasks).then(function () {
-          log('Done. Opening site…');
-          setTimeout(function () { location.replace('./index.html?recovered=1'); }, 400);
+          log('Done. Opening tap-to-start…');
+          setTimeout(function () { location.replace('./index.html?boot=tap&recovered=1'); }, 350);
         }).catch(function (err) {
           log('Error: ' + err);
-          setTimeout(function () { location.replace('./index.html?recovered=1'); }, 800);
+          setTimeout(function () { location.replace('./index.html?boot=tap&recovered=1'); }, 700);
         });
       });
     })();
