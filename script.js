@@ -20,6 +20,9 @@ class StepathonApp {
  treadmillSpeedMaxKmh: 12,
  treadmillSpeedWalkMaxKmh: 7,
  treadmillSpeedDefaultKmh: 5,
+ // Day board / auto-approve: faster than this is treated as GPS glitch or invalid
+ // 18 km/h ≈ 3:20 min/km (beyond normal corporate challenge pace; WR ~2:12/km)
+ maxHumanSpeedKmh: 18,
  dayGoalsKm: [1, 2, 3, 4, 5, 6, 7]
  };
 
@@ -3024,6 +3027,13 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 console.error('stepEntries is not an array!', typeof this.stepEntries, this.stepEntries);
                 this.stepEntries = [];
             }
+
+            // Auto-reject GPS-glitch / superhuman day finishes (e.g. 1 KM in 1:44)
+            try {
+                await this.rejectImplausibleApprovedEntries({ silent: true });
+            } catch (paceErr) {
+                console.warn('Pace auto-reject skipped:', paceErr);
+            }
             
             // Optimize: Single pass through entries to count all stats
             let pending = 0, approved = 0, rejected = 0;
@@ -4227,6 +4237,60 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         return true;
     }
 
+    /**
+     * Reject approved entries whose time-to-goal implies speed above maxHumanSpeedKmh.
+     * Clears GPS-glitch day-board winners (e.g. 1 KM in under ~3:20).
+     */
+    async rejectImplausibleApprovedEntries({ silent = false } = {}) {
+        if (!this.isAdmin) return 0;
+        const reason =
+            `Rejected: finish time implies speed above ${this.challengeConfig.maxHumanSpeedKmh} km/h for the day KM goal (unrealistic / GPS glitch).`;
+        let rejected = 0;
+        const touched = new Set();
+
+        for (const entry of this.stepEntries || []) {
+            if (!this.isApprovedEntry(entry)) continue;
+            const goalKm = this.getDailyGoalKm(new Date(entry.date));
+            if (!this.isImplausibleChallengePace(entry, goalKm)) continue;
+
+            entry.status = 'rejected';
+            entry.validatedBy = 'Admin (pace check)';
+            entry.validatedAt = new Date().toISOString();
+            entry.notes = reason;
+            rejected += 1;
+
+            const participant = this.findParticipantForEntry(entry);
+            if (participant) {
+                const key = participant.uid || participant.id || participant.email || participant.name;
+                touched.add(String(key));
+                this.recalculateParticipantTotalsFromApproved(participant);
+            }
+            await this.upsertStepEntryInFirebase(entry);
+            await this.syncActivityFeedForEntry(entry);
+        }
+
+        if (rejected > 0) {
+            this.saveStepEntries();
+            this.saveParticipantsCache();
+            for (const p of this.participants || []) {
+                const key = String(p.uid || p.id || p.email || p.name);
+                if (touched.has(key)) {
+                    await this.syncParticipantToFirebase(p);
+                }
+            }
+            if (!window.location.pathname.includes('admin.html')) {
+                await this.updateLeaderboard(null, { skipRemoteSync: true });
+            }
+        }
+
+        if (!silent) {
+            alert(rejected ? `Rejected ${rejected} impossible-pace entr${rejected === 1 ? 'y' : 'ies'}.` : 'No impossible-pace approved entries found.');
+        } else if (rejected) {
+            console.log(`Auto-rejected ${rejected} impossible-pace entries.`);
+        }
+        return rejected;
+    }
+
     editEntrySteps(entryId) {
         // Backward-compatible alias
         this.openEditActivityModal(entryId);
@@ -4790,7 +4854,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  day.goalKm = goalKm;
  if (s > 0) {
  const entryFinishSec = this.estimateTimeToGoalSec(entry, goalKm);
- if (entryFinishSec != null) {
+ if (entryFinishSec != null && !this.isImplausibleChallengePace(entry, goalKm)) {
  day.completed = true;
  // Keep the best (shortest) time-to-goal across attempts — never lock the first
  if (day.completionDurationSec == null || entryFinishSec < day.completionDurationSec) {
@@ -4798,14 +4862,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  day.completedAt = entry.date || new Date().toISOString();
  }
  } else if (day.distanceKm >= (goalKm - 0.01)) {
- day.completed = true;
- if (day.completionDurationSec == null && day.durationSec > 0) {
- day.completionDurationSec = Math.max(
- 1,
- Math.round(day.durationSec * (goalKm / Math.max(day.distanceKm, goalKm)))
- );
- if (!day.completedAt) day.completedAt = new Date().toISOString();
- }
+ // Distance may still count toward progress, but only legal single attempts set finish time
+ day.completed = day.completionDurationSec != null;
  } else {
  day.completed = false;
  day.completionDurationSec = null;
@@ -4853,6 +4911,30 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  return Math.max(1, Math.round(durationSec * (goalKm / distanceKm)));
  }
 
+ /** Implied average speed (km/h) for covering goalKm in finishSec. */
+ impliedSpeedKmh(finishSec, goalKm) {
+ if (!(finishSec > 0) || !(goalKm > 0)) return null;
+ return goalKm / (finishSec / 3600);
+ }
+
+ /**
+ * Reject GPS glitches / fake tracking: e.g. 1 KM in 1:44 (~34 km/h) is not a valid challenge finish.
+ */
+ isImplausibleChallengePace(entry, goalKm) {
+ const goal = goalKm > 0 ? goalKm : this.getDailyGoalKm(entry && entry.date ? new Date(entry.date) : new Date());
+ const finishSec = this.estimateTimeToGoalSec(entry, goal);
+ if (finishSec == null) return false;
+ const speed = this.impliedSpeedKmh(finishSec, goal);
+ const maxKmh = Number(this.challengeConfig.maxHumanSpeedKmh) || 18;
+ return speed != null && speed > maxKmh;
+ }
+
+ minLegalFinishSecForGoal(goalKm) {
+ const goal = goalKm > 0 ? goalKm : 1;
+ const maxKmh = Number(this.challengeConfig.maxHumanSpeedKmh) || 18;
+ return Math.ceil((goal / maxKmh) * 3600);
+ }
+
  /**
  * Build per-day leaderboard from APPROVED step entries only.
  * Rank by best single-attempt time to the day's target KM (not full session time).
@@ -4879,6 +4961,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  );
  const dist = Number(entry.distanceKm) || 0;
  const steps = Number(entry.steps) || 0;
+ if (this.isImplausibleChallengePace(entry, goalKm)) return;
  const finishSec = this.estimateTimeToGoalSec(entry, goalKm);
 
  const row = byKey.get(key) || {
@@ -7528,22 +7611,15 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  { distanceKm, durationSec, path: trackMeta && trackMeta.path },
  goalKmForDay
  );
- if (attemptFinishSec != null) {
+ const attemptEntry = { distanceKm, durationSec, path: trackMeta && trackMeta.path };
+ if (attemptFinishSec != null && !this.isImplausibleChallengePace(attemptEntry, goalKmForDay)) {
  prevDay.completed = true;
  if (prevDay.completionDurationSec == null || attemptFinishSec < prevDay.completionDurationSec) {
  prevDay.completionDurationSec = attemptFinishSec;
  prevDay.completedAt = new Date().toISOString();
  }
- } else if (prevDay.distanceKm >= (goalKmForDay - 0.01)) {
- prevDay.completed = true;
- if (prevDay.completionDurationSec == null && prevDay.durationSec > 0) {
- prevDay.completionDurationSec = Math.max(
- 1,
- Math.round(prevDay.durationSec * (goalKmForDay / Math.max(prevDay.distanceKm, goalKmForDay)))
- );
- prevDay.completedAt = new Date().toISOString();
  }
- }
+ // Do not invent a day-finish time from summed sessions — only single legal attempts count
  this.currentUser.dailyStats[today] = prevDay;
 
         const entryId = `ENTRY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -7552,6 +7628,16 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  alert('You must be signed in with Firebase to save activity.');
  return;
  }
+ const draftForPace = {
+ distanceKm: Number(distanceKm.toFixed(3)),
+ durationSec,
+ path: trackMeta && Array.isArray(trackMeta.path) ? trackMeta.path : []
+ };
+ const paceIllegal = this.isImplausibleChallengePace(draftForPace, goalKmForDay);
+ const autoOk = fromStepCounter && !paceIllegal;
+ const paceNote = paceIllegal
+ ? `Rejected: pace faster than ${this.challengeConfig.maxHumanSpeedKmh} km/h for the day goal (unrealistic / GPS glitch).`
+ : null;
         const stepEntry = {
             id: entryId,
             userId: this.currentUser.id || this.currentUser.employeeId || 'unknown',
@@ -7565,16 +7651,16 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  durationSec,
  screenshot: null,
             date: new Date().toISOString(),
- status: fromStepCounter ? 'approved' : 'pending',
- validatedBy: fromStepCounter ? 'App GPS Counter' : null,
- validatedAt: fromStepCounter ? new Date().toISOString() : null,
+ status: autoOk ? 'approved' : (paceIllegal ? 'rejected' : 'pending'),
+ validatedBy: paceIllegal ? 'App pace check' : (fromStepCounter ? 'App GPS Counter' : null),
+ validatedAt: (autoOk || paceIllegal) ? new Date().toISOString() : null,
             lastModifiedBy: null,
             lastModifiedAt: null,
- notes: fromStepCounter
+ notes: paceNote || (fromStepCounter
  ? ((trackMeta && trackMeta.trackingMode === 'treadmill')
  ? `Treadmill activity (step-based): ${distanceKm.toFixed(2)} KM / ${steps} steps - ${caloriesBurned} kcal`
  : `In-app GPS activity: ${distanceKm.toFixed(2)} KM - ${caloriesBurned} kcal`)
- : null,
+ : null),
  source: fromStepCounter
  ? ((trackMeta && trackMeta.trackingMode === 'treadmill') ? 'treadmill-counter' : 'gps-counter')
  : 'manual',
@@ -7688,7 +7774,11 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         
         // Show success message
         setTimeout(() => {
+ if (paceIllegal) {
+ alert(`Activity saved but REJECTED for the day challenge.\n\nYour pace to the day goal was faster than ${this.challengeConfig.maxHumanSpeedKmh} km/h (~${this.formatDurationClock(this.minLegalFinishSecForGoal(goalKmForDay))} min for ${goalKmForDay} KM minimum).\nThis usually means a GPS glitch. Please try again outdoors with a steady GPS lock.${shareNote}`);
+ } else {
  alert(`Saved successfully!\n\n${distanceKm.toFixed(2)} KM covered (~${steps.toLocaleString()} steps)\nCalories burned: ~${caloriesBurned} kcal\n\nYour leaderboard has been updated.${shareNote}`);
+ }
         }, 500);
     }
 

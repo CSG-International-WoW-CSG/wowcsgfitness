@@ -802,17 +802,17 @@
     <script src="firebase-config.js"></script>
     <script src="security-config.js"></script>
     <script src="native-bridge.js?v=55"></script>
-    <script src="script.js?v=64"></script>
+    <script src="script.js?v=65"></script>
     
     <!-- Safe SW register only — never purge+reload (that crashed iOS Safari in a loop). -->
     <script>
         (function () {
-            var CURRENT_CACHE = 'wowcsg-fitness-v64';
+            var CURRENT_CACHE = 'wowcsg-fitness-v65';
             window.addEventListener('load', function () {
                 document.body.style.overflow = '';
                 document.documentElement.style.overflow = '';
                 if ('serviceWorker' in navigator) {
-                    navigator.serviceWorker.register('./service-worker.js?v=64').catch(function () {});
+                    navigator.serviceWorker.register('./service-worker.js?v=65').catch(function () {});
                 }
                 if (window.caches && caches.keys) {
                     caches.keys().then(function (keys) {
