@@ -802,50 +802,24 @@
     <script src="firebase-config.js"></script>
     <script src="security-config.js"></script>
     <script src="native-bridge.js?v=55"></script>
-    <script src="script.js?v=63"></script>
+    <script src="script.js?v=64"></script>
     
-    <!-- Force-clear stale SW/caches that can freeze scrolling with old overlays -->
+    <!-- Safe SW register only — never purge+reload (that crashed iOS Safari in a loop). -->
     <script>
         (function () {
-            var CACHE = 'wowcsg-fitness-v55';
-            var FLAG = 'wowcsg_sw_purge_v55';
-            function purgeAndReload() {
-                var tasks = [];
-                if ('serviceWorker' in navigator) {
-                    tasks.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
-                        return Promise.all(regs.map(function (r) { return r.unregister(); }));
-                    }));
-                }
-                if (window.caches && caches.keys) {
-                    tasks.push(caches.keys().then(function (keys) {
-                        return Promise.all(keys.map(function (k) { return caches.delete(k); }));
-                    }));
-                }
-                return Promise.all(tasks);
-            }
+            var CURRENT_CACHE = 'wowcsg-fitness-v64';
             window.addEventListener('load', function () {
                 document.body.style.overflow = '';
                 document.documentElement.style.overflow = '';
-                if (!sessionStorage.getItem(FLAG)) {
-                    sessionStorage.setItem(FLAG, '1');
-                    purgeAndReload().then(function () {
-                        if ('serviceWorker' in navigator) {
-                            return navigator.serviceWorker.register('./service-worker.js?v=55');
-                        }
-                    }).then(function () {
-                        window.location.reload();
-                    }).catch(function () {
-                        window.location.reload();
-                    });
-                    return;
-                }
                 if ('serviceWorker' in navigator) {
-                    navigator.serviceWorker.register('./service-worker.js?v=55').catch(function () {});
+                    navigator.serviceWorker.register('./service-worker.js?v=64').catch(function () {});
                 }
                 if (window.caches && caches.keys) {
                     caches.keys().then(function (keys) {
-                        keys.filter(function (k) { return k !== CACHE; }).forEach(function (k) { caches.delete(k); });
-                    });
+                        keys.forEach(function (k) {
+                            if (k !== CURRENT_CACHE) caches.delete(k);
+                        });
+                    }).catch(function () {});
                 }
             });
         })();

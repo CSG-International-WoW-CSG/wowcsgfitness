@@ -102,6 +102,8 @@ class StepathonApp {
  this.wakeLockWatchdogId = null;
  this.activitySessionKey = 'wowcsg_active_activity_v1';
  this._lastActivityPersistAt = 0;
+ this._lastStepEntriesSyncAt = 0;
+ this._leaderboardSyncInFlight = null;
  this.keepAliveAudio = null;
  this.swMessageBound = false;
         
@@ -125,16 +127,16 @@ class StepathonApp {
  this.setupActivityKeepAlive();
                 
                 this.checkCurrentUser();
-                // Defer heavy operations
+                // Paint from local cache first — avoid triple Firebase sync on cold start (iOS crash)
                 setTimeout(() => {
-                    this.updateLeaderboard();
+                    this.updateLeaderboard(null, { skipRemoteSync: true });
                 }, 100);
             });
  } else {
  this.restoreAdminSessionIfAuthorized();
         }
 
-        // Keep participant + entry caches fresh (entries must sync or rejected ranks stick)
+        // One background sync refreshes participants + entries + leaderboard
         this.syncParticipantsFromFirebase();
 
         if (window.location.pathname.includes('admin.html')) {
@@ -891,7 +893,9 @@ class StepathonApp {
  const filter = button.dataset.filter;
  document.querySelectorAll('.filter-btn, .day-filter-btn').forEach(b => b.classList.remove('active'));
  button.classList.add('active');
- this.updateLeaderboard(filter);
+ // Day boards need fresh approve/reject status; throttle still applies unless forced
+ const forceSync = String(filter || '').startsWith('day-');
+ this.updateLeaderboard(filter, { forceSync });
             });
         });
     }
@@ -1999,22 +2003,34 @@ class StepathonApp {
                 console.error('Cannot save stepEntries - not an array!', typeof this.stepEntries, this.stepEntries);
                 this.stepEntries = [];
             }
-            const jsonString = JSON.stringify(this.stepEntries);
+            // Slim cache for mobile Safari — screenshots / huge GPS dumps cause OOM + QuotaExceeded
+            const slim = this.stepEntries.map((entry) => {
+                if (!entry || typeof entry !== 'object') return entry;
+                const copy = { ...entry };
+                delete copy.screenshot;
+                if (Array.isArray(copy.path) && copy.path.length > 40) {
+                    copy.path = this.sanitizePathForCloud(copy.path);
+                }
+                return copy;
+            });
+            const jsonString = JSON.stringify(slim);
             const storageKey = this.firebaseEnabled ? 'stepEntries_cache' : 'stepEntries';
             localStorage.setItem(storageKey, jsonString);
-            console.log('Saved stepEntries to localStorage:', this.stepEntries.length, 'entries');
-            console.log('Saved data size:', jsonString.length, 'characters');
-            
-            // Verify save
-            const verify = localStorage.getItem(storageKey);
-            if (verify !== jsonString) {
-                console.error('Save verification failed! Data mismatch.');
-            } else {
-                console.log('Save verification successful');
-            }
+            console.log('Saved stepEntries to localStorage:', slim.length, 'entries');
         } catch (error) {
             console.error('Error saving stepEntries to localStorage:', error);
-            console.error('Error stack:', error.stack);
+            try {
+                // Last resort: drop paths so the page can still load
+                const minimal = (this.stepEntries || []).map((e) => {
+                    if (!e || typeof e !== 'object') return e;
+                    const { path, screenshot, ...rest } = e;
+                    return rest;
+                });
+                const storageKey = this.firebaseEnabled ? 'stepEntries_cache' : 'stepEntries';
+                localStorage.setItem(storageKey, JSON.stringify(minimal));
+            } catch (inner) {
+                console.error('Minimal stepEntries cache save also failed:', inner);
+            }
         }
     }
 
@@ -4945,7 +4961,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
  }
 
- async updateLeaderboard(filter) {
+ async updateLeaderboard(filter, options = {}) {
  if (!filter) {
  const active = document.querySelector('.filter-btn.active, .day-filter-btn.active');
  filter = (active && active.dataset.filter) || 'total';
@@ -4955,10 +4971,15 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         list.innerHTML = '';
  this.updateLeaderboardSubtitle(filter);
 
- // Always refresh entries from Firebase so rejected status wins over local cache
- if (this.firebaseEnabled) {
+ const skipRemoteSync = !!(options && options.skipRemoteSync);
+ const forceSync = !!(options && options.forceSync);
+ const syncStaleMs = 45000;
+ const syncIsStale = !this._lastStepEntriesSyncAt || (Date.now() - this._lastStepEntriesSyncAt) > syncStaleMs;
+
+ // Refresh from Firebase when needed — but never thrash on every paint (iOS Safari OOM)
+ if (this.firebaseEnabled && !skipRemoteSync && (forceSync || syncIsStale)) {
  await this.syncStepEntriesFromFirebase();
- } else {
+ } else if (!Array.isArray(this.stepEntries) || this.stepEntries.length === 0) {
  this.stepEntries = this.loadStepEntries();
  }
  this.recalculateAllParticipantTotalsFromApproved();
@@ -5355,7 +5376,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  await this.syncStepEntriesFromFirebase();
  this.recalculateAllParticipantTotalsFromApproved();
             if (!window.location.pathname.includes('admin.html')) {
-                await this.updateLeaderboard();
+                await this.updateLeaderboard(null, { skipRemoteSync: true });
             }
         } catch (error) {
             console.warn('Failed to sync participants from Firebase:', error);
@@ -5366,13 +5387,22 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         if (!this.firebaseEnabled || !this.db) {
             return;
         }
-        try {
- const snapshot = await this.stepEntriesCol().get();
- this.stepEntries = this.filterCurrentSeasonEntries(snapshot.docs.map(doc => doc.data()));
-            this.saveStepEntries();
-        } catch (error) {
-            console.warn('Failed to sync step entries from Firebase:', error);
+        if (this._leaderboardSyncInFlight) {
+            return this._leaderboardSyncInFlight;
         }
+        this._leaderboardSyncInFlight = (async () => {
+            try {
+                const snapshot = await this.stepEntriesCol().get();
+                this.stepEntries = this.filterCurrentSeasonEntries(snapshot.docs.map((doc) => doc.data()));
+                this._lastStepEntriesSyncAt = Date.now();
+                this.saveStepEntries();
+            } catch (error) {
+                console.warn('Failed to sync step entries from Firebase:', error);
+            } finally {
+                this._leaderboardSyncInFlight = null;
+            }
+        })();
+        return this._leaderboardSyncInFlight;
     }
 
     async upsertStepEntryInFirebase(entry) {
