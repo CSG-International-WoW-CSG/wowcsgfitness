@@ -4770,13 +4770,32 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  day.durationSec = Math.max(0, (day.durationSec || 0) + s * durationSec);
  day.steps = Math.max(0, (day.steps || 0) + s * steps);
  day.caloriesBurned = Math.max(0, (day.caloriesBurned || 0) + s * calories);
- const goalKm = day.goalKm != null ? day.goalKm : this.getDailyGoalKm(new Date(entry.date));
+ const goalKm = this.getDailyGoalKm(new Date(entry.date));
  day.goalKm = goalKm;
- if (day.distanceKm >= (goalKm - 0.01)) {
+ if (s > 0) {
+ const entryFinishSec = this.estimateTimeToGoalSec(entry, goalKm);
+ if (entryFinishSec != null) {
  day.completed = true;
- if (!day.completionDurationSec) day.completionDurationSec = day.durationSec;
+ // Keep the best (shortest) time-to-goal across attempts — never lock the first
+ if (day.completionDurationSec == null || entryFinishSec < day.completionDurationSec) {
+ day.completionDurationSec = entryFinishSec;
+ day.completedAt = entry.date || new Date().toISOString();
+ }
+ } else if (day.distanceKm >= (goalKm - 0.01)) {
+ day.completed = true;
+ if (day.completionDurationSec == null && day.durationSec > 0) {
+ day.completionDurationSec = Math.max(
+ 1,
+ Math.round(day.durationSec * (goalKm / Math.max(day.distanceKm, goalKm)))
+ );
  if (!day.completedAt) day.completedAt = new Date().toISOString();
+ }
  } else {
+ day.completed = false;
+ day.completionDurationSec = null;
+ day.completedAt = null;
+ }
+ } else if (day.distanceKm < (goalKm - 0.01)) {
  day.completed = false;
  day.completionDurationSec = null;
  day.completedAt = null;
@@ -4785,8 +4804,42 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  /**
+ * Time (seconds) to reach the day's target KM within a single activity.
+ * Prefers GPS path crossing when timestamps exist; otherwise scales duration by goal/distance.
+ * Example: 3 KM in 30 min on a 1 KM day → ~10 min (not 30).
+ */
+ estimateTimeToGoalSec(entry, goalKm) {
+ if (!entry || !(goalKm > 0)) return null;
+ const distanceKm = Number(entry.distanceKm) || 0;
+ const durationSec = Number(entry.durationSec) || 0;
+ if (distanceKm < goalKm - 0.01) return null;
+ if (durationSec <= 0) return null;
+
+ const path = typeof this.normalizeActivityPath === 'function'
+ ? this.normalizeActivityPath(entry.path)
+ : (Array.isArray(entry.path) ? entry.path : []);
+ const timed = path.filter((p) => p && Number.isFinite(Number(p.t)) && Number(p.t) > 0);
+ if (timed.length >= 2 && typeof this.haversineKm === 'function') {
+ let cum = 0;
+ const t0 = Number(timed[0].t);
+ for (let i = 1; i < timed.length; i++) {
+ const a = timed[i - 1];
+ const b = timed[i];
+ cum += this.haversineKm(a.lat, a.lng, b.lat, b.lng);
+ if (cum >= goalKm - 0.01) {
+ const elapsed = Math.max(1, Math.round((Number(b.t) - t0) / 1000));
+ return Math.min(elapsed, durationSec);
+ }
+ }
+ }
+
+ // Constant-pace fallback: time to cover only the goal distance
+ return Math.max(1, Math.round(durationSec * (goalKm / distanceKm)));
+ }
+
+ /**
  * Build per-day leaderboard from APPROVED step entries only.
- * Do not trust participant.dailyStats — those can stay stale after admin rejection.
+ * Rank by best single-attempt time to the day's target KM (not full session time).
  */
  getDayLeaderboardRows(dayNum) {
  const goalKm = this.challengeConfig.dayGoalsKm[dayNum - 1] || dayNum;
@@ -4808,32 +4861,54 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const key = String(
  participant.uid || participant.id || participant.employeeId || participant.email || participant.name
  );
+ const dist = Number(entry.distanceKm) || 0;
+ const steps = Number(entry.steps) || 0;
+ const finishSec = this.estimateTimeToGoalSec(entry, goalKm);
+
  const row = byKey.get(key) || {
  name: participant.name,
  department: participant.department,
  steps: 0,
  distanceKm: 0,
- durationSec: 0,
+ durationSec: null,
+ bestFinishSec: null,
  completed: false,
  goalKm,
- dateKey
+ dateKey,
+ attempts: 0
  };
- row.steps += Number(entry.steps) || 0;
- row.distanceKm = Number((row.distanceKm + (Number(entry.distanceKm) || 0)).toFixed(3));
- row.durationSec += Number(entry.durationSec) || 0;
+ row.attempts += 1;
+ // Keep best attempt stats for display
+ if (dist > (row.distanceKm || 0)) {
+ row.distanceKm = dist;
+ row.steps = steps;
+ }
+ if (finishSec != null) {
+ row.completed = true;
+ if (row.bestFinishSec == null || finishSec < row.bestFinishSec) {
+ row.bestFinishSec = finishSec;
+ row.durationSec = finishSec;
+ // Prefer the winning attempt's distance/steps on the board
+ row.distanceKm = dist;
+ row.steps = steps;
+ row.bestEntryId = entry.id;
+ }
+ }
  byKey.set(key, row);
  });
 
  return Array.from(byKey.values())
- .map((row) => {
- const completed = row.distanceKm >= (goalKm - 0.01);
- return {
- ...row,
- completed,
- durationSec: completed ? row.durationSec : (row.durationSec || null),
- goalKm
- };
- })
+ .map((row) => ({
+ name: row.name,
+ department: row.department,
+ steps: row.steps,
+ distanceKm: Number(row.distanceKm) || 0,
+ completed: !!row.completed,
+ durationSec: row.completed ? row.bestFinishSec : null,
+ goalKm,
+ dateKey: row.dateKey,
+ attempts: row.attempts
+ }))
  .filter((row) => row.steps > 0 || row.distanceKm > 0.005)
  .sort((a, b) => {
  if (a.completed !== b.completed) {
@@ -4864,7 +4939,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const goalKm = this.challengeConfig.dayGoalsKm[dayNum - 1] || dayNum;
  const dayDate = this.getChallengeDayDate(dayNum);
  const dateLabel = dayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
- el.textContent = `Day ${dayNum} (${dateLabel}) - ${goalKm} KM - shortest finish time wins`;
+ el.textContent = `Day ${dayNum} (${dateLabel}) - ${goalKm} KM - shortest time to ${goalKm} KM wins (best attempt)`;
  } else {
  el.textContent = '';
  }
@@ -7419,10 +7494,25 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  prevDay.caloriesBurned = (prevDay.caloriesBurned || 0) + caloriesBurned;
  prevDay.goalKm = goalKmForDay;
  prevDay.challengeDay = dayNum || prevDay.challengeDay || null;
- if (!prevDay.completed && prevDay.distanceKm >= (goalKmForDay - 0.01)) {
+ const attemptFinishSec = this.estimateTimeToGoalSec(
+ { distanceKm, durationSec, path: trackMeta && trackMeta.path },
+ goalKmForDay
+ );
+ if (attemptFinishSec != null) {
  prevDay.completed = true;
- prevDay.completionDurationSec = prevDay.durationSec;
+ if (prevDay.completionDurationSec == null || attemptFinishSec < prevDay.completionDurationSec) {
+ prevDay.completionDurationSec = attemptFinishSec;
  prevDay.completedAt = new Date().toISOString();
+ }
+ } else if (prevDay.distanceKm >= (goalKmForDay - 0.01)) {
+ prevDay.completed = true;
+ if (prevDay.completionDurationSec == null && prevDay.durationSec > 0) {
+ prevDay.completionDurationSec = Math.max(
+ 1,
+ Math.round(prevDay.durationSec * (goalKmForDay / Math.max(prevDay.distanceKm, goalKmForDay)))
+ );
+ prevDay.completedAt = new Date().toISOString();
+ }
  }
  this.currentUser.dailyStats[today] = prevDay;
 
