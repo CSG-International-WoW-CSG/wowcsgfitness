@@ -2806,7 +2806,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
     showDashboard() {
         document.getElementById('loginCard').style.display = 'none';
-        document.getElementById('dashboardCard').style.display = 'block';
+        const dash = document.getElementById('dashboardCard');
+        if (dash) {
+            dash.style.display = 'flex';
+            dash.style.flexDirection = 'column';
+        }
+        this.setLoggedInShell(true);
         
         // Check challenge status and disable features if challenge is over
         this.updateDates(); // This will call checkChallengeStatus
@@ -2818,7 +2823,18 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.initActivityMap();
  // Restore in-progress activity if the phone killed/reloaded the page while locked
  this.tryRestoreActivitySession();
+ const startBtn = document.getElementById('startCounterBtn');
+ if (startBtn && typeof startBtn.scrollIntoView === 'function') {
+ startBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+ }
  }, 250);
+    }
+
+    setLoggedInShell(isLoggedIn) {
+        document.body.classList.toggle('is-logged-in', !!isLoggedIn);
+        document.querySelectorAll('.guest-only').forEach((el) => {
+            el.style.display = isLoggedIn ? 'none' : '';
+        });
     }
 
     updateDashboard() {
@@ -2851,18 +2867,18 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         }
  const remainingEl = document.getElementById('remainingSteps');
  if (remainingEl) {
- remainingEl.textContent = Math.max(0, goal - todaySteps).toLocaleString() + ' steps';
+ remainingEl.textContent = Math.max(0, goal - todaySteps).toLocaleString() + ' left';
  }
  const goalLabel = document.getElementById('dailyGoalLabel');
  if (goalLabel) {
  const dayPrefix = dayNum >= 1 && dayNum <= 7 ? `Day ${dayNum}: ` : '';
- goalLabel.textContent = `${dayPrefix}${goalKm} KM (~${goal.toLocaleString()} steps)`;
+ goalLabel.textContent = `${dayPrefix}${goalKm} KM goal`;
  }
  const progressTitle = document.getElementById('dailyGoalTitle');
  if (progressTitle) {
  progressTitle.textContent = dayNum >= 1 && dayNum <= 7
- ? `Day ${dayNum} Goal - ${goalKm} KM Walk/Run`
- : 'Daily Goal Progress';
+ ? `Day ${dayNum} · ${goalKm} KM`
+ : 'Daily goal';
  }
 
  const todayCalories = this.currentUser.dailyCalories && this.currentUser.dailyCalories[today]
@@ -2871,7 +2887,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const totalCalories = this.currentUser.totalCalories || 0;
  const todayCalEl = document.getElementById('todayCaloriesLabel');
  if (todayCalEl) {
- todayCalEl.textContent = `${Math.round(todayCalories).toLocaleString()} kcal`;
+ todayCalEl.textContent = `${Math.round(todayCalories).toLocaleString()} kcal today`;
  }
  const totalCalEl = document.getElementById('totalCaloriesLabel');
  if (totalCalEl) {
@@ -5297,6 +5313,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         localStorage.removeItem('currentUser');
         document.getElementById('loginCard').style.display = 'block';
         document.getElementById('dashboardCard').style.display = 'none';
+        this.setLoggedInShell(false);
         document.getElementById('loginForm').reset();
     }
 
