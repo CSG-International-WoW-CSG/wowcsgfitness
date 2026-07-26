@@ -4242,11 +4242,20 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
      * Clears GPS-glitch day-board winners (e.g. 1 KM in under ~3:20).
      */
     async rejectImplausibleApprovedEntries({ silent = false } = {}) {
-        if (!this.isAdmin) return 0;
+        if (!this.isAdmin) {
+            if (!silent) alert('Admin login required.');
+            return 0;
+        }
+        if (this.firebaseEnabled) {
+            await this.syncStepEntriesFromFirebase();
+        } else {
+            this.stepEntries = this.loadStepEntries();
+        }
         const reason =
             `Rejected: finish time implies speed above ${this.challengeConfig.maxHumanSpeedKmh} km/h for the day KM goal (unrealistic / GPS glitch).`;
         let rejected = 0;
         const touched = new Set();
+        const rejectedNames = [];
 
         for (const entry of this.stepEntries || []) {
             if (!this.isApprovedEntry(entry)) continue;
@@ -4258,6 +4267,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             entry.validatedAt = new Date().toISOString();
             entry.notes = reason;
             rejected += 1;
+            rejectedNames.push(entry.userName || entry.id);
 
             const participant = this.findParticipantForEntry(entry);
             if (participant) {
@@ -4284,9 +4294,13 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         }
 
         if (!silent) {
-            alert(rejected ? `Rejected ${rejected} impossible-pace entr${rejected === 1 ? 'y' : 'ies'}.` : 'No impossible-pace approved entries found.');
+            alert(
+                rejected
+                    ? `Rejected ${rejected} impossible-pace entr${rejected === 1 ? 'y' : 'ies'}:\n\n- ${rejectedNames.join('\n- ')}`
+                    : 'No impossible-pace approved entries found.\n\nTip: click Refresh first, then try again.'
+            );
         } else if (rejected) {
-            console.log(`Auto-rejected ${rejected} impossible-pace entries.`);
+            console.log(`Auto-rejected ${rejected} impossible-pace entries:`, rejectedNames);
         }
         return rejected;
     }
