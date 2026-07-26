@@ -3216,9 +3216,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         }
     }
 
-    viewUserDetails(userId) {
+    async viewUserDetails(userId) {
         // Reload participants to ensure we have the latest data
         this.participants = this.loadParticipants();
+        if (this.firebaseEnabled) {
+            await this.syncStepEntriesFromFirebase();
+        }
         
         // Handle user_ prefix from index-based IDs
         let searchId = userId;
@@ -3234,7 +3237,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             (p.id && p.id === searchId) || 
             (p.employeeId && p.employeeId === searchId) ||
             (p.id && String(p.id) === String(searchId)) ||
-            (p.employeeId && String(p.employeeId) === String(searchId))
+            (p.employeeId && String(p.employeeId) === String(searchId)) ||
+            (p.uid && String(p.uid) === String(searchId))
         );
         
         if (!user) {
@@ -3333,6 +3337,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 const pathPoints = Array.isArray(activity.path) ? activity.path.length : 0;
                 const speed = activity.treadmillSpeedKmh != null ? Number(activity.treadmillSpeedKmh) : null;
                 const mapDomId = this.adminMapDomId(activity.id);
+                const validGpsCount = this.normalizeActivityPath(activity.path).length;
                 const safeActivityId = this.escapeHtml(activity.id || '');
                 const safeUserIdAttr = this.escapeHtml(String(actualUserId));
                 
@@ -3404,15 +3409,23 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                             ${pathPoints > 0 ? `
                                 <div class="detail-item">
                                     <strong style="color: #003366;">GPS Points:</strong>
-                                    <span>${pathPoints}</span>
+                                    <span>${pathPoints}${validGpsCount !== pathPoints ? ` (${validGpsCount} usable)` : ''}</span>
                                 </div>
                             ` : ''}
                         </div>
 
-                        ${pathPoints > 1 ? `
-                            <div class="admin-gps-map-section" style="margin: 12px 0;">
-                                <strong style="color: #003366; display: block; margin-bottom: 8px;">GPS Route Map</strong>
-                                <div id="${mapDomId}" class="admin-gps-map" style="height: 240px; width: 100%; border-radius: 8px; border: 1px solid #cfd8dc; background: #e8eef3;"></div>
+                        ${validGpsCount > 1 ? `
+                            <div class="admin-gps-map-section" style="margin: 14px 0 8px;">
+                                <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;">
+                                    <strong style="color: #003366;">GPS Route Map</strong>
+                                    <button type="button" class="btn btn-small btn-secondary" onclick="app.refitAdminActivityMap('${mapDomId}')">Fit route</button>
+                                </div>
+                                <div id="${mapDomId}" class="admin-gps-map" style="height: 280px; width: 100%; border-radius: 8px; border: 1px solid #cfd8dc; background: #e8eef3;"></div>
+                                <p style="margin: 6px 0 0; font-size: 0.8rem; color: #666;">Blue = start · Red = end · ${validGpsCount} points</p>
+                            </div>
+                        ` : pathPoints > 1 ? `
+                            <div class="admin-gps-map-section" style="margin: 12px 0; padding: 10px; background: #fff8e1; border-radius: 6px; color: #6d4c41; font-size: 0.9rem;">
+                                GPS points are stored but coordinates could not be read for mapping.
                             </div>
                         ` : pathPoints === 1 ? `
                             <div class="admin-gps-map-section" style="margin: 12px 0; padding: 10px; background: #fff8e1; border-radius: 6px; color: #6d4c41; font-size: 0.9rem;">
@@ -3556,18 +3569,38 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         `;
 
         modal.style.display = 'flex';
-        // Draw GPS routes after the modal DOM is visible (Leaflet needs size)
-        setTimeout(() => this.renderAdminActivityMaps(userActivities), 80);
+        // Draw GPS routes after modal is visible (Leaflet needs non-zero size)
+        const drawMaps = () => this.renderAdminActivityMaps(userActivities);
+        requestAnimationFrame(() => {
+            setTimeout(drawMaps, 50);
+            setTimeout(drawMaps, 250);
+            setTimeout(drawMaps, 600);
+        });
     }
 
     adminMapDomId(entryId) {
         return `adminGpsMap_${String(entryId || '').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
     }
 
+    normalizeActivityPath(path) {
+        if (!Array.isArray(path)) return [];
+        return path
+            .map((p) => {
+                if (!p || typeof p !== 'object') return null;
+                const lat = Number(p.lat != null ? p.lat : p.latitude);
+                const lng = Number(p.lng != null ? p.lng : (p.longitude != null ? p.longitude : p.lon));
+                if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+                if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+                return { lat, lng, t: p.t || p.timestamp || null };
+            })
+            .filter(Boolean);
+    }
+
     destroyAdminActivityMaps() {
         if (!Array.isArray(this._adminActivityMaps)) return;
-        this._adminActivityMaps.forEach((map) => {
+        this._adminActivityMaps.forEach((entry) => {
             try {
+                const map = entry && entry.map ? entry.map : entry;
                 if (map && typeof map.remove === 'function') map.remove();
             } catch (err) {
                 /* ignore */
@@ -3576,20 +3609,45 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         this._adminActivityMaps = [];
     }
 
+    refitAdminActivityMap(mapDomId) {
+        const found = (this._adminActivityMaps || []).find((m) => m && m.id === mapDomId);
+        if (!found || !found.map || !found.bounds) return;
+        try {
+            found.map.invalidateSize();
+            found.map.fitBounds(found.bounds, { padding: [24, 24] });
+        } catch (err) {
+            console.warn('refitAdminActivityMap failed:', err);
+        }
+    }
+
     renderAdminActivityMaps(activities) {
         this.destroyAdminActivityMaps();
+        this._adminActivityMaps = [];
+
         if (typeof L === 'undefined') {
             console.warn('Leaflet not loaded — admin GPS maps unavailable');
+            (activities || []).forEach((activity) => {
+                const el = document.getElementById(this.adminMapDomId(activity.id));
+                if (el) {
+                    el.innerHTML = '<div style="padding:16px;color:#c62828;font-size:0.9rem;">Map library failed to load. Hard-refresh admin page (Ctrl+F5).</div>';
+                }
+            });
             return;
         }
-        this._adminActivityMaps = [];
+
         (activities || []).forEach((activity) => {
-            const path = Array.isArray(activity.path)
-                ? activity.path.filter((p) => p && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)))
-                : [];
+            const path = this.normalizeActivityPath(activity.path);
             if (path.length < 2) return;
-            const el = document.getElementById(this.adminMapDomId(activity.id));
+            const mapId = this.adminMapDomId(activity.id);
+            const el = document.getElementById(mapId);
             if (!el) return;
+
+            // Avoid double-init if Leaflet left a map on this node
+            if (el._leaflet_id) {
+                el.innerHTML = '';
+                delete el._leaflet_id;
+            }
+
             try {
                 const map = L.map(el, {
                     zoomControl: true,
@@ -3599,7 +3657,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                     maxZoom: 19,
                     attribution: '&copy; OpenStreetMap'
                 }).addTo(map);
-                const latLngs = path.map((p) => [Number(p.lat), Number(p.lng)]);
+                const latLngs = path.map((p) => [p.lat, p.lng]);
                 const line = L.polyline(latLngs, {
                     color: '#0d9488',
                     weight: 5,
@@ -3617,11 +3675,20 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                     fillColor: '#ef5350',
                     fillOpacity: 1
                 }).addTo(map).bindTooltip('End');
-                map.fitBounds(line.getBounds(), { padding: [24, 24] });
-                this._adminActivityMaps.push(map);
-                setTimeout(() => map.invalidateSize(), 120);
+                const bounds = line.getBounds();
+                map.fitBounds(bounds, { padding: [24, 24] });
+                this._adminActivityMaps.push({ id: mapId, map, bounds });
+                [100, 300, 700].forEach((ms) => {
+                    setTimeout(() => {
+                        try {
+                            map.invalidateSize();
+                            map.fitBounds(bounds, { padding: [24, 24] });
+                        } catch (e) { /* ignore */ }
+                    }, ms);
+                });
             } catch (err) {
                 console.warn('Failed to render admin GPS map:', err);
+                el.innerHTML = `<div style="padding:16px;color:#c62828;font-size:0.9rem;">Could not draw map: ${this.escapeHtml(err.message || 'unknown error')}</div>`;
             }
         });
     }
