@@ -173,13 +173,12 @@ public class ActivityTrackingService extends Service implements SensorEventListe
         long dtMs = Math.max(0L, now - lastTickAt);
         lastTickAt = now;
 
-        if ("treadmill".equals(mode) && dtMs > 0 && dtMs < 15000L) {
-            double hours = dtMs / 3600000.0;
-            distanceMeters += treadmillSpeedKmh * 1000.0 * hours;
-        }
-
-        // Prefer step-derived distance when GPS is sparse while locked
-        if ("outdoor".equals(mode) && sessionSteps > 0) {
+        if ("treadmill".equals(mode) && sessionSteps > 0) {
+            // Step-based only — do not trust user-entered treadmill speed
+            double stepMeters = sessionSteps * (1000.0 / 1040.0);
+            distanceMeters = stepMeters;
+        } else if ("outdoor".equals(mode) && sessionSteps > 0) {
+            // Prefer step-derived distance when GPS is sparse while locked
             double stepMeters = sessionSteps * (1000.0 / 1040.0); // ~1040 steps/KM native
             if (stepMeters > distanceMeters) {
                 distanceMeters = stepMeters;

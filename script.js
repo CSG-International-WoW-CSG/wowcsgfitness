@@ -756,44 +756,9 @@ class StepathonApp {
 
  const treadmillSpeedInput = document.getElementById('treadmillSpeedKmh');
  if (treadmillSpeedInput) {
- const min = this.challengeConfig.treadmillSpeedMinKmh;
- const max = this.challengeConfig.treadmillSpeedMaxKmh;
- treadmillSpeedInput.min = String(min);
- treadmillSpeedInput.max = String(max);
- const savedSpeed = parseFloat(localStorage.getItem('treadmillSpeedKmh') || '');
- const initial = this.clampTreadmillSpeedKmh(savedSpeed);
- treadmillSpeedInput.value = String(initial);
- this.stepCounter.treadmillSpeedKmh = initial;
- localStorage.setItem('treadmillSpeedKmh', String(initial));
- const syncSpeed = () => {
- const raw = parseFloat(treadmillSpeedInput.value);
- const clamped = this.clampTreadmillSpeedKmh(raw);
- if (Number.isFinite(raw) && Math.abs(raw - clamped) > 0.05) {
- treadmillSpeedInput.value = String(clamped);
- this.showTreadmillSpeedCapNotice(raw, clamped);
+ // Legacy speed field removed from UI — ignore if still present in old cached HTML
+ treadmillSpeedInput.disabled = true;
  }
- this.stepCounter.treadmillSpeedKmh = clamped;
- localStorage.setItem('treadmillSpeedKmh', String(clamped));
- this.updateTreadmillSpeedPaceLabel(clamped);
- this.highlightTreadmillSpeedPreset(clamped);
- };
- treadmillSpeedInput.addEventListener('change', syncSpeed);
- treadmillSpeedInput.addEventListener('input', syncSpeed);
- this.updateTreadmillSpeedPaceLabel(initial);
- this.highlightTreadmillSpeedPreset(initial);
- }
-
- document.querySelectorAll('#treadmillSpeedPresets .speed-preset-btn').forEach((btn) => {
- btn.addEventListener('click', () => {
- const speed = this.clampTreadmillSpeedKmh(parseFloat(btn.dataset.speed));
- const input = document.getElementById('treadmillSpeedKmh');
- if (input) input.value = String(speed);
- this.stepCounter.treadmillSpeedKmh = speed;
- localStorage.setItem('treadmillSpeedKmh', String(speed));
- this.updateTreadmillSpeedPaceLabel(speed);
- this.highlightTreadmillSpeedPreset(speed);
- });
- });
 
  const savedMode = localStorage.getItem('trackingMode');
  if (savedMode === 'treadmill' || savedMode === 'outdoor') {
@@ -5610,25 +5575,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
     startStepCounter() {
         const mode = this.getTrackingMode();
-        if (mode === 'treadmill') {
-            const speed = this.getTreadmillSpeedKmh();
-            const input = document.getElementById('treadmillSpeedKmh');
-            if (input) input.value = String(speed);
-            this.stepCounter.treadmillSpeedKmh = speed;
-            localStorage.setItem('treadmillSpeedKmh', String(speed));
-            this.updateTreadmillSpeedPaceLabel(speed);
-
-            const walkMax = this.challengeConfig.treadmillSpeedWalkMaxKmh;
-            if (speed > walkMax) {
-                const ok = confirm(
-                    `You set treadmill speed to ${speed.toFixed(1)} km/h (${this.getTreadmillPaceLabel(speed)}).\n\n` +
-                    `Walking is usually 4–6 km/h. Above ${walkMax} km/h is jogging/running pace.\n\n` +
-                    `Distance = speed × time, so a high speed creates a lot of KM quickly.\n\n` +
-                    `Continue with ${speed.toFixed(1)} km/h?`
-                );
-                if (!ok) return;
-            }
-        }
+        // Treadmill: no user speed — distance comes from pedometer/steps only
 
         if (!this.stepCounter.permissionGranted && typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
             this.requestMotionPermission().then(() => {
@@ -5660,7 +5607,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.stepCounter.stepCount = 0;
  this.stepCounter.treadmillDistanceKm = 0;
  this.stepCounter.lastTreadmillTickAt = Date.now();
- this.stepCounter.treadmillSpeedKmh = this.getTreadmillSpeedKmh();
+ this.stepCounter.treadmillSpeedKmh = null;
 
  // Treadmill: slightly more sensitive motion thresholds (phone in pocket / on arm)
  if (mode === 'treadmill') {
@@ -5686,9 +5633,10 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.startNativeTrackingHelpers();
 
  if (mode === 'treadmill') {
- this.updateCounterStatus('Treadmill mode — distance from speed x time + step backup.');
- this.updateCounterHint(`Speed ${this.getTreadmillSpeedKmh().toFixed(1)} km/h (${this.getTreadmillPaceLabel(this.getTreadmillSpeedKmh())}). Keep phone on your body for step backup.`);
- this.showCounterNotification(`Treadmill started at ${this.getTreadmillSpeedKmh().toFixed(1)} km/h.`);
+ this.updateCounterStatus('Treadmill mode — KM from phone steps only (no speed entry).');
+ this.updateCounterHint('Keep the phone on your body. Distance = steps ÷ steps-per-KM. Fake treadmill speeds are not allowed.');
+ this.showCounterNotification('Treadmill started. Walk/run with phone on you — steps drive KM.');
+ this.updateTreadmillSpeedPaceLabel(null);
  } else {
  this.updateCounterStatus('Tracking your route — works with screen off when possible.');
  this.updateCounterHint('Keep the app open (Home Screen recommended). Tracking continues while locked when the OS allows.');
@@ -5815,10 +5763,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (!Number.isFinite(serviceKm) || serviceKm <= 0) return;
 
  if (this.stepCounter.trackingMode === 'treadmill') {
- this.stepCounter.treadmillDistanceKm = Math.max(
- this.stepCounter.treadmillDistanceKm || 0,
- serviceKm
- );
+ // Ignore native speed×time KM; keep step-derived distance only
+ this.stepCounter.treadmillDistanceKm = (this.stepCounter.stepCount || 0) / this.getStepsPerKmForTracking();
  } else {
  // Outdoor: merge service GPS/step KM without shrinking local GPS track
  this.stepCounter.distanceKm = Math.max(this.stepCounter.distanceKm || 0, serviceKm);
@@ -5883,32 +5829,42 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  updateTreadmillSpeedPaceLabel(speedKmh) {
  const el = document.getElementById('treadmillSpeedPace');
  if (!el) return;
- const speed = this.clampTreadmillSpeedKmh(speedKmh);
- const walkMax = this.challengeConfig.treadmillSpeedWalkMaxKmh;
- el.textContent = `${this.getTreadmillPaceLabel(speed)} · ${speed.toFixed(1)} km/h`;
- el.classList.toggle('is-run-pace', speed > walkMax);
+ // Derived pace only (from steps + elapsed time) — never a user input
+ const dist = this.getTrackedDistanceKm();
+ const sec = this.getSessionDurationSec ? this.getSessionDurationSec() : 0;
+ if (dist > 0.01 && sec > 30) {
+ const pace = dist / (sec / 3600);
+ el.textContent = `Estimated pace from steps: ${pace.toFixed(1)} km/h · ${this.getTreadmillPaceLabel(pace)}`;
+ el.classList.toggle('is-run-pace', pace > this.challengeConfig.treadmillSpeedWalkMaxKmh);
+ } else {
+ el.textContent = 'Step-based distance · keep phone on your body';
+ el.classList.remove('is-run-pace');
+ }
  }
 
- highlightTreadmillSpeedPreset(speedKmh) {
- const speed = this.clampTreadmillSpeedKmh(speedKmh);
- document.querySelectorAll('#treadmillSpeedPresets .speed-preset-btn').forEach((btn) => {
- const preset = parseFloat(btn.dataset.speed);
- btn.classList.toggle('active', Number.isFinite(preset) && Math.abs(preset - speed) < 0.05);
- });
+ /**
+ * Treadmill no longer credits KM from user speed × time.
+ * Kept as a tick hook so unlock/sync still refreshes the derived pace label.
+ */
+ accumulateTreadmillDistance() {
+ if (!this.stepCounter.isRunning || this.stepCounter.trackingMode !== 'treadmill') return;
+ this.stepCounter.lastTreadmillTickAt = Date.now();
+ // Distance is step-derived via getTrackedDistanceKm(); mirror into treadmillDistanceKm for UI/session
+ this.stepCounter.treadmillDistanceKm = (this.stepCounter.stepCount || 0) / this.getStepsPerKmForTracking();
+ const sec = this.getSessionDurationSec ? this.getSessionDurationSec() : 0;
+ if (this.stepCounter.treadmillDistanceKm > 0.01 && sec > 30) {
+ this.stepCounter.treadmillSpeedKmh = this.stepCounter.treadmillDistanceKm / (sec / 3600);
+ } else {
+ this.stepCounter.treadmillSpeedKmh = null;
+ }
+ this.updateTreadmillSpeedPaceLabel(this.stepCounter.treadmillSpeedKmh);
  }
 
- showTreadmillSpeedCapNotice(raw, clamped) {
- const max = this.challengeConfig.treadmillSpeedMaxKmh;
- const min = this.challengeConfig.treadmillSpeedMinKmh;
- if (raw > max) {
- alert(
- `Treadmill speed capped at ${max} km/h.\n\n` +
- `${raw} km/h is not realistic for this challenge (that is near elite race pace).\n` +
- `Typical walk: 4–6 km/h · Jog: 7–10 km/h · Max allowed: ${max} km/h.`
- );
- } else if (raw < min) {
- alert(`Treadmill speed must be at least ${min} km/h. Using ${clamped} km/h.`);
- }
+ /** After unlock in treadmill mode, refresh step-based KM (no speed × time credit) */
+ catchUpTreadmillAfterUnlock() {
+ if (!this.stepCounter.isRunning || this.stepCounter.trackingMode !== 'treadmill') return;
+ this.stepCounter.lastTreadmillTickAt = Date.now();
+ this.accumulateTreadmillDistance();
  }
 
  setTrackingMode(mode, silent = false) {
@@ -5928,7 +5884,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  });
  this.applyTrackingModeUi();
  if (mode === 'treadmill') {
- this.updateTreadmillSpeedPaceLabel(this.getTreadmillSpeedKmh());
+ this.updateTreadmillSpeedPaceLabel(null);
  }
  }
 
@@ -5944,58 +5900,11 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  mapWrap.style.display = mode === 'treadmill' ? 'none' : 'block';
  }
  if (distLabel) {
- distLabel.textContent = mode === 'treadmill' ? 'Treadmill distance' : 'GPS distance';
+ distLabel.textContent = mode === 'treadmill' ? 'Step distance' : 'GPS distance';
  }
  if (modeRow) {
  modeRow.classList.toggle('is-locked', !!this.stepCounter.isRunning || !!this.stepCounter.isPaused);
  }
- }
-
- accumulateTreadmillDistance() {
- if (!this.stepCounter.isRunning || this.stepCounter.trackingMode !== 'treadmill') return;
- const now = Date.now();
- const last = this.stepCounter.lastTreadmillTickAt || now;
- const dtSec = Math.max(0, (now - last) / 1000);
- if (dtSec <= 0) return;
-
- const isHidden = document.visibilityState !== 'visible';
- // While locked, browsers throttle timers (often 30s–minutes). Credit that time
- // instead of dropping gaps > 30s (that was why treadmill stalled when locked).
- let creditSec = dtSec;
- if (isHidden) {
- creditSec = Math.min(dtSec, 2 * 3600);
- } else if (dtSec > 30) {
- // Large gap while visible → wait for unlock catch-up path
- return;
- }
-
- this.stepCounter.lastTreadmillTickAt = now;
- const speed = this.getTreadmillSpeedKmh();
- this.stepCounter.treadmillSpeedKmh = speed;
- this.stepCounter.treadmillDistanceKm += (speed / 3600) * creditSec;
- if (isHidden) {
- this.syncStepsFromDistance(false);
- }
- }
-
- /** After unlock in treadmill mode, credit missed time at current speed (capped) */
- catchUpTreadmillAfterUnlock() {
- if (!this.stepCounter.isRunning || this.stepCounter.trackingMode !== 'treadmill') return;
- const now = Date.now();
- const last = this.stepCounter.lastTreadmillTickAt || this.stepCounter.startTime || now;
- const dtSec = Math.max(0, (now - last) / 1000);
- // Cap catch-up at 2 hours to avoid absurd values if session was abandoned
- const creditSec = Math.min(dtSec, 2 * 3600);
- if (creditSec < 2) {
- this.stepCounter.lastTreadmillTickAt = now;
- return;
- }
- const speed = this.getTreadmillSpeedKmh();
- this.stepCounter.treadmillDistanceKm += (speed / 3600) * creditSec;
- this.stepCounter.lastTreadmillTickAt = now;
- this.syncStepsFromDistance(true);
- this.updateStepCounterDisplay();
- this.persistActivitySession(true);
  }
 
  bindMotionListener() {
@@ -6461,8 +6370,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const stepKm = (this.stepCounter.stepCount || 0) / stepsPerKm;
 
  if (mode === 'treadmill') {
- const speedKm = this.stepCounter.treadmillDistanceKm || 0;
- return Math.max(speedKm, stepKm);
+ // Steps only — never trust user-entered treadmill speed
+ return Number(stepKm.toFixed(3));
  }
 
  const gpsKm = (this.stepCounter.distanceKm || 0) + (this.stepCounter.pendingSegmentKm || 0);
@@ -7424,15 +7333,24 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         }
 
  this.accumulateTreadmillDistance();
- const distanceKm = this.getTrackedDistanceKm();
- const motionSteps = this.stepCounter.stepCount || 0;
- const estimatedSteps = Math.round(distanceKm * this.getStepsPerKmForTracking());
- const steps = Math.max(motionSteps, estimatedSteps);
  const mode = this.stepCounter.trackingMode || 'outdoor';
+ const motionSteps = this.stepCounter.stepCount || 0;
+ const stepsPerKm = this.getStepsPerKmForTracking();
+ // Treadmill: steps are the only source of truth (prevents fake speed farming)
+ let distanceKm;
+ let steps;
+ if (mode === 'treadmill') {
+ steps = motionSteps;
+ distanceKm = Number((steps / stepsPerKm).toFixed(3));
+ } else {
+ distanceKm = this.getTrackedDistanceKm();
+ const estimatedSteps = Math.round(distanceKm * stepsPerKm);
+ steps = Math.max(motionSteps, estimatedSteps);
+ }
 
  if (distanceKm <= 0 && steps <= 0) {
  alert(mode === 'treadmill'
- ? 'No treadmill distance yet. Set speed, Start Activity, walk/run, then Stop and Save.'
+ ? 'No treadmill steps yet. Start Activity, keep the phone on your body, walk/run, then Stop and Save.'
  : 'No distance recorded yet. Start Activity, move with GPS on, then Stop and Save.');
             return;
         }
@@ -7451,7 +7369,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  caloriesBurned,
  bodyWeightKg: this.getBodyWeightKg(),
  trackingMode: mode,
- treadmillSpeedKmh: mode === 'treadmill' ? this.getTreadmillSpeedKmh() : null,
+ treadmillSpeedKmh: mode === 'treadmill' ? (this.stepCounter.treadmillSpeedKmh || null) : null,
  path: mode === 'treadmill' ? [] : (this.stepCounter.path || []).map((p) => ({ lat: p.lat, lng: p.lng, t: p.t }))
  });
  }
@@ -7534,7 +7452,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             lastModifiedAt: null,
  notes: fromStepCounter
  ? ((trackMeta && trackMeta.trackingMode === 'treadmill')
- ? `Treadmill activity: ${distanceKm.toFixed(2)} KM at ${trackMeta.treadmillSpeedKmh || '?'} km/h - ${caloriesBurned} kcal`
+ ? `Treadmill activity (step-based): ${distanceKm.toFixed(2)} KM / ${steps} steps - ${caloriesBurned} kcal`
  : `In-app GPS activity: ${distanceKm.toFixed(2)} KM - ${caloriesBurned} kcal`)
  : null,
  source: fromStepCounter
