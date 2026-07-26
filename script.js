@@ -134,7 +134,7 @@ class StepathonApp {
  this.restoreAdminSessionIfAuthorized();
         }
 
-        // Keep participant cache fresh for admin/user lists
+        // Keep participant + entry caches fresh (entries must sync or rejected ranks stick)
         this.syncParticipantsFromFirebase();
 
         if (window.location.pathname.includes('admin.html')) {
@@ -3246,15 +3246,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         // Get all activities for this user
         this.stepEntries = this.loadStepEntries();
         const actualUserId = user.id || user.employeeId || searchId;
-        const userActivities = this.stepEntries.filter(entry => {
-            const entryUserId = entry.userId || entry.userId;
-            return entryUserId === actualUserId || 
-                   entryUserId === user.id || 
-                   entryUserId === user.employeeId ||
-                   String(entryUserId) === String(actualUserId) ||
-                   String(entryUserId) === String(user.id) ||
-                   String(entryUserId) === String(user.employeeId);
-        }).sort((a, b) => new Date(b.date) - new Date(a.date));
+        const userActivities = this.stepEntries.filter((entry) =>
+            this.entryBelongsToParticipant(entry, user)
+        ).sort((a, b) => new Date(b.date) - new Date(a.date));
         
         console.log('User activities found:', userActivities.length, 'for user:', actualUserId);
 
@@ -3263,16 +3257,18 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         
         if (!modal || !content) return;
 
+        // Leaderboard-aligned totals (approved only)
+        this.recalculateParticipantTotalsFromApproved(user);
         const totalSteps = user.totalSteps || 0;
         const dailySteps = user.dailySteps || {};
         const dailyStepsCount = Object.keys(dailySteps).length;
         const streak = this.calculateStreak(user);
         
-        // Calculate activity statistics
-        const totalActivitySteps = userActivities.reduce((sum, a) => sum + (a.steps || 0), 0);
-        const totalActivityKm = userActivities.reduce((sum, a) => sum + (Number(a.distanceKm) || 0), 0);
-        const totalActivityCalories = userActivities.reduce((sum, a) => sum + (Number(a.caloriesBurned) || 0), 0);
-        const approvedActivities = userActivities.filter(a => a.status === 'approved').length;
+        const approvedList = userActivities.filter((a) => a.status === 'approved');
+        const totalActivitySteps = approvedList.reduce((sum, a) => sum + (a.steps || 0), 0);
+        const totalActivityKm = approvedList.reduce((sum, a) => sum + (Number(a.distanceKm) || 0), 0);
+        const totalActivityCalories = approvedList.reduce((sum, a) => sum + (Number(a.caloriesBurned) || 0), 0);
+        const approvedActivities = approvedList.length;
         const pendingActivities = userActivities.filter(a => !a.status || a.status === 'pending').length;
         const rejectedActivities = userActivities.filter(a => a.status === 'rejected').length;
         const outdoorCount = userActivities.filter(a => (a.trackingMode || '') === 'outdoor' || a.source === 'gps-counter').length;
@@ -3304,15 +3300,15 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                         </div>
                         <div class="stat-box">
                             <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #2196f3;">${totalActivitySteps.toLocaleString()}</div>
-                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">Total Steps</div>
+                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">Approved Steps</div>
                         </div>
                         <div class="stat-box">
                             <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #00897b;">${totalActivityKm.toFixed(2)}</div>
-                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">Total KM</div>
+                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">Approved KM</div>
                         </div>
                         <div class="stat-box">
                             <div class="stat-value" style="font-size: 1.5rem; font-weight: bold; color: #e65100;">${Math.round(totalActivityCalories).toLocaleString()}</div>
-                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">Calories</div>
+                            <div class="stat-label" style="font-size: 0.85rem; color: #666;">Approved Calories</div>
                         </div>
                         <div class="stat-box">
                             <div class="stat-value" style="font-size: 1.1rem; font-weight: bold; color: #5e35b1;">${outdoorCount} / ${treadmillCount}</div>
@@ -3336,6 +3332,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 const durationLabel = this.formatDurationClock(activity.durationSec);
                 const pathPoints = Array.isArray(activity.path) ? activity.path.length : 0;
                 const speed = activity.treadmillSpeedKmh != null ? Number(activity.treadmillSpeedKmh) : null;
+                const mapDomId = this.adminMapDomId(activity.id);
                 const safeActivityId = this.escapeHtml(activity.id || '');
                 const safeUserIdAttr = this.escapeHtml(String(actualUserId));
                 
@@ -3411,6 +3408,21 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                                 </div>
                             ` : ''}
                         </div>
+
+                        ${pathPoints > 1 ? `
+                            <div class="admin-gps-map-section" style="margin: 12px 0;">
+                                <strong style="color: #003366; display: block; margin-bottom: 8px;">GPS Route Map</strong>
+                                <div id="${mapDomId}" class="admin-gps-map" style="height: 240px; width: 100%; border-radius: 8px; border: 1px solid #cfd8dc; background: #e8eef3;"></div>
+                            </div>
+                        ` : pathPoints === 1 ? `
+                            <div class="admin-gps-map-section" style="margin: 12px 0; padding: 10px; background: #fff8e1; border-radius: 6px; color: #6d4c41; font-size: 0.9rem;">
+                                Only 1 GPS point recorded — not enough to draw a route.
+                            </div>
+                        ` : (activity.trackingMode === 'outdoor' || activity.source === 'gps-counter') ? `
+                            <div class="admin-gps-map-section" style="margin: 12px 0; padding: 10px; background: #f5f5f5; border-radius: 6px; color: #666; font-size: 0.9rem;">
+                                No GPS path saved for this outdoor activity.
+                            </div>
+                        ` : ''}
                         
                         ${activity.screenshot ? `
                             <div class="screenshot-section" style="margin: 12px 0; padding: 12px; background: #f8f9fa; border-radius: 6px;">
@@ -3544,6 +3556,74 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         `;
 
         modal.style.display = 'flex';
+        // Draw GPS routes after the modal DOM is visible (Leaflet needs size)
+        setTimeout(() => this.renderAdminActivityMaps(userActivities), 80);
+    }
+
+    adminMapDomId(entryId) {
+        return `adminGpsMap_${String(entryId || '').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    }
+
+    destroyAdminActivityMaps() {
+        if (!Array.isArray(this._adminActivityMaps)) return;
+        this._adminActivityMaps.forEach((map) => {
+            try {
+                if (map && typeof map.remove === 'function') map.remove();
+            } catch (err) {
+                /* ignore */
+            }
+        });
+        this._adminActivityMaps = [];
+    }
+
+    renderAdminActivityMaps(activities) {
+        this.destroyAdminActivityMaps();
+        if (typeof L === 'undefined') {
+            console.warn('Leaflet not loaded — admin GPS maps unavailable');
+            return;
+        }
+        this._adminActivityMaps = [];
+        (activities || []).forEach((activity) => {
+            const path = Array.isArray(activity.path)
+                ? activity.path.filter((p) => p && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)))
+                : [];
+            if (path.length < 2) return;
+            const el = document.getElementById(this.adminMapDomId(activity.id));
+            if (!el) return;
+            try {
+                const map = L.map(el, {
+                    zoomControl: true,
+                    attributionControl: true
+                });
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '&copy; OpenStreetMap'
+                }).addTo(map);
+                const latLngs = path.map((p) => [Number(p.lat), Number(p.lng)]);
+                const line = L.polyline(latLngs, {
+                    color: '#0d9488',
+                    weight: 5,
+                    opacity: 0.9
+                }).addTo(map);
+                L.circleMarker(latLngs[0], {
+                    radius: 6,
+                    color: '#1565c0',
+                    fillColor: '#42a5f5',
+                    fillOpacity: 1
+                }).addTo(map).bindTooltip('Start');
+                L.circleMarker(latLngs[latLngs.length - 1], {
+                    radius: 6,
+                    color: '#c62828',
+                    fillColor: '#ef5350',
+                    fillOpacity: 1
+                }).addTo(map).bindTooltip('End');
+                map.fitBounds(line.getBounds(), { padding: [24, 24] });
+                this._adminActivityMaps.push(map);
+                setTimeout(() => map.invalidateSize(), 120);
+            } catch (err) {
+                console.warn('Failed to render admin GPS map:', err);
+            }
+        });
     }
 
     saveUserDetails(userId) {
@@ -3792,7 +3872,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
  }
 
-    deleteUserActivity(activityId, userId) {
+    async deleteUserActivity(activityId, userId) {
         if (!this.requireAdmin()) return;
         if (!confirm('Are you sure you want to delete this activity entry?')) {
             return;
@@ -3800,28 +3880,31 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
         this.stepEntries = this.loadStepEntries();
         const activity = this.stepEntries.find(e => e.id === activityId);
-        
+        let user = null;
+
         if (activity) {
-            const user = this.findParticipantForEntry(activity) ||
-                this.participants.find(p => (p.id === userId) || (p.employeeId === userId));
-            if (user && (activity.status || 'pending') === 'approved') {
-                this.applyEntryContribution(user, activity, -1);
-                this.saveParticipantsCache();
-                this.syncParticipantToFirebase(user);
-            }
+            user = this.findParticipantForEntry(activity) ||
+                this.participants.find(p => (p.id === userId) || (p.employeeId === userId) || (p.uid === userId));
 
             this.stepEntries = this.stepEntries.filter(e => e.id !== activityId);
             this.saveStepEntries();
-            this.deleteStepEntryFromFirebase(activityId);
+            await this.deleteStepEntryFromFirebase(activityId);
+            await this.removeActivityFeedForEntry(activityId);
+
+            if (user) {
+                this.recalculateParticipantTotalsFromApproved(user);
+                this.saveParticipantsCache();
+                await this.syncParticipantToFirebase(user);
+            }
         }
 
+        await this.refreshSurfacesAfterAdminActivityChange(user);
         alert('Activity deleted successfully!');
         this.viewUserDetails(userId);
-        this.updateAdminDashboard();
-        this.updateLeaderboard();
     }
 
     closeUserDetailsModal() {
+        this.destroyAdminActivityMaps();
         const modal = document.getElementById('userDetailsModal');
         if (modal) {
             modal.style.display = 'none';
@@ -4038,7 +4121,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         return div.innerHTML;
     }
 
-    validateEntry(entryId, status, refreshUserId = null) {
+    async validateEntry(entryId, status, refreshUserId = null) {
         if (!this.requireAdmin()) {
             return false;
         }
@@ -4059,51 +4142,37 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         const previousStatus = entry.status || 'pending';
         const participant = this.findParticipantForEntry(entry);
 
-        // Remove totals if previously approved
-        if (previousStatus === 'approved' && participant) {
-            this.applyEntryContribution(participant, entry, -1);
-        }
-
         entry.status = status;
         entry.validatedBy = 'Admin';
         entry.validatedAt = new Date().toISOString();
         entry.notes = notes || null;
 
-        // Add totals if newly approved
-        if (status === 'approved' && participant) {
-            this.applyEntryContribution(participant, entry, 1);
+        if (participant) {
+            // Rebuild from approved entries only (self-heals stale rejected totals)
+            this.recalculateParticipantTotalsFromApproved(participant);
 
             const activity = (participant.activities || []).find(a => a.entryId === entryId);
             if (activity) {
-                if (previousStatus === 'rejected') {
-                    activity.message = `Activity approved after rejection: ${(entry.steps || 0).toLocaleString()} steps / ${Number(entry.distanceKm || 0).toFixed(2)} km`;
-                } else {
-                    activity.message = `Activity approved: ${(entry.steps || 0).toLocaleString()} steps / ${Number(entry.distanceKm || 0).toFixed(2)} km`;
+                if (status === 'approved') {
+                    activity.message = previousStatus === 'rejected'
+                        ? `Activity approved after rejection: ${(entry.steps || 0).toLocaleString()} steps / ${Number(entry.distanceKm || 0).toFixed(2)} km`
+                        : `Activity approved: ${(entry.steps || 0).toLocaleString()} steps / ${Number(entry.distanceKm || 0).toFixed(2)} km`;
+                } else if (status === 'rejected') {
+                    activity.message = `Activity rejected: ${(entry.steps || 0).toLocaleString()} steps / ${Number(entry.distanceKm || 0).toFixed(2)} km`;
                 }
-            }
-            this.saveParticipantsCache();
-        } else if (status === 'rejected' && participant) {
-            const activity = (participant.activities || []).find(a => a.entryId === entryId);
-            if (activity) {
-                activity.message = `Activity rejected: ${(entry.steps || 0).toLocaleString()} steps / ${Number(entry.distanceKm || 0).toFixed(2)} km`;
             }
             this.saveParticipantsCache();
         }
 
         this.saveStepEntries();
-        this.upsertStepEntryInFirebase(entry);
+        await this.upsertStepEntryInFirebase(entry);
         if (this.firebaseEnabled && participant) {
-            this.syncParticipantToFirebase(participant);
+            await this.syncParticipantToFirebase(participant);
         }
-        this.updateAdminDashboard();
-        this.updateLeaderboard();
-        
+        await this.syncActivityFeedForEntry(entry);
+        await this.refreshSurfacesAfterAdminActivityChange(participant);
+
         alert(`Entry ${status} successfully!`);
-        if (status === 'rejected') {
-            this.setFeedVisibilityForEntry(entryId, false);
-        } else if (status === 'approved') {
-            this.setFeedVisibilityForEntry(entryId, true);
-        }
         if (refreshUserId) {
             this.viewUserDetails(refreshUserId);
         }
@@ -4191,7 +4260,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         });
     }
 
-    saveEditedActivityFromForm() {
+    async saveEditedActivityFromForm() {
         if (!this.requireAdmin()) return;
         const ctx = this._editActivityContext || {};
         const entryId = document.getElementById('editActivityId')?.value || ctx.entryId;
@@ -4239,7 +4308,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             treadmillSpeedKmh = this.clampTreadmillSpeedKmh(treadmillSpeedKmh);
         }
 
-        this.saveEditedActivityDetails({
+        await this.saveEditedActivityDetails({
             entryId,
             steps,
             distanceKm: Number(distanceKm.toFixed(3)),
@@ -4253,7 +4322,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         });
     }
 
-    saveEditedActivityDetails({
+    async saveEditedActivityDetails({
         entryId,
         steps,
         distanceKm,
@@ -4273,18 +4342,6 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
         const participant = this.findParticipantForEntry(entry);
         const previousStatus = entry.status || 'pending';
-        const previousSnapshot = {
-            steps: entry.steps,
-            distanceKm: entry.distanceKm,
-            caloriesBurned: entry.caloriesBurned,
-            durationSec: entry.durationSec,
-            date: entry.date
-        };
-
-        // Remove old approved contribution before mutating fields
-        if (previousStatus === 'approved' && participant) {
-            this.applyEntryContribution(participant, previousSnapshot, -1);
-        }
 
         entry.steps = steps;
         entry.distanceKm = Number(Number(distanceKm).toFixed(3));
@@ -4304,17 +4361,15 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         entry.status = status || previousStatus;
 
         if (entry.status === 'approved') {
-            entry.validatedBy = entry.validatedBy || 'Admin';
-            entry.validatedAt = entry.validatedAt || new Date().toISOString();
-            if (participant) {
-                this.applyEntryContribution(participant, entry, 1);
-            }
+            entry.validatedBy = 'Admin';
+            entry.validatedAt = new Date().toISOString();
         } else if (previousStatus === 'approved' && entry.status !== 'approved') {
             entry.validatedBy = 'Admin';
             entry.validatedAt = new Date().toISOString();
         }
 
         if (participant) {
+            this.recalculateParticipantTotalsFromApproved(participant);
             const activity = (participant.activities || []).find(a => a.entryId === entryId);
             if (activity) {
                 activity.steps = entry.steps;
@@ -4326,12 +4381,13 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         }
 
         this.saveStepEntries();
-        this.upsertStepEntryInFirebase(entry);
+        await this.upsertStepEntryInFirebase(entry);
         if (this.firebaseEnabled && participant) {
-            this.syncParticipantToFirebase(participant);
+            await this.syncParticipantToFirebase(participant);
         }
-        this.updateAdminDashboard();
-        this.updateLeaderboard();
+        await this.syncActivityFeedForEntry(entry);
+        await this.refreshSurfacesAfterAdminActivityChange(participant);
+
         this.closeEditActivityModal();
         alert('Activity details updated successfully.');
         if (refreshUserId) {
@@ -4576,12 +4632,64 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  findParticipantForEntry(entry) {
  if (!entry) return null;
  const uid = entry.userId;
+ const authUid = entry.userUid;
  return this.participants.find((p) =>
- p.id === uid ||
- p.employeeId === uid ||
- String(p.id) === String(uid) ||
- String(p.employeeId) === String(uid)
+ (uid && (p.id === uid || p.employeeId === uid || String(p.id) === String(uid) || String(p.employeeId) === String(uid))) ||
+ (authUid && (p.uid === authUid || String(p.uid) === String(authUid)))
  ) || null;
+ }
+
+ entryBelongsToParticipant(entry, participant) {
+ if (!entry || !participant) return false;
+ const ids = [
+ participant.id,
+ participant.employeeId,
+ participant.uid
+ ].filter((v) => v != null && v !== '').map((v) => String(v));
+ const entryIds = [
+ entry.userId,
+ entry.userUid,
+ entry.userEmployeeId
+ ].filter((v) => v != null && v !== '').map((v) => String(v));
+ if (entryIds.some((id) => ids.includes(id))) return true;
+
+ const pEmail = String(participant.email || participant.emailId || '').toLowerCase().trim();
+ const eEmail = String(entry.userEmail || entry.email || '').toLowerCase().trim();
+ return !!(pEmail && eEmail && pEmail === eEmail);
+ }
+
+ isApprovedEntry(entry) {
+ return entry && (entry.status || 'pending') === 'approved';
+ }
+
+ /**
+ * Rebuild participant totals from approved step entries only.
+ * Fixes leaderboard drift when rejected/pending entries were still counted.
+ */
+ recalculateParticipantTotalsFromApproved(participant) {
+ if (!participant) return;
+ participant.totalSteps = 0;
+ participant.totalDistanceKm = 0;
+ participant.totalCalories = 0;
+ participant.dailySteps = {};
+ participant.dailyDistanceKm = {};
+ participant.dailyCalories = {};
+ participant.dailyStats = {};
+
+ const entries = (this.stepEntries || []).filter(
+ (e) => this.isApprovedEntry(e) && this.entryBelongsToParticipant(e, participant)
+ );
+ for (const entry of entries) {
+ this.applyEntryContribution(participant, entry, 1);
+ }
+ }
+
+ recalculateAllParticipantTotalsFromApproved() {
+ if (!Array.isArray(this.stepEntries)) {
+ this.stepEntries = this.loadStepEntries();
+ }
+ (this.participants || []).forEach((p) => this.recalculateParticipantTotalsFromApproved(p));
+ this.saveParticipantsCache();
  }
 
  /**
@@ -4645,45 +4753,53 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  /**
- * Build per-day leaderboard rows: completed finishers first (shortest time),
- * then in-progress by distance.
+ * Build per-day leaderboard from APPROVED step entries only.
+ * Do not trust participant.dailyStats — those can stay stale after admin rejection.
  */
  getDayLeaderboardRows(dayNum) {
  const goalKm = this.challengeConfig.dayGoalsKm[dayNum - 1] || dayNum;
- const goalSteps = goalKm * (this.challengeConfig.stepsPerKm || 1300);
- const dayDate = this.getChallengeDayDate(dayNum);
- const dateKey = dayDate.toDateString();
+ const dateKey = this.getChallengeDayDate(dayNum).toDateString();
+ const byKey = new Map();
 
- return this.participants
- .map((p) => {
- const stats = p.dailyStats && p.dailyStats[dateKey] ? p.dailyStats[dateKey] : null;
- const steps = stats && typeof stats.steps === 'number'
- ? stats.steps
- : (p.dailySteps && p.dailySteps[dateKey]) || 0;
- const distanceKm = stats && typeof stats.distanceKm === 'number'
- ? stats.distanceKm
- : (p.dailyDistanceKm && p.dailyDistanceKm[dateKey])
- || (steps / (this.challengeConfig.stepsPerKm || 1300));
- const completed = stats && typeof stats.completed === 'boolean'
- ? stats.completed
- : (distanceKm >= goalKm - 0.01 || steps >= goalSteps);
- let durationSec = null;
- if (stats) {
- if (stats.completed && stats.completionDurationSec != null) {
- durationSec = stats.completionDurationSec;
- } else if (stats.durationSec != null) {
- durationSec = stats.durationSec;
+ (this.stepEntries || []).forEach((entry) => {
+ if (!this.isApprovedEntry(entry)) return;
+ let entryDateKey;
+ try {
+ entryDateKey = new Date(entry.date).toDateString();
+ } catch (err) {
+ return;
  }
- }
- return {
- name: p.name,
- department: p.department,
- steps,
- distanceKm: Number(distanceKm) || 0,
- completed: !!completed,
- durationSec,
+ if (entryDateKey !== dateKey) return;
+
+ const participant = this.findParticipantForEntry(entry);
+ if (!participant) return;
+ const key = String(
+ participant.uid || participant.id || participant.employeeId || participant.email || participant.name
+ );
+ const row = byKey.get(key) || {
+ name: participant.name,
+ department: participant.department,
+ steps: 0,
+ distanceKm: 0,
+ durationSec: 0,
+ completed: false,
  goalKm,
  dateKey
+ };
+ row.steps += Number(entry.steps) || 0;
+ row.distanceKm = Number((row.distanceKm + (Number(entry.distanceKm) || 0)).toFixed(3));
+ row.durationSec += Number(entry.durationSec) || 0;
+ byKey.set(key, row);
+ });
+
+ return Array.from(byKey.values())
+ .map((row) => {
+ const completed = row.distanceKm >= (goalKm - 0.01);
+ return {
+ ...row,
+ completed,
+ durationSec: completed ? row.durationSec : (row.durationSec || null),
+ goalKm
  };
  })
  .filter((row) => row.steps > 0 || row.distanceKm > 0.005)
@@ -4722,7 +4838,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
  }
 
- updateLeaderboard(filter) {
+ async updateLeaderboard(filter) {
  if (!filter) {
  const active = document.querySelector('.filter-btn.active, .day-filter-btn.active');
  filter = (active && active.dataset.filter) || 'total';
@@ -4732,6 +4848,14 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         list.innerHTML = '';
  this.updateLeaderboardSubtitle(filter);
 
+ // Always refresh entries from Firebase so rejected status wins over local cache
+ if (this.firebaseEnabled) {
+ await this.syncStepEntriesFromFirebase();
+ } else {
+ this.stepEntries = this.loadStepEntries();
+ }
+ this.recalculateAllParticipantTotalsFromApproved();
+
         let sorted = [];
  const dayMatch = String(filter).match(/^day-(\d+)$/);
 
@@ -4739,7 +4863,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const dayNum = parseInt(dayMatch[1], 10);
  sorted = this.getDayLeaderboardRows(dayNum);
  if (sorted.length === 0) {
- list.innerHTML = `<div class="leaderboard-item"><div class="rank">-</div><div class="name">No activity for Day ${dayNum} yet</div><div class="steps">Be the first!</div></div>`;
+ list.innerHTML = `<div class="leaderboard-item"><div class="rank">-</div><div class="name">No approved finishers for Day ${dayNum} yet</div><div class="steps">Be the first!</div></div>`;
  return;
  }
 
@@ -4754,7 +4878,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  : `${Math.min(100, Math.round((participant.distanceKm / participant.goalKm) * 100))}% of ${participant.goalKm} KM`;
  item.innerHTML = `
  <div class="rank">${index + 1}</div>
- <div class="name">${participant.name}${participant.department ? ` (${participant.department})` : ''}${participant.completed && index === 0 ? ' <span class="day-winner-tag">Winner</span>' : ''}<div class="lb-detail">${detail}</div></div>
+ <div class="name">${this.escapeHtml(participant.name)}${participant.department ? ` (${this.escapeHtml(participant.department)})` : ''}${participant.completed && index === 0 ? ' <span class="day-winner-tag">Winner</span>' : ''}<div class="lb-detail">${detail}</div></div>
  <div class="steps">${status}</div>
  `;
  list.appendChild(item);
@@ -4771,7 +4895,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             sorted = [...this.participants]
                 .map(p => ({
                     ...p,
-                    todaySteps: p.dailySteps[today] || 0
+                    todaySteps: (p.dailySteps && p.dailySteps[today]) || 0
                 }))
                 .sort((a, b) => b.todaySteps - a.todaySteps);
         } else if (filter === 'avg') {
@@ -4786,8 +4910,15 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 .sort((a, b) => b.avgSteps - a.avgSteps);
         }
 
+        // Hide people with zero approved activity on total/today boards
+        if (filter === 'total') {
+            sorted = sorted.filter((p) => (p.totalSteps || 0) > 0 || (p.totalDistanceKm || 0) > 0.005);
+        } else if (filter === 'today') {
+            sorted = sorted.filter((p) => (p.todaySteps || 0) > 0);
+        }
+
         if (sorted.length === 0) {
-            list.innerHTML = '<div class="leaderboard-item"><div class="rank">-</div><div class="name">No participants yet</div><div class="steps">0 steps</div></div>';
+            list.innerHTML = '<div class="leaderboard-item"><div class="rank">-</div><div class="name">No approved activity yet</div><div class="steps">0 steps</div></div>';
             return;
         }
 
@@ -5113,9 +5244,11 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.participants = this.filterCurrentSeasonParticipants(
  snapshot.docs.map((doc) => this.stripSecretsFromParticipant(doc.data()))
  );
-            this.saveParticipantsCache();
+ // Always refresh entries first — local cache can still say "approved" after admin reject
+ await this.syncStepEntriesFromFirebase();
+ this.recalculateAllParticipantTotalsFromApproved();
             if (!window.location.pathname.includes('admin.html')) {
-                this.updateLeaderboard();
+                await this.updateLeaderboard();
             }
         } catch (error) {
             console.warn('Failed to sync participants from Firebase:', error);
@@ -7705,6 +7838,92 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         return post;
     }
 
+    /**
+     * Keep activityFeed posts in sync when admin edits/validates an entry.
+     * Updates denormalized stats + visibility so leaderboard-adjacent feed stays accurate.
+     */
+    async syncActivityFeedForEntry(entry) {
+        if (!this.firebaseEnabled || !this.db || !entry || !entry.id) return;
+        const status = entry.status || 'pending';
+        const visible = status === 'approved';
+        try {
+            const snap = await this.activityFeedCol()
+                .where('entryId', '==', entry.id)
+                .where('season', '==', this.dataSeason)
+                .limit(10)
+                .get();
+            if (snap.empty) return;
+
+            const patch = {
+                steps: entry.steps || 0,
+                distanceKm: Number(entry.distanceKm || 0),
+                caloriesBurned: Number(entry.caloriesBurned || 0),
+                durationSec: entry.durationSec == null ? null : Number(entry.durationSec),
+                trackingMode: entry.trackingMode || null,
+                source: entry.source || null,
+                date: entry.date || null,
+                userName: entry.userName || null,
+                visible,
+                lastSyncedAt: new Date().toISOString(),
+                lastSyncedBy: 'Admin'
+            };
+            await Promise.all(snap.docs.map((doc) => doc.ref.update(patch)));
+        } catch (err) {
+            console.warn('Could not sync activity feed for entry:', err);
+            // Fallback: at least toggle visibility
+            try {
+                await this.setFeedVisibilityForEntry(entry.id, visible);
+            } catch (visErr) {
+                console.warn('Feed visibility fallback failed:', visErr);
+            }
+        }
+    }
+
+    async removeActivityFeedForEntry(entryId) {
+        if (!this.firebaseEnabled || !this.db || !entryId) return;
+        try {
+            const snap = await this.activityFeedCol()
+                .where('entryId', '==', entryId)
+                .where('season', '==', this.dataSeason)
+                .limit(10)
+                .get();
+            if (snap.empty) return;
+            await Promise.all(snap.docs.map((doc) => doc.ref.delete()));
+        } catch (err) {
+            console.warn('Could not delete feed posts for entry; hiding instead:', err);
+            await this.setFeedVisibilityForEntry(entryId, false);
+        }
+    }
+
+    /**
+     * Refresh leaderboard, admin stats, users list, team feed, and the affected user's dashboard.
+     */
+    async refreshSurfacesAfterAdminActivityChange(participant) {
+        if (participant && this.currentUser) {
+            const sameUser =
+                (participant.uid && this.currentUser.uid === participant.uid) ||
+                (participant.id && this.currentUser.id === participant.id) ||
+                (participant.employeeId && this.currentUser.employeeId === participant.employeeId);
+            if (sameUser) {
+                this.currentUser = this.stripSecretsFromParticipant({ ...participant });
+                localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
+                this.updateDashboard();
+                if (typeof this.updateActivities === 'function') {
+                    this.updateActivities();
+                }
+            }
+        }
+
+        await this.updateAdminDashboard();
+        this.updateLeaderboard();
+        if (document.getElementById('usersList')) {
+            this.loadUsersList();
+        }
+        if (document.getElementById('teamFeedList')) {
+            await this.loadActivityFeed(true);
+        }
+    }
+
     async setFeedVisibilityForEntry(entryId, visible) {
         if (!this.firebaseEnabled || !this.db || !entryId) return;
         try {
@@ -7764,6 +7983,33 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 });
             } catch (feedErr) {
                 console.warn('activityFeed query failed:', feedErr);
+            }
+
+            // Prefer in-memory stepEntries so admin edits apply immediately to the feed.
+            if (!Array.isArray(this.stepEntries) || this.stepEntries.length === 0) {
+                this.stepEntries = this.loadStepEntries();
+            }
+            const entriesById = new Map(
+                (this.stepEntries || []).filter((e) => e && e.id).map((e) => [e.id, e])
+            );
+
+            // Overlay live entry stats onto feed posts (admin edits win over denormalized copies)
+            for (const [key, post] of Array.from(byEntry.entries())) {
+                const entry = entriesById.get(post.entryId || key);
+                if (!entry) continue;
+                const st = entry.status || 'pending';
+                if (st === 'rejected') {
+                    byEntry.delete(key);
+                    continue;
+                }
+                post.steps = entry.steps || 0;
+                post.distanceKm = Number(entry.distanceKm || 0);
+                post.caloriesBurned = Number(entry.caloriesBurned || 0);
+                post.durationSec = entry.durationSec == null ? null : Number(entry.durationSec);
+                post.trackingMode = entry.trackingMode || post.trackingMode || null;
+                post.source = entry.source || post.source || null;
+                post.userName = entry.userName || post.userName;
+                if (entry.date) post.date = entry.date;
             }
 
             // 2) Fallback / supplement: recent approved activities so the feed is never empty
