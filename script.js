@@ -137,6 +137,10 @@ class StepathonApp {
                 setTimeout(() => {
                     this.ensurePublicLeaderboardReady();
                 }, 100);
+                const iosTip = document.getElementById('iosTrackingTip');
+                if (iosTip && /iPhone|iPad|iPod/i.test(navigator.userAgent || '')) {
+                    iosTip.style.display = 'block';
+                }
             });
  // Always sync participants + entries for public leaderboard (signed-out visitors included)
  setTimeout(() => {
@@ -5956,6 +5960,10 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.updateCounterStatus('Tracking your route — works with screen off when possible.');
  this.updateCounterHint('Keep the app open (Home Screen recommended). Tracking continues while locked when the OS allows.');
  this.showCounterNotification('Activity started. Tracking continues while the phone is locked.');
+ if (/iPhone|iPad|iPod/i.test(navigator.userAgent || '')) {
+ this.updateCounterHint('iPhone tip: keep Safari open and the screen on (or guided access). Apple Fitness can keep counting while Safari GPS pauses.');
+ this.showCounterNotification('iPhone: keep the screen on for accurate portal KM.');
+ }
  }
 
  this.startTimer(false);
@@ -7389,9 +7397,13 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const { latitude, longitude, accuracy } = position.coords;
  const isBackground = fromResume || document.visibilityState !== 'visible';
  const isNative = !!(window.WowNative && window.WowNative.isNative);
- // Android GPS often reports 80–150m accuracy while still usable for walking tracks
+ const isIosWeb = !isNative && /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+ // Android GPS often reports 80–150m accuracy while still usable for walking tracks.
+ // iPhone Safari often reports noisy accuracy after unlock — allow a wider window.
  const maxAccuracy = isNative
  ? (isBackground ? 280 : 160)
+ : isIosWeb
+ ? (isBackground || fromResume ? 250 : 150)
  : (isBackground ? 180 : 100);
  if (accuracy && accuracy > maxAccuracy) {
  return;
@@ -7404,21 +7416,23 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const dtSec = Math.max(0.5, (point.t - (last.t || point.t)) / 1000);
  const hours = dtSec / 3600;
  // Wider limits on native / after unlock so sparse samples still credit distance
- const maxKm = isBackground || isNative
+ // iOS Safari often delivers one big jump after unlock — allow more credit there
+ const maxKm = isBackground || isNative || (isIosWeb && (fromResume || dtSec >= 20))
  ? Math.min(14.0, Math.max(0.6, hours * 18))
  : Math.min(4.0, Math.max(0.35, hours * 20));
 
  if (segmentKm > maxKm) {
- if (dtSec >= 15) {
+ if (dtSec >= 12) {
  // Long gap (typical when phone was locked): credit capped walking/jogging pace
- const creditKm = Math.min(segmentKm, hours * 9.5);
+ const paceKmh = isIosWeb ? 10.5 : 9.5;
+ const creditKm = Math.min(segmentKm, hours * paceKmh);
  if (creditKm >= 0.005) {
  this.stepCounter.distanceKm = (this.stepCounter.distanceKm || 0) + creditKm;
  }
  this.stepCounter.lastPosition = point;
  this.stepCounter.path.push(point);
  this.stepCounter.gpsReady = true;
- if (isBackground || isNative) {
+ if (isBackground || isNative || isIosWeb) {
  this.syncStepsFromDistance(true);
  }
  this.updateActivityMap(point);
@@ -7434,7 +7448,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  this.stepCounter.pendingSegmentKm = (this.stepCounter.pendingSegmentKm || 0) + segmentKm;
- if (this.stepCounter.pendingSegmentKm >= 0.001 || isBackground || isNative) {
+ if (this.stepCounter.pendingSegmentKm >= 0.001 || isBackground || isNative || isIosWeb) {
  this.stepCounter.distanceKm += this.stepCounter.pendingSegmentKm;
  this.stepCounter.pendingSegmentKm = 0;
  }
@@ -7674,8 +7688,25 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  alert(mode === 'treadmill'
  ? 'No treadmill steps yet. Start Activity, keep the phone on your body, walk/run, then Stop and Save.'
  : 'No distance recorded yet. Start Activity, move with GPS on, then Stop and Save.');
-            return;
-        }
+ return;
+ }
+ // iPhone Safari often under-counts if the screen was locked — warn before save
+ if (
+ mode === 'outdoor' &&
+ /iPhone|iPad|iPod/i.test(navigator.userAgent || '') &&
+ durationSec >= 600 &&
+ distanceKm > 0 &&
+ distanceKm < 0.5
+ ) {
+ const proceed = confirm(
+ 'iPhone notice: portal distance looks very low for this duration (' +
+ distanceKm.toFixed(2) +
+ ' KM in ' +
+ this.formatDurationClock(durationSec) +
+ ').\n\nSafari often pauses GPS when the screen locks, while Apple Fitness may keep counting.\n\nFor accurate challenge KM: keep Safari open with the screen on, then try again.\n\nSave this activity anyway?'
+ );
+ if (!proceed) return;
+ }
 
  const durationSec = this.stepCounter.isPaused
  ? (this.stepCounter.elapsedSecAtPause || 0)

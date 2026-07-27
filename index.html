@@ -416,6 +416,9 @@
                                 <div id="activityMap" class="activity-map" role="img" aria-label="Live activity map"></div>
                                 <div class="wake-lock-badge" id="wakeLockBadge" style="display: none;">Lock-screen tracking ready</div>
                                 <p class="map-hint" id="mapHint">Allow location when prompted. Tracking can continue while locked.</p>
+ <p class="map-hint ios-tracking-tip" id="iosTrackingTip" style="display:none;">
+ <strong>iPhone:</strong> Keep Safari open and the screen on while walking/running. Apple Fitness may show more KM than this portal if the phone was locked — Safari pauses GPS in the background.
+ </p>
                             </div>
 
                             <div class="step-counter-info-section">
@@ -787,7 +790,7 @@
     <script src="firebase-config.js"></script>
     <script src="security-config.js"></script>
     <script src="native-bridge.js?v=55"></script>
-    <script src="script.js?v=71"></script>
+    <script src="script.js?v=72"></script>
     <script>
         (function () {
             window.addEventListener('load', function () {
