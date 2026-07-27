@@ -152,8 +152,18 @@ class StepathonApp {
  }, window.__WOWCSG_SAFE_BOOT__ ? 4500 : 2500);
  } else {
  this.restoreAdminSessionIfAuthorized();
-            this.syncStepEntriesFromFirebase();
-        }
+ // Admin needs both entries (Validations) and participants (User Management + totals)
+ setTimeout(() => {
+ this.syncParticipantsFromFirebase({ skipEntries: false }).then(() => {
+ if (typeof this.updateAdminDashboard === 'function') {
+ this.updateAdminDashboard();
+ }
+ if (document.getElementById('usersList') && document.getElementById('usersTab')?.classList.contains('active')) {
+ this.loadUsersList();
+ }
+ }).catch(() => {});
+ }, 800);
+ }
     }
 
     loadStepEntriesSafely() {
@@ -3136,10 +3146,15 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  return;
  }
             if (this.firebaseEnabled) {
-                await this.syncStepEntriesFromFirebase();
+                // Pull participants + entries from Firebase (local cache is often empty on admin devices)
+                await this.syncParticipantsFromFirebase({ skipEntries: false });
             }
             // Reload entries from localStorage to ensure we have the latest data
             this.stepEntries = this.loadStepEntries();
+            // Prefer in-memory roster from Firebase; only fall back to cache if empty
+            if (!Array.isArray(this.participants) || this.participants.length === 0) {
+                this.participants = this.loadParticipants();
+            }
             
             if (!Array.isArray(this.stepEntries)) {
                 console.error('stepEntries is not an array!', typeof this.stepEntries, this.stepEntries);
@@ -3164,28 +3179,39 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 else if (status === 'rejected') rejected++;
             }
             
-            // Aggregate totals across all participants (fallback to step-based estimates)
+            // Aggregate totals across all participants (fallback to approved step entries)
             const stepsPerKm = this.challengeConfig?.stepsPerKm || 1300;
             let totalSteps = 0;
             let totalKm = 0;
             let totalCalories = 0;
-            (this.participants || []).forEach((participant) => {
-                if (!participant) return;
-                const steps = Number(participant.totalSteps) || 0;
-                totalSteps += steps;
+            const roster = Array.isArray(this.participants) ? this.participants : [];
+            if (roster.length > 0) {
+                roster.forEach((participant) => {
+                    if (!participant) return;
+                    const steps = Number(participant.totalSteps) || 0;
+                    totalSteps += steps;
 
-                let km = Number(participant.totalDistanceKm);
-                if (!Number.isFinite(km) || km < 0) {
-                    km = steps / stepsPerKm;
-                }
-                totalKm += km;
+                    let km = Number(participant.totalDistanceKm);
+                    if (!Number.isFinite(km) || km < 0) {
+                        km = steps / stepsPerKm;
+                    }
+                    totalKm += km;
 
-                let calories = Number(participant.totalCalories);
-                if (!Number.isFinite(calories) || calories < 0) {
-                    calories = this.estimateCaloriesBurned(km, null, null);
-                }
-                totalCalories += calories;
-            });
+                    let calories = Number(participant.totalCalories);
+                    if (!Number.isFinite(calories) || calories < 0) {
+                        calories = this.estimateCaloriesBurned(km, null, null);
+                    }
+                    totalCalories += calories;
+                });
+            } else {
+                // Fallback when participant docs aren't loaded yet — sum approved entries
+                (this.stepEntries || []).forEach((e) => {
+                    if (!e || (e.status || 'pending') !== 'approved') return;
+                    totalSteps += Number(e.steps) || 0;
+                    totalKm += Number(e.distanceKm) || 0;
+                    totalCalories += Number(e.caloriesBurned) || 0;
+                });
+            }
 
             // Update stats immediately
             const pendingCountEl = document.getElementById('pendingCount');
@@ -3252,7 +3278,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         document.querySelector('[data-tab="validations"]').classList.add('active');
     }
 
-    loadUsersList() {
+    async loadUsersList() {
  if (!this.requireAdmin()) {
  return;
  }
@@ -3263,12 +3289,22 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         }
 
         try {
-            this.participants = this.loadParticipants();
+            usersList.innerHTML = '<p class="no-entries">Loading users from Firebase…</p>';
+            if (this.firebaseEnabled) {
+                await this.syncParticipantsFromFirebase({ skipEntries: true });
+                this.saveParticipantsCache();
+            } else {
+                this.participants = this.loadParticipants();
+            }
+            // Prefer in-memory roster from Firebase sync; fall back to cache
+            if (!Array.isArray(this.participants) || this.participants.length === 0) {
+                this.participants = this.loadParticipants();
+            }
             console.log('Loaded participants:', this.participants);
             console.log('Participants count:', this.participants ? this.participants.length : 0);
             
             if (!this.participants || this.participants.length === 0) {
-                usersList.innerHTML = '<p class="no-entries">No users registered yet.</p>';
+                usersList.innerHTML = '<p class="no-entries">No users registered yet. If entries exist under Validations, click Refresh Users again after Firebase finishes loading.</p>';
                 return;
             }
 
@@ -5609,6 +5645,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.participants = this.filterCurrentSeasonParticipants(
  snapshot.docs.map((doc) => this.stripSecretsFromParticipant(doc.data()))
  );
+ this.saveParticipantsCache();
  if (!options.skipEntries) {
  // Always refresh entries first — local cache can still say "approved" after admin reject
  await this.syncStepEntriesFromFirebase();
