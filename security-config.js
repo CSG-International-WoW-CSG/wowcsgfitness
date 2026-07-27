@@ -14,9 +14,12 @@ window.securityConfig = {
     'wow-csg@csgi.com'
   ],
   minPasswordLength: 8,
-  /** Coarsen GPS before cloud sync (~110m). */
-  gpsCoordDecimals: 3,
-  maxGpsPointsCloud: 40,
+  /** GPS precision for cloud routes (~1.1 m). Was 3 (~110 m) which made admin maps look blocky/wrong. */
+  gpsCoordDecimals: 5,
+  /** Keep evenly spaced points across the full route (not just the first N). */
+  maxGpsPointsCloud: 300,
+  /** Slightly leaner for browser localStorage cache. */
+  maxGpsPointsCache: 180,
   privacyVersion: '2026-07-21b',
   supportEmail: 'wow-csg@csgi.com'
 };

@@ -306,8 +306,9 @@ class StepathonApp {
  allowedEmailDomains: ['csgi.com', 'csg.com'],
  adminEmails: ['wow-csg@csgi.com'],
  minPasswordLength: 8,
- gpsCoordDecimals: 3,
- maxGpsPointsCloud: 40,
+ gpsCoordDecimals: 5,
+ maxGpsPointsCloud: 300,
+ maxGpsPointsCache: 180,
  privacyVersion: '2026-07-21b',
  supportEmail: 'wow-csg@csgi.com'
  };
@@ -406,17 +407,62 @@ class StepathonApp {
  });
  }
 
- sanitizePathForCloud(path) {
+ sanitizePathForCloud(path, options = {}) {
  const cfg = this.securityCfg();
- const decimals = cfg.gpsCoordDecimals || 3;
- const maxPts = cfg.maxGpsPointsCloud || 40;
+ const decimals = Number(options.decimals != null ? options.decimals : (cfg.gpsCoordDecimals || 5));
+ const maxPts = Number(options.maxPts != null ? options.maxPts : (cfg.maxGpsPointsCloud || 300));
+ return this.downsampleActivityPath(path, maxPts, decimals);
+ }
+
+ /**
+ * Keep the full route shape for admin maps: always preserve start/end and
+ * evenly sample the middle (old code took only the first 40 points).
+ */
+ downsampleActivityPath(path, maxPts = 300, decimals = 5) {
  if (!Array.isArray(path)) return [];
- const factor = Math.pow(10, decimals);
- return path.slice(0, maxPts).map((p) => ({
- lat: Math.round(Number(p.lat) * factor) / factor,
- lng: Math.round(Number(p.lng) * factor) / factor,
+ const cleaned = path
+ .map((p) => {
+ if (!p || typeof p !== 'object') return null;
+ const lat = Number(p.lat != null ? p.lat : p.latitude);
+ const lng = Number(p.lng != null ? p.lng : (p.longitude != null ? p.longitude : p.lon));
+ if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+ if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+ return {
+ lat,
+ lng,
  t: p.t || p.timestamp || null
- }));
+ };
+ })
+ .filter(Boolean);
+ if (!cleaned.length) return [];
+
+ const factor = Math.pow(10, Math.max(0, Math.min(8, decimals)));
+ const roundPt = (p) => ({
+ lat: Math.round(p.lat * factor) / factor,
+ lng: Math.round(p.lng * factor) / factor,
+ t: p.t || null
+ });
+
+ let sampled;
+ if (cleaned.length <= maxPts) {
+ sampled = cleaned.map(roundPt);
+ } else {
+ sampled = [];
+ const last = cleaned.length - 1;
+ for (let i = 0; i < maxPts; i++) {
+ const idx = Math.round((i * last) / (maxPts - 1));
+ sampled.push(roundPt(cleaned[idx]));
+ }
+ }
+
+ // Drop consecutive duplicates after rounding (reduces grid spikes)
+ const deduped = [];
+ for (const pt of sampled) {
+ const prev = deduped[deduped.length - 1];
+ if (prev && prev.lat === pt.lat && prev.lng === pt.lng) continue;
+ deduped.push(pt);
+ }
+ return deduped;
  }
 
  /** Wipe browser caches when data season changes (fresh challenge start). */
@@ -2107,12 +2153,14 @@ class StepathonApp {
                 this.stepEntries = [];
             }
             // Slim cache for mobile Safari — screenshots / huge GPS dumps cause OOM + QuotaExceeded
+            const cfg = this.securityCfg();
+            const cacheMax = cfg.maxGpsPointsCache || 180;
             const slim = this.stepEntries.map((entry) => {
                 if (!entry || typeof entry !== 'object') return entry;
                 const copy = { ...entry };
                 delete copy.screenshot;
-                if (Array.isArray(copy.path) && copy.path.length > 40) {
-                    copy.path = this.sanitizePathForCloud(copy.path);
+                if (Array.isArray(copy.path) && copy.path.length > cacheMax) {
+                    copy.path = this.downsampleActivityPath(copy.path, cacheMax, cfg.gpsCoordDecimals || 5);
                 }
                 return copy;
             });
@@ -3366,6 +3414,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         this.participants = this.loadParticipants();
         if (this.firebaseEnabled) {
             await this.syncStepEntriesFromFirebase();
+        } else {
+            this.stepEntries = this.loadStepEntries();
+        }
+        // Prefer in-memory Firebase sync (do NOT reload slimmed localStorage over it)
+        if (!Array.isArray(this.stepEntries)) {
+            this.stepEntries = this.loadStepEntries();
         }
         
         // Handle user_ prefix from index-based IDs
@@ -3392,12 +3446,14 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             return;
         }
 
-        // Get all activities for this user
-        this.stepEntries = this.loadStepEntries();
         const actualUserId = user.id || user.employeeId || searchId;
-        const userActivities = this.stepEntries.filter((entry) =>
+        let userActivities = (this.stepEntries || []).filter((entry) =>
             this.entryBelongsToParticipant(entry, user)
         ).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        // Re-fetch each outdoor entry path from Firebase so admin sees the stored route
+        // (local cache may have dropped/coarsened GPS points).
+        userActivities = await this.hydrateActivityPathsFromFirebase(userActivities);
         
         console.log('User activities found:', userActivities.length, 'for user:', actualUserId);
 
@@ -3565,8 +3621,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                                     <strong style="color: #003366;">GPS Route Map</strong>
                                     <button type="button" class="btn btn-small btn-secondary" onclick="app.refitAdminActivityMap('${mapDomId}')">Fit route</button>
                                 </div>
-                                <div id="${mapDomId}" class="admin-gps-map" style="height: 280px; width: 100%; border-radius: 8px; border: 1px solid #cfd8dc; background: #e8eef3;"></div>
-                                <p style="margin: 6px 0 0; font-size: 0.8rem; color: #666;">Blue = start · Red = end · ${validGpsCount} points</p>
+                                <div id="${mapDomId}" class="admin-gps-map" style="height: 360px; width: 100%; border-radius: 8px; border: 1px solid #cfd8dc; background: #e8eef3;"></div>
+                                <p style="margin: 6px 0 0; font-size: 0.8rem; color: #666;">Blue = start · Red = end · ${validGpsCount} GPS points (full saved route)</p>
                             </div>
                         ` : pathPoints > 1 ? `
                             <div class="admin-gps-map-section" style="margin: 12px 0; padding: 10px; background: #fff8e1; border-radius: 6px; color: #6d4c41; font-size: 0.9rem;">
@@ -3727,6 +3783,39 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         return `adminGpsMap_${String(entryId || '').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
     }
 
+    /**
+     * Pull fresh path arrays from Firestore for outdoor entries so admin maps
+     * are not limited to a previously over-slimmed localStorage cache.
+     */
+    async hydrateActivityPathsFromFirebase(activities) {
+        if (!this.firebaseEnabled || !this.db || !Array.isArray(activities) || !activities.length) {
+            return activities || [];
+        }
+        const out = [];
+        for (const activity of activities) {
+            const copy = { ...activity };
+            const needsPath = (copy.trackingMode === 'outdoor' || copy.source === 'gps-counter' || copy.source === 'native')
+                && (!Array.isArray(copy.path) || copy.path.length < 2 || copy.path.length < 50);
+            if (needsPath && copy.id) {
+                try {
+                    const doc = await this.stepEntriesCol().doc(copy.id).get();
+                    if (doc.exists) {
+                        const remote = doc.data() || {};
+                        if (Array.isArray(remote.path) && remote.path.length > (copy.path || []).length) {
+                            copy.path = remote.path;
+                        } else if (Array.isArray(remote.path) && remote.path.length >= 2 && (!copy.path || copy.path.length < 2)) {
+                            copy.path = remote.path;
+                        }
+                    }
+                } catch (err) {
+                    console.warn('Could not hydrate GPS path for', copy.id, err);
+                }
+            }
+            out.push(copy);
+        }
+        return out;
+    }
+
     normalizeActivityPath(path) {
         if (!Array.isArray(path)) return [];
         return path
@@ -3805,29 +3894,44 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 const latLngs = path.map((p) => [p.lat, p.lng]);
                 const line = L.polyline(latLngs, {
                     color: '#0d9488',
-                    weight: 5,
-                    opacity: 0.9
+                    weight: 4,
+                    opacity: 0.95,
+                    lineJoin: 'round',
+                    lineCap: 'round'
                 }).addTo(map);
+                // Start pin
                 L.circleMarker(latLngs[0], {
-                    radius: 6,
-                    color: '#1565c0',
+                    radius: 7,
+                    color: '#0d47a1',
                     fillColor: '#42a5f5',
-                    fillOpacity: 1
+                    fillOpacity: 1,
+                    weight: 2
                 }).addTo(map).bindTooltip('Start');
-                L.circleMarker(latLngs[latLngs.length - 1], {
-                    radius: 6,
-                    color: '#c62828',
-                    fillColor: '#ef5350',
-                    fillOpacity: 1
+                // End pin (classic marker so it is obvious)
+                L.marker(latLngs[latLngs.length - 1], {
+                    title: 'End'
                 }).addTo(map).bindTooltip('End');
+                // Midway dots for longer routes so the track is obvious
+                if (latLngs.length >= 8) {
+                    const step = Math.max(1, Math.floor(latLngs.length / 12));
+                    for (let i = step; i < latLngs.length - 1; i += step) {
+                        L.circleMarker(latLngs[i], {
+                            radius: 3,
+                            color: '#115e59',
+                            fillColor: '#5eead4',
+                            fillOpacity: 0.9,
+                            weight: 1
+                        }).addTo(map);
+                    }
+                }
                 const bounds = line.getBounds();
-                map.fitBounds(bounds, { padding: [24, 24] });
+                map.fitBounds(bounds, { padding: [28, 28], maxZoom: 17 });
                 this._adminActivityMaps.push({ id: mapId, map, bounds });
-                [100, 300, 700].forEach((ms) => {
+                [80, 250, 600, 1200].forEach((ms) => {
                     setTimeout(() => {
                         try {
                             map.invalidateSize();
-                            map.fitBounds(bounds, { padding: [24, 24] });
+                            map.fitBounds(bounds, { padding: [28, 28], maxZoom: 17 });
                         } catch (e) { /* ignore */ }
                     }, ms);
                 });
