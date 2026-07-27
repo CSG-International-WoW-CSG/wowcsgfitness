@@ -40,8 +40,12 @@ public class ActivityTrackingService extends Service implements SensorEventListe
     private static final long TICK_MS = 1000L;
     private static final long GPS_MIN_TIME_MS = 4000L;
     private static final float GPS_MIN_DIST_M = 3f;
-    private static final float MAX_ACCURACY_M = 45f;
-    private static final float MAX_JUMP_M = 80f;
+    // Android outdoor GPS often reports 50–150m accuracy while still usable.
+    // Previous 45m filter dropped most lock-screen fixes on MIUI/Samsung.
+    private static final float MAX_ACCURACY_M = 160f;
+    private static final float MAX_JUMP_M = 120f;
+    /** Cap credited gap distance at ~9.5 km/h walking/jogging when GPS resumes after lock. */
+    private static final double GAP_CREDIT_KMH = 9.5;
 
     private SensorManager sensorManager;
     private Sensor stepSensor;
@@ -336,12 +340,20 @@ public class ActivityTrackingService extends Service implements SensorEventListe
             float dist = lastLocation.distanceTo(location);
             long dt = Math.max(1L, location.getTime() - lastLocation.getTime());
             if (dist > MAX_JUMP_M && dt < 8000L) {
-                // Likely GPS jump — skip
+                // Likely GPS jump — skip distance, keep anchor
                 lastLocation = location;
                 return;
             }
             if (dist >= GPS_MIN_DIST_M && dist <= MAX_JUMP_M) {
                 distanceMeters += dist;
+            } else if (dist > MAX_JUMP_M && dt >= 8000L) {
+                // Long gap while locked/backgrounded: credit capped walking pace
+                // (previously these points were dropped entirely → under-count).
+                double hours = dt / 3600000.0;
+                float credit = (float) Math.min(dist, hours * GAP_CREDIT_KMH * 1000.0);
+                if (credit >= 5f) {
+                    distanceMeters += credit;
+                }
             }
         }
         lastLocation = location;

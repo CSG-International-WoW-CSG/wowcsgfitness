@@ -94,7 +94,11 @@ class StepathonApp {
  /** Capacitor Android: hardware pedometer is source of truth (skip DeviceMotion). */
  useNativeStepsOnly: false,
  /** Steps already accrued before a pedometer restart (e.g. session restore). */
- nativeStepBaseline: 0
+ nativeStepBaseline: 0,
+ /** Seconds from start when live distance first hit today's goal (2-decimal UI). */
+ timeToGoalSec: null,
+ /** Snapshot frozen at Stop — Save must use this (not submit-time clock). */
+ frozenForSave: null
  };
 
  this.activityMap = null;
@@ -4989,7 +4993,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  day.completionDurationSec = entryFinishSec;
  day.completedAt = entry.date || new Date().toISOString();
  }
- } else if (day.distanceKm >= (goalKm - 0.01)) {
+ } else if (this.meetsDailyGoal(day.distanceKm, goalKm)) {
  // Distance may still count toward progress, but only legal single attempts set finish time
  day.completed = day.completionDurationSec != null;
  } else {
@@ -4997,7 +5001,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  day.completionDurationSec = null;
  day.completedAt = null;
  }
- } else if (day.distanceKm < (goalKm - 0.01)) {
+ } else if (!this.meetsDailyGoal(day.distanceKm, goalKm)) {
  day.completed = false;
  day.completionDurationSec = null;
  day.completedAt = null;
@@ -5006,15 +5010,30 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  /**
+ * Goal check matching the live counter (2 decimal places).
+ * Prevents "UI showed 2.00 KM" but board treats 1.995 as incomplete.
+ */
+ meetsDailyGoal(distanceKm, goalKm) {
+ const d = Number(distanceKm) || 0;
+ const g = Number(goalKm) || 0;
+ if (!(g > 0) || !(d > 0)) return false;
+ return Number(d.toFixed(2)) >= Number(g.toFixed(2));
+ }
+
+ /**
  * Time (seconds) to reach the day's target KM within a single activity.
- * Prefers GPS path crossing when timestamps exist; otherwise scales duration by goal/distance.
+ * Prefers live goal-crossing snapshot, then GPS path crossing, then pace scale.
  * Example: 3 KM in 30 min on a 1 KM day → ~10 min (not 30).
  */
  estimateTimeToGoalSec(entry, goalKm) {
  if (!entry || !(goalKm > 0)) return null;
  const distanceKm = Number(entry.distanceKm) || 0;
  const durationSec = Number(entry.durationSec) || 0;
- if (distanceKm < goalKm - 0.01) return null;
+ const liveGoalSec = Number(entry.timeToGoalSec);
+ if (Number.isFinite(liveGoalSec) && liveGoalSec > 0) {
+ return Math.min(Math.round(liveGoalSec), durationSec > 0 ? durationSec : Math.round(liveGoalSec));
+ }
+ if (!this.meetsDailyGoal(distanceKm, goalKm)) return null;
  if (durationSec <= 0) return null;
 
  const path = typeof this.normalizeActivityPath === 'function'
@@ -5027,16 +5046,22 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  for (let i = 1; i < timed.length; i++) {
  const a = timed[i - 1];
  const b = timed[i];
- cum += this.haversineKm(a.lat, a.lng, b.lat, b.lng);
- if (cum >= goalKm - 0.01) {
- const elapsed = Math.max(1, Math.round((Number(b.t) - t0) / 1000));
+ const seg = this.haversineKm(a.lat, a.lng, b.lat, b.lng);
+ const prev = cum;
+ cum += seg;
+ if (this.meetsDailyGoal(cum, goalKm) || cum >= goalKm) {
+ // Interpolate within the segment that crossed the goal
+ const need = Math.max(0, goalKm - prev);
+ const frac = seg > 0.00001 ? Math.min(1, need / seg) : 1;
+ const crossedAt = Number(a.t) + frac * (Number(b.t) - Number(a.t));
+ const elapsed = Math.max(1, Math.round((crossedAt - t0) / 1000));
  return Math.min(elapsed, durationSec);
  }
  }
  }
 
  // Constant-pace fallback: time to cover only the goal distance
- return Math.max(1, Math.round(durationSec * (goalKm / distanceKm)));
+ return Math.max(1, Math.round(durationSec * (goalKm / Math.max(distanceKm, goalKm))));
  }
 
  /** Implied average speed (km/h) for covering goalKm in finishSec. */
@@ -5942,6 +5967,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.stepCounter.lastAccelMagnitude = 0;
  this.stepCounter.stepPeakArmed = true;
  this.stepCounter.lockedStepEstimateAt = null;
+ this.stepCounter.timeToGoalSec = null;
+ this.stepCounter.frozenForSave = null;
 
  this.stepCounter.useNativeStepsOnly = false;
  this.stepCounter.nativeStepBaseline = 0;
@@ -5960,9 +5987,17 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.updateCounterStatus('Tracking your route — works with screen off when possible.');
  this.updateCounterHint('Keep the app open (Home Screen recommended). Tracking continues while locked when the OS allows.');
  this.showCounterNotification('Activity started. Tracking continues while the phone is locked.');
- if (/iPhone|iPad|iPod/i.test(navigator.userAgent || '')) {
+ const ua = navigator.userAgent || '';
+ const isNative = !!(window.WowNative && window.WowNative.isNative);
+ if (/iPhone|iPad|iPod/i.test(ua)) {
  this.updateCounterHint('iPhone tip: keep Safari open and the screen on (or guided access). Apple Fitness can keep counting while Safari GPS pauses.');
  this.showCounterNotification('iPhone: keep the screen on for accurate portal KM.');
+ } else if (!isNative && /Android/i.test(ua)) {
+ this.updateCounterHint('Android web tip: Chrome may pause GPS when locked. Prefer the Android APK, or keep Chrome open with the screen on.');
+ this.showCounterNotification('Android Chrome: keep screen on, or use the APK for lock-screen tracking.');
+ } else if (isNative) {
+ this.updateCounterHint('Android app: tracking continues in the notification while locked. Do not force-stop the app or swipe it away from Recents on some phones.');
+ this.showCounterNotification('Android app: leave the tracking notification running while locked.');
  }
  }
 
@@ -6337,6 +6372,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  useNativeStepsOnly: !!this.stepCounter.useNativeStepsOnly,
  path,
  lastPosition: this.stepCounter.lastPosition || null,
+ timeToGoalSec: this.stepCounter.timeToGoalSec,
+ frozenForSave: this.stepCounter.frozenForSave || null,
  savedAt: now
  };
  localStorage.setItem(this.activitySessionKey, JSON.stringify(payload));
@@ -6404,6 +6441,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.stepCounter.lastPosition = data.lastPosition || null;
  this.stepCounter.nativeStepBaseline = Number(data.nativeStepBaseline) || 0;
  this.stepCounter.useNativeStepsOnly = !!data.useNativeStepsOnly;
+ this.stepCounter.timeToGoalSec = data.timeToGoalSec != null ? Number(data.timeToGoalSec) : null;
+ this.stepCounter.frozenForSave = data.frozenForSave || null;
  this.stepCounter.stepHistory = [];
  this.stepCounter.accelerationHistory = [];
  this.stepCounter.lastAcceleration = { x: 0, y: 0, z: 0 };
@@ -6574,12 +6613,18 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         if (!this.stepCounter.isRunning) return;
 
         this.accumulateTreadmillDistance();
+        // Flush any buffered GPS meters into distance before freezing the snapshot
+        if ((this.stepCounter.pendingSegmentKm || 0) > 0) {
+            this.stepCounter.distanceKm = (this.stepCounter.distanceKm || 0) + (this.stepCounter.pendingSegmentKm || 0);
+            this.stepCounter.pendingSegmentKm = 0;
+        }
         const elapsedSec = this.stepCounter.startTime
             ? Math.max(0, Math.floor((Date.now() - this.stepCounter.startTime) / 1000))
             : (this.stepCounter.elapsedSecAtPause || 0);
         this.stepCounter.elapsedSecAtPause = elapsedSec;
         this.stepCounter.isRunning = false;
         this.stepCounter.isPaused = true;
+        this.maybeCaptureTimeToGoal();
 
         if (this.boundHandleDeviceMotion) {
             window.removeEventListener('devicemotion', this.boundHandleDeviceMotion);
@@ -6600,10 +6645,21 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.stepCounter.useNativeStepsOnly = false;
  this.stepCounter.nativeStepBaseline = 0;
 
+ const distance = this.getTrackedDistanceKm();
+ // Freeze Stop-time distance/duration so Save cannot pick up submit-time clock or later GPS noise
+ this.stepCounter.frozenForSave = {
+ distanceKm: Number(distance.toFixed(3)),
+ durationSec: elapsedSec,
+ steps: this.stepCounter.stepCount || 0,
+ path: (this.stepCounter.path || []).map((p) => ({ lat: p.lat, lng: p.lng, t: p.t })),
+ timeToGoalSec: this.stepCounter.timeToGoalSec,
+ trackingMode: this.stepCounter.trackingMode || 'outdoor',
+ treadmillSpeedKmh: this.stepCounter.treadmillSpeedKmh || null
+ };
+
  this.applyPausedActivityUi();
  this.persistActivitySession(true);
 
- const distance = this.getTrackedDistanceKm();
         const minutes = Math.floor(elapsedSec / 60);
         const seconds = elapsedSec % 60;
         const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
@@ -6611,10 +6667,13 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         if (timerValue) {
             timerValue.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         }
-        
- this.updateCounterStatus(`Stopped. Covered ${distance.toFixed(2)} KM in ${timeStr}.`);
- this.updateCounterHint('Tap Resume to continue, or Save Activity to update the leaderboard.');
- this.showCounterNotification(`Activity stopped: ${distance.toFixed(2)} KM`);
+ const goalKm = this.getDailyGoalKm();
+ const goalNote = this.stepCounter.timeToGoalSec != null
+ ? ` · time to ${goalKm} KM: ${this.formatDurationClock(this.stepCounter.timeToGoalSec)}`
+ : '';
+ this.updateCounterStatus(`Stopped. Covered ${distance.toFixed(3)} KM in ${timeStr}${goalNote}.`);
+ this.updateCounterHint('Tap Resume to continue, or Save Activity to update the leaderboard. Leaderboard uses time to the day goal, not submit time.');
+ this.showCounterNotification(`Activity stopped: ${distance.toFixed(3)} KM`);
  this.updateStepCounterDisplay();
     }
 
@@ -6634,6 +6693,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         this.stepCounter.lastTreadmillTickAt = Date.now();
         this.stepCounter.isPaused = false;
         this.stepCounter.isRunning = true;
+        this.stepCounter.frozenForSave = null;
         this.stepCounter.useNativeStepsOnly = false;
         this.stepCounter.nativeStepBaseline = 0;
 
@@ -6674,6 +6734,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.stepCounter.path = [];
  this.stepCounter.lastPosition = null;
  this.stepCounter.gpsReady = false;
+ this.stepCounter.timeToGoalSec = null;
+ this.stepCounter.frozenForSave = null;
+ this.stepCounter.pendingSegmentKm = 0;
  this.clearActivitySession();
  this.clearActivityMapTrack();
         this.updateStepCounterDisplay();
@@ -6740,8 +6803,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  recalculateGpsDistanceFromPath() {
  const path = this.stepCounter.path || [];
  if (path.length < 2) {
- this.stepCounter.distanceKm = 0;
- return 0;
+ // Keep any already-credited distance; only clear pending buffer
+ this.stepCounter.pendingSegmentKm = 0;
+ return this.stepCounter.distanceKm || 0;
  }
  let total = 0;
  for (let i = 1; i < path.length; i++) {
@@ -6760,9 +6824,22 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  total += Math.min(segmentKm, hours * 9);
  }
  }
- this.stepCounter.distanceKm = total;
+ // Never reduce credited KM (path thinning / stricter filters used to drop e.g. 2.00 → 1.98)
+ this.stepCounter.distanceKm = Math.max(this.stepCounter.distanceKm || 0, total);
  this.stepCounter.pendingSegmentKm = 0;
- return total;
+ return this.stepCounter.distanceKm;
+ }
+
+ maybeCaptureTimeToGoal() {
+ if (this.stepCounter.timeToGoalSec != null) return;
+ const goalKm = this.getDailyGoalKm();
+ if (!(goalKm > 0)) return;
+ const dist = this.getTrackedDistanceKm();
+ if (!this.meetsDailyGoal(dist, goalKm)) return;
+ const elapsed = this.getSessionDurationSec();
+ if (elapsed > 0) {
+ this.stepCounter.timeToGoalSec = elapsed;
+ }
  }
 
  getBodyWeightKg() {
@@ -7397,12 +7474,15 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const { latitude, longitude, accuracy } = position.coords;
  const isBackground = fromResume || document.visibilityState !== 'visible';
  const isNative = !!(window.WowNative && window.WowNative.isNative);
- const isIosWeb = !isNative && /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
- // Android GPS often reports 80–150m accuracy while still usable for walking tracks.
- // iPhone Safari often reports noisy accuracy after unlock — allow a wider window.
+ const ua = navigator.userAgent || '';
+ const isIosWeb = !isNative && /iPhone|iPad|iPod/i.test(ua);
+ const isAndroidWeb = !isNative && /Android/i.test(ua);
+ const isMobileWeb = isIosWeb || isAndroidWeb;
+ // Mobile browsers often report 80–150m+ accuracy while still usable for walking.
+ // Native Android can be noisier while locked (MIUI) — allow a wider window.
  const maxAccuracy = isNative
  ? (isBackground ? 280 : 160)
- : isIosWeb
+ : isMobileWeb
  ? (isBackground || fromResume ? 250 : 150)
  : (isBackground ? 180 : 100);
  if (accuracy && accuracy > maxAccuracy) {
@@ -7416,15 +7496,14 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const dtSec = Math.max(0.5, (point.t - (last.t || point.t)) / 1000);
  const hours = dtSec / 3600;
  // Wider limits on native / after unlock so sparse samples still credit distance
- // iOS Safari often delivers one big jump after unlock — allow more credit there
- const maxKm = isBackground || isNative || (isIosWeb && (fromResume || dtSec >= 20))
+ const maxKm = isBackground || isNative || (isMobileWeb && (fromResume || dtSec >= 20))
  ? Math.min(14.0, Math.max(0.6, hours * 18))
  : Math.min(4.0, Math.max(0.35, hours * 20));
 
  if (segmentKm > maxKm) {
  if (dtSec >= 12) {
  // Long gap (typical when phone was locked): credit capped walking/jogging pace
- const paceKmh = isIosWeb ? 10.5 : 9.5;
+ const paceKmh = isMobileWeb ? 10.5 : 9.5;
  const creditKm = Math.min(segmentKm, hours * paceKmh);
  if (creditKm >= 0.005) {
  this.stepCounter.distanceKm = (this.stepCounter.distanceKm || 0) + creditKm;
@@ -7505,11 +7584,17 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
     }
 
     updateStepCounterDisplay() {
- const distance = this.getTrackedDistanceKm();
+ this.maybeCaptureTimeToGoal();
+ const distance = this.stepCounter.frozenForSave
+ ? Number(this.stepCounter.frozenForSave.distanceKm) || 0
+ : this.getTrackedDistanceKm();
  const calories = this.getSessionCalories();
  const kmEl = document.getElementById('liveKmCount');
  if (kmEl) {
- kmEl.textContent = distance.toFixed(2);
+ // Show 3 decimals near the day goal so 1.98 is not mistaken for 2.00
+ const goalKm = this.getDailyGoalKm();
+ const nearGoal = goalKm > 0 && distance >= Math.max(0, goalKm - 0.08);
+ kmEl.textContent = nearGoal ? distance.toFixed(3) : distance.toFixed(2);
  }
  const stepsEl = document.getElementById('liveStepCount');
  if (stepsEl) {
@@ -7522,7 +7607,11 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  const gpsDistanceLabel = document.getElementById('gpsDistanceLabel');
  if (gpsDistanceLabel) {
- gpsDistanceLabel.textContent = `${Number(distance).toFixed(2)} KM`;
+ const goalKm = this.getDailyGoalKm();
+ const nearGoal = goalKm > 0 && distance >= Math.max(0, goalKm - 0.08);
+ gpsDistanceLabel.textContent = nearGoal
+ ? `${Number(distance).toFixed(3)} KM`
+ : `${Number(distance).toFixed(2)} KM`;
  }
  const gpsCaloriesLabel = document.getElementById('gpsCaloriesLabel');
  if (gpsCaloriesLabel) {
@@ -7668,9 +7757,15 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             return;
         }
 
+ // If still running, force Stop first so duration is freeze-at-stop (not submit time)
+ if (this.stepCounter.isRunning) {
+ this.stopStepCounter();
+ }
+
  this.accumulateTreadmillDistance();
- const mode = this.stepCounter.trackingMode || 'outdoor';
- const motionSteps = this.stepCounter.stepCount || 0;
+ const frozen = this.stepCounter.frozenForSave;
+ const mode = (frozen && frozen.trackingMode) || this.stepCounter.trackingMode || 'outdoor';
+ const motionSteps = frozen ? (frozen.steps || 0) : (this.stepCounter.stepCount || 0);
  const stepsPerKm = this.getStepsPerKmForTracking();
  // Treadmill: steps are the only source of truth (prevents fake speed farming)
  let distanceKm;
@@ -7678,6 +7773,10 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (mode === 'treadmill') {
  steps = motionSteps;
  distanceKm = Number((steps / stepsPerKm).toFixed(3));
+ } else if (frozen && Number(frozen.distanceKm) > 0) {
+ distanceKm = Number(Number(frozen.distanceKm).toFixed(3));
+ const estimatedSteps = Math.round(distanceKm * stepsPerKm);
+ steps = Math.max(motionSteps, estimatedSteps);
  } else {
  distanceKm = this.getTrackedDistanceKm();
  const estimatedSteps = Math.round(distanceKm * stepsPerKm);
@@ -7690,41 +7789,72 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  : 'No distance recorded yet. Start Activity, move with GPS on, then Stop and Save.');
  return;
  }
- // iPhone Safari often under-counts if the screen was locked — warn before save
+
+ this.maybeCaptureTimeToGoal();
+ const durationSec = frozen && frozen.durationSec != null
+ ? Math.max(0, Math.round(Number(frozen.durationSec) || 0))
+ : (this.stepCounter.isPaused
+ ? (this.stepCounter.elapsedSecAtPause || 0)
+ : (this.stepCounter.startTime
+ ? Math.round((Date.now() - this.stepCounter.startTime) / 1000)
+ : this.getSessionDurationSec()));
+ const timeToGoalSec = (frozen && frozen.timeToGoalSec != null)
+ ? frozen.timeToGoalSec
+ : this.stepCounter.timeToGoalSec;
+ const path = frozen && Array.isArray(frozen.path)
+ ? frozen.path
+ : (mode === 'treadmill' ? [] : (this.stepCounter.path || []).map((p) => ({ lat: p.lat, lng: p.lng, t: p.t })));
+
+ // Mobile browsers often under-count if the screen was locked — warn before save
+ const uaSave = navigator.userAgent || '';
+ const isIosWebSave = /iPhone|iPad|iPod/i.test(uaSave);
+ const isAndroidWebSave = /Android/i.test(uaSave) && !(window.WowNative && window.WowNative.isNative);
  if (
  mode === 'outdoor' &&
- /iPhone|iPad|iPod/i.test(navigator.userAgent || '') &&
+ (isIosWebSave || isAndroidWebSave) &&
  durationSec >= 600 &&
  distanceKm > 0 &&
  distanceKm < 0.5
  ) {
  const proceed = confirm(
- 'iPhone notice: portal distance looks very low for this duration (' +
- distanceKm.toFixed(2) +
+ (isIosWebSave ? 'iPhone' : 'Android Chrome') +
+ ' notice: portal distance looks very low for this duration (' +
+ distanceKm.toFixed(3) +
  ' KM in ' +
  this.formatDurationClock(durationSec) +
- ').\n\nSafari often pauses GPS when the screen locks, while Apple Fitness may keep counting.\n\nFor accurate challenge KM: keep Safari open with the screen on, then try again.\n\nSave this activity anyway?'
+ ').\n\n' +
+ (isIosWebSave
+ ? 'Safari often pauses GPS when the screen locks, while Apple Fitness may keep counting.\n\nFor accurate challenge KM: keep Safari open with the screen on, then try again.'
+ : 'Chrome may pause GPS/steps when the screen locks or the tab is backgrounded.\n\nFor accurate challenge KM: use the Android APK, or keep Chrome open with the screen on, then try again.') +
+ '\n\nSave this activity anyway?'
  );
  if (!proceed) return;
  }
 
- const durationSec = this.stepCounter.isPaused
- ? (this.stepCounter.elapsedSecAtPause || 0)
- : (this.stepCounter.startTime
- ? Math.round((Date.now() - this.stepCounter.startTime) / 1000)
- : this.getSessionDurationSec());
  const caloriesBurned = this.estimateCaloriesBurned(distanceKm, durationSec, this.getBodyWeightKg());
+ const goalKm = this.getDailyGoalKm();
+ const finishHint = timeToGoalSec != null
+ ? ` · day-goal time ${this.formatDurationClock(timeToGoalSec)}`
+ : (this.meetsDailyGoal(distanceKm, goalKm) ? '' : ` · under ${goalKm} KM goal`);
 
  this.openShareActivityModal({
  steps,
  distanceKm,
  durationSec,
+ timeToGoalSec: timeToGoalSec != null ? Number(timeToGoalSec) : null,
  caloriesBurned,
  bodyWeightKg: this.getBodyWeightKg(),
  trackingMode: mode,
- treadmillSpeedKmh: mode === 'treadmill' ? (this.stepCounter.treadmillSpeedKmh || null) : null,
- path: mode === 'treadmill' ? [] : (this.stepCounter.path || []).map((p) => ({ lat: p.lat, lng: p.lng, t: p.t }))
+ treadmillSpeedKmh: mode === 'treadmill'
+ ? ((frozen && frozen.treadmillSpeedKmh) || this.stepCounter.treadmillSpeedKmh || null)
+ : null,
+ path
  });
+ // Enrich share summary with goal timing when available
+ const summary = document.getElementById('shareActivitySummary');
+ if (summary && finishHint) {
+ summary.textContent = `${summary.textContent}${finishHint}`;
+ }
  }
 
  async saveStepsWithScreenshot(steps, screenshotData, fromStepCounter = false, trackMeta = null, shareOptions = null) {
@@ -7773,10 +7903,10 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  prevDay.goalKm = goalKmForDay;
  prevDay.challengeDay = dayNum || prevDay.challengeDay || null;
  const attemptFinishSec = this.estimateTimeToGoalSec(
- { distanceKm, durationSec, path: trackMeta && trackMeta.path },
+ { distanceKm, durationSec, path: trackMeta && trackMeta.path, timeToGoalSec: trackMeta && trackMeta.timeToGoalSec },
  goalKmForDay
  );
- const attemptEntry = { distanceKm, durationSec, path: trackMeta && trackMeta.path };
+ const attemptEntry = { distanceKm, durationSec, path: trackMeta && trackMeta.path, timeToGoalSec: trackMeta && trackMeta.timeToGoalSec };
  if (attemptFinishSec != null && !this.isImplausibleChallengePace(attemptEntry, goalKmForDay)) {
  prevDay.completed = true;
  if (prevDay.completionDurationSec == null || attemptFinishSec < prevDay.completionDurationSec) {
@@ -7796,6 +7926,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const draftForPace = {
  distanceKm: Number(distanceKm.toFixed(3)),
  durationSec,
+ timeToGoalSec: trackMeta && trackMeta.timeToGoalSec != null ? Number(trackMeta.timeToGoalSec) : null,
  path: trackMeta && Array.isArray(trackMeta.path) ? trackMeta.path : []
  };
  const paceIllegal = this.isImplausibleChallengePace(draftForPace, goalKmForDay);
@@ -7814,6 +7945,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  caloriesBurned,
  path: this.sanitizePathForCloud(trackMeta && Array.isArray(trackMeta.path) ? trackMeta.path : []),
  durationSec,
+ timeToGoalSec: trackMeta && trackMeta.timeToGoalSec != null ? Number(trackMeta.timeToGoalSec) : null,
  screenshot: null,
             date: new Date().toISOString(),
  status: autoOk ? 'approved' : (paceIllegal ? 'rejected' : 'pending'),
@@ -8054,6 +8186,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 distanceKm: pending.distanceKm,
                 path: pending.path || [],
                 durationSec: pending.durationSec,
+                timeToGoalSec: pending.timeToGoalSec != null ? pending.timeToGoalSec : null,
                 caloriesBurned: pending.caloriesBurned,
                 bodyWeightKg: pending.bodyWeightKg,
                 trackingMode: pending.trackingMode,
