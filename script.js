@@ -2870,7 +2870,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  return this.resetPasswordFirebase();
     }
 
-    showDashboard() {
+    async showDashboard() {
         document.getElementById('loginCard').style.display = 'none';
         const dash = document.getElementById('dashboardCard');
         if (dash) {
@@ -2881,6 +2881,15 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         
         // Check challenge status and disable features if challenge is over
         this.updateDates(); // This will call checkChallengeStatus
+
+        // Pull latest entries so Today / Day progress aren't stuck at 0 after a walk
+        if (this.firebaseEnabled) {
+            try {
+                await this.syncStepEntriesFromFirebase();
+            } catch (e) {
+                console.warn('Dashboard entry sync skipped:', e);
+            }
+        }
         
         this.updateDashboard();
         this.loadActivityFeed();
@@ -2915,73 +2924,175 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         this.updateLeaderboard(filter, { skipRemoteSync: true });
     }
 
+    /**
+     * Rebuild the logged-in user's dashboard totals from their step entries.
+     * Personal Today/progress includes approved + pending (so a just-saved walk
+     * is visible). Rejected pace glitches are excluded but surfaced as a hint.
+     */
+    refreshCurrentUserTotalsFromEntries() {
+        if (!this.currentUser) return { todayRejectedKm: 0, todayPending: false };
+        if (!Array.isArray(this.stepEntries)) {
+            this.stepEntries = this.loadStepEntriesSafely();
+        }
+        this.stepEntries = this.filterCurrentSeasonEntries(this.stepEntries || []);
+
+        const mine = (this.stepEntries || []).filter((e) => this.entryBelongsToParticipant(e, this.currentUser));
+        const forTotals = mine.filter((e) => {
+            const st = e.status || 'pending';
+            return st === 'approved' || st === 'pending';
+        });
+        const rejectedToday = mine.filter((e) => {
+            if ((e.status || '') !== 'rejected') return false;
+            try {
+                return new Date(e.date).toDateString() === new Date().toDateString();
+            } catch (err) {
+                return false;
+            }
+        });
+
+        // Zero then re-apply (approved + pending) so Today matches what the user saved
+        this.currentUser.totalSteps = 0;
+        this.currentUser.totalDistanceKm = 0;
+        this.currentUser.totalCalories = 0;
+        this.currentUser.dailySteps = {};
+        this.currentUser.dailyDistanceKm = {};
+        this.currentUser.dailyCalories = {};
+        this.currentUser.dailyStats = {};
+        for (const entry of forTotals) {
+            this.applyEntryContribution(this.currentUser, entry, 1);
+        }
+
+        // Keep roster copy in sync for rank
+        const idx = (this.participants || []).findIndex((p) =>
+            (this.currentUser.uid && p.uid && String(p.uid) === String(this.currentUser.uid)) ||
+            (this.currentUser.id && p.id && String(p.id) === String(this.currentUser.id)) ||
+            (this.currentUser.employeeId && p.employeeId && String(p.employeeId) === String(this.currentUser.employeeId))
+        );
+        if (idx >= 0) {
+            this.participants[idx] = this.stripSecretsFromParticipant({ ...this.currentUser });
+        }
+
+        try {
+            localStorage.setItem('currentUser', JSON.stringify(this.stripSecretsFromParticipant(this.currentUser)));
+        } catch (e) { /* ignore */ }
+
+        const today = new Date().toDateString();
+        const todayPending = forTotals.some((e) => {
+            try {
+                return (e.status || 'pending') === 'pending' && new Date(e.date).toDateString() === today;
+            } catch (err) {
+                return false;
+            }
+        });
+        const todayRejectedKm = rejectedToday.reduce((s, e) => s + (Number(e.distanceKm) || 0), 0);
+        return { todayRejectedKm, todayPending };
+    }
+
     updateDashboard() {
         if (!this.currentUser) return;
 
         document.getElementById('userName').textContent = this.currentUser.name;
-        
+
+        // Always rebuild Today/Total from this user's entries (fixes 0% after a saved walk)
+        const dashMeta = this.refreshCurrentUserTotalsFromEntries();
+
         const today = new Date().toDateString();
-        const todaySteps = this.currentUser.dailySteps[today] || 0;
+        if (!this.currentUser.dailySteps) this.currentUser.dailySteps = {};
+        if (!this.currentUser.dailyDistanceKm) this.currentUser.dailyDistanceKm = {};
+
+        let todaySteps = Number(this.currentUser.dailySteps[today]) || 0;
+        let todayKm = Number(this.currentUser.dailyDistanceKm[today]) || 0;
+        // If GPS distance exists but steps weren't stored, derive steps for the counter card
+        const stepsPerKm = this.challengeConfig.stepsPerKm || 1300;
+        if (todayKm > 0.005 && todaySteps <= 0) {
+            todaySteps = Math.round(todayKm * stepsPerKm);
+            this.currentUser.dailySteps[today] = todaySteps;
+        }
+        if (todaySteps > 0 && todayKm < 0.005) {
+            todayKm = Number((todaySteps / stepsPerKm).toFixed(3));
+            this.currentUser.dailyDistanceKm[today] = todayKm;
+        }
+
         const totalSteps = this.currentUser.totalSteps || 0;
-        
+
         // Always recalculate streak to ensure it's up to date
         const streak = this.calculateStreak(this.currentUser);
-        this.currentUser.streak = streak; // Update the stored streak value
+        this.currentUser.streak = streak;
 
         // Animated number counting
         this.animateNumber('todaySteps', todaySteps);
         this.animateNumber('totalSteps', totalSteps);
         this.animateNumber('streak', streak);
 
- // Update progress bar with animation - progressive daily KM goal
- const goalKm = this.getDailyGoalKm();
- const goal = this.getDailyGoalSteps();
- const dayNum = this.getChallengeDayNumber();
-        const progress = Math.min((todaySteps / goal) * 100, 100);
+        // Progress is KM-based (challenge goal), with step-ratio fallback
+        const goalKm = this.getDailyGoalKm();
+        const goalSteps = this.getDailyGoalSteps();
+        const dayNum = this.getChallengeDayNumber();
+        const progressFromKm = goalKm > 0 ? (todayKm / goalKm) * 100 : 0;
+        const progressFromSteps = goalSteps > 0 ? (todaySteps / goalSteps) * 100 : 0;
+        const progress = Math.min(100, Math.max(progressFromKm, progressFromSteps));
         this.animateProgressBar(progress);
         const progressBadge = document.getElementById('progressBadge');
         if (progressBadge) {
             this.animateNumber('progressBadge', Math.round(progress), '%');
         }
- const remainingEl = document.getElementById('remainingSteps');
- if (remainingEl) {
- remainingEl.textContent = Math.max(0, goal - todaySteps).toLocaleString() + ' left';
- }
- const goalLabel = document.getElementById('dailyGoalLabel');
- if (goalLabel) {
- const dayPrefix = dayNum >= 1 && dayNum <= 7 ? `Day ${dayNum}: ` : '';
- goalLabel.textContent = `${dayPrefix}${goalKm} KM goal`;
- }
- const progressTitle = document.getElementById('dailyGoalTitle');
- if (progressTitle) {
- progressTitle.textContent = dayNum >= 1 && dayNum <= 7
- ? `Day ${dayNum} · ${goalKm} KM`
- : 'Daily goal';
- }
+        const remainingEl = document.getElementById('remainingSteps');
+        if (remainingEl) {
+            const kmLeft = Math.max(0, goalKm - todayKm);
+            if (todayKm > 0.005 || progressFromKm >= progressFromSteps) {
+                remainingEl.textContent = kmLeft <= 0.005
+                    ? 'Goal complete'
+                    : `${kmLeft.toFixed(2)} KM left`;
+            } else {
+                remainingEl.textContent = Math.max(0, goalSteps - todaySteps).toLocaleString() + ' steps left';
+            }
+        }
+        const goalLabel = document.getElementById('dailyGoalLabel');
+        if (goalLabel) {
+            const dayPrefix = dayNum >= 1 && dayNum <= 7 ? `Day ${dayNum}: ` : '';
+            const kmPart = todayKm > 0.005 ? ` · ${todayKm.toFixed(2)} KM today` : '';
+            goalLabel.textContent = `${dayPrefix}${goalKm} KM goal${kmPart}`;
+        }
+        const progressTitle = document.getElementById('dailyGoalTitle');
+        if (progressTitle) {
+            progressTitle.textContent = dayNum >= 1 && dayNum <= 7
+                ? `Day ${dayNum} · ${goalKm} KM`
+                : 'Daily goal';
+        }
 
- const todayCalories = this.currentUser.dailyCalories && this.currentUser.dailyCalories[today]
- ? this.currentUser.dailyCalories[today]
- : 0;
- const totalCalories = this.currentUser.totalCalories || 0;
- const todayCalEl = document.getElementById('todayCaloriesLabel');
- if (todayCalEl) {
- todayCalEl.textContent = `${Math.round(todayCalories).toLocaleString()} kcal today`;
- }
- const totalCalEl = document.getElementById('totalCaloriesLabel');
- if (totalCalEl) {
- totalCalEl.textContent = `${Math.round(totalCalories).toLocaleString()} kcal`;
- }
+        // Hint when today's walk exists but was rejected for the day board
+        const hintEl = document.getElementById('dailyGoalHint') || document.getElementById('counterStatus');
+        if (dashMeta.todayRejectedKm > 0.05 && progress < 5) {
+            this.updateCounterHint(
+                `Today's saved activity (~${dashMeta.todayRejectedKm.toFixed(2)} KM) was rejected for the day board (usually GPS pace). Try again with a steady GPS lock, or contact wow-csg@csgi.com.`
+            );
+        } else if (dashMeta.todayPending) {
+            this.updateCounterHint('Today\'s activity is pending approval — it still counts on your dashboard.');
+        }
 
-        // Update rank
+        const todayCalories = this.currentUser.dailyCalories && this.currentUser.dailyCalories[today]
+            ? this.currentUser.dailyCalories[today]
+            : 0;
+        const totalCalories = this.currentUser.totalCalories || 0;
+        const todayCalEl = document.getElementById('todayCaloriesLabel');
+        if (todayCalEl) {
+            todayCalEl.textContent = `${Math.round(todayCalories).toLocaleString()} kcal today`;
+        }
+        const totalCalEl = document.getElementById('totalCaloriesLabel');
+        if (totalCalEl) {
+            totalCalEl.textContent = `${Math.round(totalCalories).toLocaleString()} kcal`;
+        }
+
+        // Update rank (approved-only leaderboard)
         const rank = this.getUserRank(this.currentUser);
         document.getElementById('rank').textContent = rank > 0 ? `#${rank}` : '-';
 
         // Update activities
         this.updateActivities();
-        
+
         // Update motivation messages
         this.updateMotivationMessages(todaySteps, progress);
-        
+
         // Update daily motivation quote
         this.updateDailyMotivation();
     }
@@ -5092,10 +5203,14 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (!participant || !entry) return;
  const s = sign >= 0 ? 1 : -1;
  const entryDate = new Date(entry.date).toDateString();
- const steps = Number(entry.steps) || 0;
+ let steps = Number(entry.steps) || 0;
  const distanceKm = Number(entry.distanceKm) || 0;
  const calories = Number(entry.caloriesBurned) || 0;
  const durationSec = Number(entry.durationSec) || 0;
+ // GPS-first activities may store KM with 0 steps — derive steps so Today isn't stuck at 0
+ if (steps <= 0 && distanceKm > 0.005) {
+ steps = Math.round(distanceKm * (this.challengeConfig.stepsPerKm || 1300));
+ }
 
  if (!participant.dailySteps) participant.dailySteps = {};
  participant.dailySteps[entryDate] = Math.max(0, (participant.dailySteps[entryDate] || 0) + s * steps);
