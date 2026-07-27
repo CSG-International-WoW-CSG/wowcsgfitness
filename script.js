@@ -4856,10 +4856,22 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
     }
 
     getUserRank(user) {
-        const sorted = [...this.participants].sort((a, b) => 
-            (b.totalSteps || 0) - (a.totalSteps || 0)
+        if (!user) return 0;
+        this.participants = this.filterCurrentSeasonParticipants(this.participants || this.loadParticipants());
+        this.stepEntries = this.filterCurrentSeasonEntries(this.stepEntries || this.loadStepEntries());
+        this.recalculateAllParticipantTotalsFromApproved();
+        const sorted = [...(this.participants || [])]
+            .filter((p) => (p.totalSteps || 0) > 0 || (p.totalDistanceKm || 0) > 0.005)
+            .sort((a, b) => (b.totalSteps || 0) - (a.totalSteps || 0));
+        const idx = sorted.findIndex((p) =>
+            (user.uid && p.uid && String(p.uid) === String(user.uid)) ||
+            (user.id && p.id && String(p.id) === String(user.id)) ||
+            (user.employeeId && p.employeeId && String(p.employeeId) === String(user.employeeId)) ||
+            (user.email && (p.email || p.emailId) &&
+                String(p.email || p.emailId).toLowerCase() === String(user.email).toLowerCase()) ||
+            (user.name && p.name && p.name === user.name)
         );
-        return sorted.findIndex(p => p.name === user.name) + 1;
+        return idx >= 0 ? idx + 1 : 0;
     }
 
  getChallengeDayDate(dayNum) {
@@ -4911,12 +4923,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  findParticipantForEntry(entry) {
  if (!entry) return null;
- const uid = entry.userId;
- const authUid = entry.userUid;
- return this.participants.find((p) =>
- (uid && (p.id === uid || p.employeeId === uid || String(p.id) === String(uid) || String(p.employeeId) === String(uid))) ||
- (authUid && (p.uid === authUid || String(p.uid) === String(authUid)))
- ) || null;
+ // Same identity rules as totals (uid / employeeId / email) — day boards were
+ // missing people when entries only matched via email or userEmployeeId.
+ return (this.participants || []).find((p) => this.entryBelongsToParticipant(entry, p)) || null;
  }
 
  entryBelongsToParticipant(entry, participant) {
@@ -4933,7 +4942,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  ].filter((v) => v != null && v !== '').map((v) => String(v));
  if (entryIds.some((id) => ids.includes(id))) return true;
 
- const pEmail = String(participant.email || participant.emailId || '').toLowerCase().trim();
+ const pEmail = String(participant.email || participant.emailId || participant.emailLower || '').toLowerCase().trim();
  const eEmail = String(entry.userEmail || entry.email || '').toLowerCase().trim();
  return !!(pEmail && eEmail && pEmail === eEmail);
  }
@@ -4957,7 +4966,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  participant.dailyStats = {};
 
  const entries = (this.stepEntries || []).filter(
- (e) => this.isApprovedEntry(e) && this.entryBelongsToParticipant(e, participant)
+ (e) => this.isApprovedEntry(e) && this.isCurrentSeasonEntry(e) && this.entryBelongsToParticipant(e, participant)
  );
  for (const entry of entries) {
  this.applyEntryContribution(participant, entry, 1);
@@ -5132,8 +5141,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const goalKm = this.challengeConfig.dayGoalsKm[dayNum - 1] || dayNum;
  const dateKey = this.getChallengeDayDate(dayNum).toDateString();
  const byKey = new Map();
+ const entries = this.filterCurrentSeasonEntries(this.stepEntries || []);
 
- (this.stepEntries || []).forEach((entry) => {
+ entries.forEach((entry) => {
  if (!this.isApprovedEntry(entry)) return;
  let entryDateKey;
  try {
@@ -5144,18 +5154,25 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (entryDateKey !== dateKey) return;
 
  const participant = this.findParticipantForEntry(entry);
- if (!participant) return;
+ // Prefer stable auth/employee ids from the entry so missing profiles still rank
  const key = String(
- participant.uid || participant.id || participant.employeeId || participant.email || participant.name
+ entry.userUid ||
+ entry.userId ||
+ entry.userEmployeeId ||
+ (participant && (participant.uid || participant.id || participant.employeeId || participant.email)) ||
+ entry.userEmail ||
+ entry.userName ||
+ entry.id
  );
  const dist = Number(entry.distanceKm) || 0;
  const steps = Number(entry.steps) || 0;
+ // GPS-glitch finishes: skip for ranking, but keep slower/in-progress attempts
  if (this.isImplausibleChallengePace(entry, goalKm)) return;
  const finishSec = this.estimateTimeToGoalSec(entry, goalKm);
 
  const row = byKey.get(key) || {
- name: participant.name,
- department: participant.department,
+ name: (participant && participant.name) || entry.userName || 'Unknown',
+ department: (participant && participant.department) || '',
  steps: 0,
  distanceKm: 0,
  durationSec: null,
@@ -5250,10 +5267,13 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  // Refresh from Firebase when needed — but never thrash on every paint (iOS Safari OOM)
  if (this.firebaseEnabled && !skipRemoteSync && (forceSync || syncIsStale)) {
- await this.syncStepEntriesFromFirebase();
+ await this.syncParticipantsFromFirebase({ skipEntries: false });
  } else if (!Array.isArray(this.stepEntries) || this.stepEntries.length === 0) {
  this.stepEntries = this.loadStepEntries();
  }
+ // Always season-filter before ranking (local cache may still contain old-season rows)
+ this.stepEntries = this.filterCurrentSeasonEntries(this.stepEntries || this.loadStepEntries());
+ this.participants = this.filterCurrentSeasonParticipants(this.participants || this.loadParticipants());
  this.recalculateAllParticipantTotalsFromApproved();
 
         let sorted = [];
@@ -5310,8 +5330,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 .sort((a, b) => b.avgSteps - a.avgSteps);
         }
 
-        // Hide people with zero approved activity on total/today boards
-        if (filter === 'total') {
+        // Hide people with zero approved activity on total/today/avg boards
+        if (filter === 'total' || filter === 'avg') {
             sorted = sorted.filter((p) => (p.totalSteps || 0) > 0 || (p.totalDistanceKm || 0) > 0.005);
         } else if (filter === 'today') {
             sorted = sorted.filter((p) => (p.todaySteps || 0) > 0);
@@ -7896,25 +7916,21 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  async saveStepsWithScreenshot(steps, screenshotData, fromStepCounter = false, trackMeta = null, shareOptions = null) {
         const today = new Date().toDateString();
-        const currentSteps = this.currentUser.dailySteps[today] || 0;
-        this.currentUser.dailySteps[today] = currentSteps + steps;
-        this.currentUser.totalSteps = (this.currentUser.totalSteps || 0) + steps;
+        // Do not bump totals here — leaderboard uses approved entries only.
+        // Totals are rebuilt from approved entries after this entry is stored.
         this.currentUser.lastActivity = new Date().toISOString();
 
  const distanceKm = trackMeta && typeof trackMeta.distanceKm === 'number'
  ? trackMeta.distanceKm
  : steps / (this.challengeConfig.stepsPerKm || 1300);
- this.currentUser.totalDistanceKm = (this.currentUser.totalDistanceKm || 0) + distanceKm;
  if (!this.currentUser.dailyDistanceKm) this.currentUser.dailyDistanceKm = {};
- this.currentUser.dailyDistanceKm[today] = (this.currentUser.dailyDistanceKm[today] || 0) + distanceKm;
+ if (!this.currentUser.dailySteps) this.currentUser.dailySteps = {};
 
  const durationSec = trackMeta && typeof trackMeta.durationSec === 'number' ? trackMeta.durationSec : null;
  const caloriesBurned = trackMeta && typeof trackMeta.caloriesBurned === 'number'
  ? trackMeta.caloriesBurned
  : this.estimateCaloriesBurned(distanceKm, durationSec, this.getBodyWeightKg());
- this.currentUser.totalCalories = (this.currentUser.totalCalories || 0) + caloriesBurned;
  if (!this.currentUser.dailyCalories) this.currentUser.dailyCalories = {};
- this.currentUser.dailyCalories[today] = (this.currentUser.dailyCalories[today] || 0) + caloriesBurned;
 
  // Per-day completion stats for daily leaderboards (shortest time wins)
  if (!this.currentUser.dailyStats) this.currentUser.dailyStats = {};
@@ -7933,10 +7949,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  goalKm: goalKmForDay,
  challengeDay: dayNum || null
  };
- prevDay.distanceKm = Number(((prevDay.distanceKm || 0) + distanceKm).toFixed(3));
- prevDay.durationSec = (prevDay.durationSec || 0) + (durationSec || 0);
- prevDay.steps = (prevDay.steps || 0) + steps;
- prevDay.caloriesBurned = (prevDay.caloriesBurned || 0) + caloriesBurned;
+ // Tentative day stats — rebuilt from approved entries after save when status is known
  prevDay.goalKm = goalKmForDay;
  prevDay.challengeDay = dayNum || prevDay.challengeDay || null;
  const attemptFinishSec = this.estimateTimeToGoalSec(
@@ -7944,14 +7957,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  goalKmForDay
  );
  const attemptEntry = { distanceKm, durationSec, path: trackMeta && trackMeta.path, timeToGoalSec: trackMeta && trackMeta.timeToGoalSec };
- if (attemptFinishSec != null && !this.isImplausibleChallengePace(attemptEntry, goalKmForDay)) {
- prevDay.completed = true;
- if (prevDay.completionDurationSec == null || attemptFinishSec < prevDay.completionDurationSec) {
- prevDay.completionDurationSec = attemptFinishSec;
- prevDay.completedAt = new Date().toISOString();
- }
- }
- // Do not invent a day-finish time from summed sessions — only single legal attempts count
+ // Only count toward day completion preview when this attempt will auto-approve
+ // (actual rebuild happens after stepEntries is updated)
  this.currentUser.dailyStats[today] = prevDay;
 
         const entryId = `ENTRY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -7968,6 +7975,14 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  };
  const paceIllegal = this.isImplausibleChallengePace(draftForPace, goalKmForDay);
  const autoOk = fromStepCounter && !paceIllegal;
+ if (autoOk && attemptFinishSec != null && !this.isImplausibleChallengePace(attemptEntry, goalKmForDay)) {
+ prevDay.completed = true;
+ if (prevDay.completionDurationSec == null || attemptFinishSec < prevDay.completionDurationSec) {
+ prevDay.completionDurationSec = attemptFinishSec;
+ prevDay.completedAt = new Date().toISOString();
+ }
+ }
+ this.currentUser.dailyStats[today] = prevDay;
  const paceNote = paceIllegal
  ? `Rejected: pace faster than ${this.challengeConfig.maxHumanSpeedKmh} km/h for the day goal (unrealistic / GPS glitch).`
  : null;
@@ -8017,6 +8032,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         
         this.saveStepEntries();
         await this.upsertStepEntryInFirebase(stepEntry);
+
+        // Align personal dashboard with public leaderboard (approved entries only)
+        this.recalculateParticipantTotalsFromApproved(this.currentUser);
 
         let shareNote = '';
         // Always publish a team-feed summary so colleagues can see activity;
@@ -8076,10 +8094,17 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         // Update streak
         this.currentUser.streak = this.calculateStreak(this.currentUser);
 
-        // Save
-        const index = this.participants.findIndex(p => p.name === this.currentUser.name);
+        // Save — match by uid/id, not display name (duplicate names broke ranks)
+        const index = this.participants.findIndex((p) =>
+            (this.currentUser.uid && p.uid && String(p.uid) === String(this.currentUser.uid)) ||
+            (this.currentUser.id && p.id && String(p.id) === String(this.currentUser.id)) ||
+            (this.currentUser.employeeId && p.employeeId && String(p.employeeId) === String(this.currentUser.employeeId)) ||
+            (p.name === this.currentUser.name)
+        );
         if (index !== -1) {
             this.participants[index] = this.currentUser;
+        } else {
+            this.participants.push(this.currentUser);
         }
 
         localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
