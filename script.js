@@ -139,22 +139,49 @@ class StepathonApp {
                 this.checkCurrentUser();
                 // Paint from local cache first — avoid triple Firebase sync on cold start
                 // Delay paint on iOS so cold start / reload doesn't fight Firebase + JSON parse
+                const iosBanner = document.getElementById('iosBootBanner');
+                const iosLoadBtn = document.getElementById('iosLoadRankingsBtn');
+                if (this.isLowMemoryClient()) {
+                    if (iosBanner) iosBanner.style.display = 'block';
+                    if (iosLoadBtn) {
+                        iosLoadBtn.style.display = 'block';
+                        iosLoadBtn.addEventListener('click', () => {
+                            iosLoadBtn.disabled = true;
+                            iosLoadBtn.textContent = 'Loading…';
+                            this.ensureFirestore().then(() => this.syncParticipantsFromFirebase({ skipEntries: false }))
+                                .then(() => {
+                                    this.ensurePublicLeaderboardReady();
+                                    iosLoadBtn.textContent = 'Rankings loaded';
+                                })
+                                .catch(() => {
+                                    iosLoadBtn.disabled = false;
+                                    iosLoadBtn.textContent = 'Load rankings';
+                                });
+                        });
+                    }
+                }
                 setTimeout(() => {
-                    this.ensurePublicLeaderboardReady();
+                    if (!this.isLowMemoryClient()) {
+                        this.ensurePublicLeaderboardReady();
+                    } else {
+                        const list = document.getElementById('leaderboardList');
+                        if (list) {
+                            list.innerHTML = '<div class="leaderboard-item"><div class="name">Tap “Load rankings” to refresh the board.</div></div>';
+                        }
+                    }
                 }, this.isLowMemoryClient() ? 500 : 100);
                 const iosTip = document.getElementById('iosTrackingTip');
                 if (iosTip && /iPhone|iPad|iPod/i.test(navigator.userAgent || '')) {
                     iosTip.style.display = 'block';
                 }
             });
- // Always sync participants + entries for public leaderboard (signed-out visitors included)
- // iOS Chrome dies on reload when sync + huge GPS paths hit memory too early
- const syncDelayMs = this.isLowMemoryClient()
-   ? (window.__WOWCSG_SAFE_BOOT__ ? 8000 : 6000)
-   : (window.__WOWCSG_SAFE_BOOT__ ? 4500 : 2500);
- setTimeout(() => {
- this.syncParticipantsFromFirebase({ skipEntries: false });
- }, syncDelayMs);
+ // Desktop/Android: sync for public leaderboard. iOS waits for explicit Load rankings / login.
+ if (!this.isLowMemoryClient()) {
+   const syncDelayMs = window.__WOWCSG_SAFE_BOOT__ ? 4500 : 2500;
+   setTimeout(() => {
+     this.syncParticipantsFromFirebase({ skipEntries: false });
+   }, syncDelayMs);
+ }
  } else {
  this.restoreAdminSessionIfAuthorized();
  // Admin needs both entries (Validations) and participants (User Management + totals)
@@ -295,10 +322,19 @@ class StepathonApp {
             }
 
             this.auth = firebase.auth();
-            this.db = firebase.firestore();
+            // iOS: defer Firestore SDK + queries until rankings/login need them
+            if (window.__WOWCSG_DEFER_FIRESTORE__ || typeof firebase.firestore !== 'function') {
+                this.db = null;
+                this.firebaseEnabled = true;
+                this._firestoreReady = false;
+            } else {
+                this.db = firebase.firestore();
+                this._firestoreReady = true;
+                this.firebaseEnabled = true;
+            }
             // Storage SDK loaded on demand when sharing a photo
             this.storage = null;
-            this.firebaseEnabled = true;
+            if (!this.firebaseEnabled) return;
 
             // Keep session in sync
  this.auth.onAuthStateChanged(async (user) => {
@@ -311,6 +347,7 @@ class StepathonApp {
  }
  return;
  }
+ await this.ensureFirestore();
  if (window.location.pathname.includes('admin.html')) {
  const ok = await this.verifyAdminAccess(user);
  if (ok) {
@@ -331,6 +368,24 @@ class StepathonApp {
             this.firebaseEnabled = false;
             this.auth = null;
             this.db = null;
+        }
+    }
+
+    async ensureFirestore() {
+        if (this.db && this._firestoreReady) return true;
+        if (typeof firebase === 'undefined') return false;
+        try {
+            if (typeof firebase.firestore !== 'function') {
+                await this.loadScriptOnce('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js');
+            }
+            if (typeof firebase.firestore !== 'function') return false;
+            this.db = firebase.firestore();
+            this._firestoreReady = true;
+            this.firebaseEnabled = true;
+            return true;
+        } catch (e) {
+            console.warn('Firestore load failed', e);
+            return false;
         }
     }
 
@@ -2288,6 +2343,7 @@ class StepathonApp {
         }
 
         if (this.firebaseEnabled) {
+            await this.ensureFirestore();
             const usernameLower = username.toLowerCase();
             const employeeIdLower = id.toLowerCase();
 
@@ -5653,6 +5709,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
     async handleFirebaseLogin(identifier, password) {
         try {
+            await this.ensureFirestore();
             let raw = String(identifier || '').trim();
             let email = raw;
             let participant = null;
@@ -5802,6 +5859,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  async lookupFirebaseParticipant(identifier) {
+ await this.ensureFirestore();
  if (!this.firebaseEnabled || !this.db) {
  return null;
  }
@@ -5871,6 +5929,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
     }
 
     async loadCurrentUserFromFirebase(uid) {
+        await this.ensureFirestore();
         if (!this.firebaseEnabled || !this.db) {
             return null;
         }
@@ -5894,6 +5953,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
     }
 
     async syncParticipantsFromFirebase(options = {}) {
+        await this.ensureFirestore();
         if (!this.firebaseEnabled || !this.db) {
             return;
         }
@@ -5917,6 +5977,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
     }
 
     async syncStepEntriesFromFirebase() {
+        await this.ensureFirestore();
         if (!this.firebaseEnabled || !this.db) {
             return;
         }
@@ -5945,6 +6006,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
     }
 
     async upsertStepEntryInFirebase(entry) {
+        await this.ensureFirestore();
         if (!this.firebaseEnabled || !this.db || !entry || !entry.id) {
             return;
         }
@@ -9086,7 +9148,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             const app = new StepathonApp();
             window.app = app;
             try {
-                const key = window.__WOWCSG_BOOT_KEY__ || 'wowcsg_boot_fails_v81';
+                const key = window.__WOWCSG_BOOT_KEY__ || 'wowcsg_boot_fails_v82';
                 sessionStorage.setItem(key, '0');
             } catch (e0) { /* ignore */ }
             console.log('StepathonApp initialized successfully');

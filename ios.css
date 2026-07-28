@@ -1,0 +1,102 @@
+/* Minimal iPhone stylesheet — no animations, filters, or fixed GPU layers */
+:root {
+  --bg: #f4f7fb;
+  --ink: #0f172a;
+  --muted: #475569;
+  --card: #ffffff;
+  --line: #dbe3ee;
+  --brand: #0f766e;
+  --accent: #ea580c;
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  line-height: 1.45;
+  -webkit-text-size-adjust: 100%;
+}
+body::before, body::after { display: none !important; content: none !important; }
+.container { max-width: 720px; margin: 0 auto; padding: 12px; }
+.card, .hero-shell, .challenge-band, .info-card, .dashboard, .leaderboard-card, .feed-card, .activity-card, .motivation-card, .day-plan-card, .android-app-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  margin: 0 0 12px;
+}
+.hero-shell, .challenge-band, .info-card, .day-plan-card, .android-app-card, .motivation-card, .email-warning { display: none !important; }
+h1, h2, h3 { margin: 0 0 8px; line-height: 1.25; }
+.btn, button {
+  font: inherit;
+  border: 0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--brand);
+  color: #fff;
+  font-weight: 600;
+}
+.btn-secondary, .btn-ghost, .filter-btn, .day-filter-btn, .login-tab, .mode-btn {
+  background: #e2e8f0;
+  color: var(--ink);
+}
+.btn-primary, .btn-counter-start, .btn-success { background: var(--accent); color: #fff; }
+.form-group { margin: 0 0 12px; }
+label { display: block; font-weight: 600; margin-bottom: 4px; }
+input, textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  background: #fff;
+}
+.form-hint, .map-hint, .leaderboard-public-note, .leaderboard-day-note, .leaderboard-subtitle { color: var(--muted); font-size: 0.9rem; }
+.login-tabs, .leaderboard-filters, .leaderboard-day-filters, .activity-mode-toggles, .step-counter-controls-section, .dashboard-header-actions, .stats-grid, .gps-stats-row, .admin-filters, .feed-toolbar, .help-actions, .share-actions, .form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+.stats-grid-compact .stat-card, .gps-stat, .admin-stat-card {
+  flex: 1 1 40%;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  text-align: center;
+}
+.stat-value, .step-counter-value-large, .admin-stat-value { font-size: 1.4rem; font-weight: 700; }
+.step-counter-circle { text-align: center; padding: 12px 0; }
+.activity-map, .activity-map-wrap { display: none !important; }
+.progress-bar-container, .progress-bar { background: #e2e8f0; border-radius: 999px; height: 12px; overflow: hidden; }
+.progress-fill { background: var(--brand); height: 100%; width: 0; }
+.leaderboard-item, .activity-list > *, .team-feed-list > * {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45);
+  display: flex; align-items: flex-end; justify-content: center; z-index: 50;
+}
+.modal-content {
+  background: #fff; width: 100%; max-width: 560px; border-radius: 16px 16px 0 0;
+  padding: 16px; max-height: 85vh; overflow: auto;
+}
+.modal-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.required { color: #dc2626; }
+footer { color: var(--muted); font-size: 0.85rem; text-align: center; padding: 16px 8px 28px; }
+.ios-boot-banner {
+  background: #ecfdf5; border: 1px solid #99f6e4; color: #115e59;
+  border-radius: 12px; padding: 12px; margin: 0 0 12px; font-size: 0.95rem;
+}
+#leaderboardList .name { flex: 1; }
+.filter-btn.active, .day-filter-btn.active, .login-tab.active, .mode-btn.active {
+  background: var(--brand); color: #fff;
+}
