@@ -36,10 +36,11 @@
         var tasks = [];
         log('Clearing…');
         try {
-          ['stepEntries', 'stepEntries_cache', 'participants_cache'].forEach(function (k) {
-            localStorage.removeItem(k);
+          ['stepEntries', 'stepEntries_cache', 'participants_cache', 'wowcsg_boot_fails_v69', 'wowcsg_boot_fails_v80'].forEach(function (k) {
+            try { localStorage.removeItem(k); } catch (e0) {}
+            try { sessionStorage.removeItem(k); } catch (e1) {}
           });
-          sessionStorage.clear();
+          try { sessionStorage.clear(); } catch (e2) {}
           log('Cleared local data');
         } catch (e) { log('localStorage: ' + e); }
         if ('serviceWorker' in navigator) {

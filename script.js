@@ -138,18 +138,23 @@ class StepathonApp {
                 
                 this.checkCurrentUser();
                 // Paint from local cache first — avoid triple Firebase sync on cold start
+                // Delay paint on iOS so cold start / reload doesn't fight Firebase + JSON parse
                 setTimeout(() => {
                     this.ensurePublicLeaderboardReady();
-                }, 100);
+                }, this.isLowMemoryClient() ? 500 : 100);
                 const iosTip = document.getElementById('iosTrackingTip');
                 if (iosTip && /iPhone|iPad|iPod/i.test(navigator.userAgent || '')) {
                     iosTip.style.display = 'block';
                 }
             });
  // Always sync participants + entries for public leaderboard (signed-out visitors included)
+ // iOS Chrome dies on reload when sync + huge GPS paths hit memory too early
+ const syncDelayMs = this.isLowMemoryClient()
+   ? (window.__WOWCSG_SAFE_BOOT__ ? 8000 : 6000)
+   : (window.__WOWCSG_SAFE_BOOT__ ? 4500 : 2500);
  setTimeout(() => {
  this.syncParticipantsFromFirebase({ skipEntries: false });
- }, window.__WOWCSG_SAFE_BOOT__ ? 4500 : 2500);
+ }, syncDelayMs);
  } else {
  this.restoreAdminSessionIfAuthorized();
  // Admin needs both entries (Validations) and participants (User Management + totals)
@@ -166,12 +171,29 @@ class StepathonApp {
  }
     }
 
+    /** iPhone Chrome/Safari + safe-boot: keep memory tiny (GPS paths OOM on reload). */
+    isLowMemoryClient() {
+        // Admin maps need full GPS paths — never strip there
+        if (window.location.pathname.includes('admin.html')) return false;
+        if (window.__WOWCSG_IOS__ || window.__WOWCSG_SAFE_BOOT__) return true;
+        const ua = navigator.userAgent || '';
+        return /iPhone|iPad|iPod/i.test(ua);
+    }
+
+    /** Drop GPS / screenshot blobs — not needed for boards or dashboards. */
+    leanStepEntry(entry) {
+        if (!entry || typeof entry !== 'object') return entry;
+        const { path, screenshot, ...rest } = entry;
+        return rest;
+    }
+
     loadStepEntriesSafely() {
         try {
             const storageKey = this.firebaseEnabled ? 'stepEntries_cache' : 'stepEntries';
             const raw = localStorage.getItem(storageKey);
-            // ~1.5MB+ JSON.parse regularly OOM-kills mobile Chrome tabs
-            if (raw && raw.length > 1500000) {
+            // iOS Chrome OOMs well below 1.5MB — especially after reload with GPS caches
+            const maxChars = this.isLowMemoryClient() ? 350000 : 1500000;
+            if (raw && raw.length > maxChars) {
                 console.warn('Dropping oversized stepEntries cache:', raw.length);
                 localStorage.removeItem(storageKey);
                 return [];
@@ -180,7 +202,11 @@ class StepathonApp {
             /* ignore */
         }
         const entries = this.loadStepEntries();
-        return Array.isArray(entries) ? entries : [];
+        if (!Array.isArray(entries)) return [];
+        if (this.isLowMemoryClient()) {
+            return entries.map((e) => this.leanStepEntry(e));
+        }
+        return entries;
     }
 
     loadScriptOnce(src) {
@@ -2120,28 +2146,17 @@ class StepathonApp {
         try {
             const storageKey = this.firebaseEnabled ? 'stepEntries_cache' : 'stepEntries';
             const saved = localStorage.getItem(storageKey);
-            console.log('loadStepEntries - Raw localStorage value:', saved);
-            
             if (!saved || saved === 'null' || saved === 'undefined') {
-                console.log('No stepEntries found in localStorage (or null/undefined)');
                 return [];
             }
-            
             const entries = JSON.parse(saved);
-            console.log('loadStepEntries - Parsed entries:', entries);
-            console.log('loadStepEntries - Is array?', Array.isArray(entries));
-            console.log('loadStepEntries - Type:', typeof entries);
-            
             if (!Array.isArray(entries)) {
-                console.error('stepEntries is not an array! Type:', typeof entries, 'Value:', entries);
+                console.error('stepEntries is not an array! Type:', typeof entries);
                 return [];
             }
-            
-            console.log('Loaded stepEntries from localStorage:', entries.length, 'entries');
             return entries;
         } catch (error) {
             console.error('Error loading stepEntries from localStorage:', error);
-            console.error('Error stack:', error.stack);
             return [];
         }
     }
@@ -2155,8 +2170,10 @@ class StepathonApp {
             // Slim cache for mobile Safari — screenshots / huge GPS dumps cause OOM + QuotaExceeded
             const cfg = this.securityCfg();
             const cacheMax = cfg.maxGpsPointsCache || 180;
+            const lowMem = this.isLowMemoryClient();
             const slim = this.stepEntries.map((entry) => {
                 if (!entry || typeof entry !== 'object') return entry;
+                if (lowMem) return this.leanStepEntry(entry);
                 const copy = { ...entry };
                 delete copy.screenshot;
                 if (Array.isArray(copy.path) && copy.path.length > cacheMax) {
@@ -2167,16 +2184,10 @@ class StepathonApp {
             const jsonString = JSON.stringify(slim);
             const storageKey = this.firebaseEnabled ? 'stepEntries_cache' : 'stepEntries';
             localStorage.setItem(storageKey, jsonString);
-            console.log('Saved stepEntries to localStorage:', slim.length, 'entries');
         } catch (error) {
             console.error('Error saving stepEntries to localStorage:', error);
             try {
-                // Last resort: drop paths so the page can still load
-                const minimal = (this.stepEntries || []).map((e) => {
-                    if (!e || typeof e !== 'object') return e;
-                    const { path, screenshot, ...rest } = e;
-                    return rest;
-                });
+                const minimal = (this.stepEntries || []).map((e) => this.leanStepEntry(e));
                 const storageKey = this.firebaseEnabled ? 'stepEntries_cache' : 'stepEntries';
                 localStorage.setItem(storageKey, JSON.stringify(minimal));
             } catch (inner) {
@@ -5908,7 +5919,13 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         this._leaderboardSyncInFlight = (async () => {
             try {
                 const snapshot = await this.stepEntriesCol().get();
-                this.stepEntries = this.filterCurrentSeasonEntries(snapshot.docs.map((doc) => doc.data()));
+                const lean = this.isLowMemoryClient();
+                this.stepEntries = this.filterCurrentSeasonEntries(
+                    snapshot.docs.map((doc) => {
+                        const data = doc.data();
+                        return lean ? this.leanStepEntry(data) : data;
+                    })
+                );
                 this._lastStepEntriesSyncAt = Date.now();
                 this.saveStepEntries();
             } catch (error) {
