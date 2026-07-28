@@ -40,12 +40,15 @@ public class ActivityTrackingService extends Service implements SensorEventListe
     private static final long TICK_MS = 1000L;
     private static final long GPS_MIN_TIME_MS = 4000L;
     private static final float GPS_MIN_DIST_M = 3f;
-    // Android outdoor GPS often reports 50–150m accuracy while still usable.
-    // Previous 45m filter dropped most lock-screen fixes on MIUI/Samsung.
-    private static final float MAX_ACCURACY_M = 160f;
-    private static final float MAX_JUMP_M = 120f;
-    /** Cap credited gap distance at ~9.5 km/h walking/jogging when GPS resumes after lock. */
-    private static final double GAP_CREDIT_KMH = 9.5;
+    // Outdoor GPS: prefer real GPS accuracy window (~50–80m typical while walking).
+    private static final float MAX_ACCURACY_M = 80f;
+    private static final float MAX_JUMP_M = 100f;
+    /** Cap credited gap distance at ~8.5 km/h walking when GPS resumes after lock. */
+    private static final double GAP_CREDIT_KMH = 8.5;
+    /** Conservative walking cadence (~1300 steps/KM). 1040 was over-counting ~25–40%. */
+    private static final double STEPS_PER_KM = 1300.0;
+    /** Only use step floor when GPS has been silent this long (phone locked). */
+    private static final long GPS_STALE_MS = 25000L;
 
     private SensorManager sensorManager;
     private Sensor stepSensor;
@@ -62,6 +65,7 @@ public class ActivityTrackingService extends Service implements SensorEventListe
     private int sessionSteps = 0;
     private double distanceMeters = 0;
     private Location lastLocation = null;
+    private long lastGpsAt = 0L;
     private long lastTickAt = 0L;
     private long startedAt = 0L;
 
@@ -141,6 +145,7 @@ public class ActivityTrackingService extends Service implements SensorEventListe
         sessionSteps = 0;
         distanceMeters = 0;
         lastLocation = null;
+        lastGpsAt = 0L;
 
         acquireWakeLock();
         registerStepSensor();
@@ -179,13 +184,22 @@ public class ActivityTrackingService extends Service implements SensorEventListe
 
         if ("treadmill".equals(mode) && sessionSteps > 0) {
             // Step-based only — do not trust user-entered treadmill speed
-            double stepMeters = sessionSteps * (1000.0 / 1040.0);
+            double stepMeters = sessionSteps * (1000.0 / STEPS_PER_KM);
             distanceMeters = stepMeters;
         } else if ("outdoor".equals(mode) && sessionSteps > 0) {
-            // Prefer step-derived distance when GPS is sparse while locked
-            double stepMeters = sessionSteps * (1000.0 / 1040.0); // ~1040 steps/KM native
-            if (stepMeters > distanceMeters) {
-                distanceMeters = stepMeters;
+            // Only fill from steps when GPS is stale (locked). Never let an aggressive
+            // step stride outrun a live GPS track (was over-counting ~30–60%).
+            long silentMs = lastGpsAt > 0L ? (now - lastGpsAt) : Long.MAX_VALUE;
+            if (silentMs >= GPS_STALE_MS) {
+                double stepMeters = sessionSteps * (1000.0 / STEPS_PER_KM);
+                // Cap step fill-in at +15% over current GPS so cadence noise can't explode KM
+                double capped = Math.max(distanceMeters, Math.min(stepMeters, distanceMeters * 1.15 + 40.0));
+                if (distanceMeters < 20.0) {
+                    // No usable GPS yet — allow step distance but still use conservative stride
+                    distanceMeters = Math.max(distanceMeters, stepMeters);
+                } else {
+                    distanceMeters = Math.max(distanceMeters, Math.min(stepMeters, capped));
+                }
             }
         }
 
@@ -210,18 +224,10 @@ public class ActivityTrackingService extends Service implements SensorEventListe
     private void registerGps() {
         if (locationManager == null) return;
         try {
+            // GPS only — NETWORK + GPS together zigzag and inflate distance.
             if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 locationManager.requestLocationUpdates(
                     LocationManager.GPS_PROVIDER,
-                    GPS_MIN_TIME_MS,
-                    GPS_MIN_DIST_M,
-                    this,
-                    Looper.getMainLooper()
-                );
-            }
-            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                locationManager.requestLocationUpdates(
-                    LocationManager.NETWORK_PROVIDER,
                     GPS_MIN_TIME_MS,
                     GPS_MIN_DIST_M,
                     this,
@@ -335,10 +341,23 @@ public class ActivityTrackingService extends Service implements SensorEventListe
     @Override
     public void onLocationChanged(Location location) {
         if (!running || location == null) return;
+        // Ignore non-GPS providers if any still deliver (defense in depth)
+        String provider = location.getProvider();
+        if (provider != null && !LocationManager.GPS_PROVIDER.equals(provider)) {
+            return;
+        }
         if (location.hasAccuracy() && location.getAccuracy() > MAX_ACCURACY_M) return;
+        lastGpsAt = System.currentTimeMillis();
         if (lastLocation != null) {
             float dist = lastLocation.distanceTo(location);
             long dt = Math.max(1L, location.getTime() - lastLocation.getTime());
+            // Implied speed gate: > 18 km/h between fixes is almost always a jump
+            double hours = dt / 3600000.0;
+            double speedKmh = hours > 0 ? (dist / 1000.0) / hours : 0;
+            if (speedKmh > 18.0 && dist > 25f) {
+                lastLocation = location;
+                return;
+            }
             if (dist > MAX_JUMP_M && dt < 8000L) {
                 // Likely GPS jump — skip distance, keep anchor
                 lastLocation = location;
@@ -347,9 +366,7 @@ public class ActivityTrackingService extends Service implements SensorEventListe
             if (dist >= GPS_MIN_DIST_M && dist <= MAX_JUMP_M) {
                 distanceMeters += dist;
             } else if (dist > MAX_JUMP_M && dt >= 8000L) {
-                // Long gap while locked/backgrounded: credit capped walking pace
-                // (previously these points were dropped entirely → under-count).
-                double hours = dt / 3600000.0;
+                // Long gap while locked: credit capped walking pace
                 float credit = (float) Math.min(dist, hours * GAP_CREDIT_KMH * 1000.0);
                 if (credit >= 5f) {
                     distanceMeters += credit;

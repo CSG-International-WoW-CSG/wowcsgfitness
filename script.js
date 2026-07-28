@@ -6400,8 +6400,14 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  // Ignore native speed×time KM; keep step-derived distance only
  this.stepCounter.treadmillDistanceKm = (this.stepCounter.stepCount || 0) / this.getStepsPerKmForTracking();
  } else {
- // Outdoor: merge service GPS/step KM without shrinking local GPS track
+ // Outdoor: take service KM only if it doesn't wildly exceed local GPS track
+ const localGps = (this.stepCounter.distanceKm || 0) + (this.stepCounter.pendingSegmentKm || 0);
+ if (localGps < 0.05) {
  this.stepCounter.distanceKm = Math.max(this.stepCounter.distanceKm || 0, serviceKm);
+ } else {
+ const capped = Math.min(serviceKm, localGps * 1.15 + 0.1);
+ this.stepCounter.distanceKm = Math.max(this.stepCounter.distanceKm || 0, Math.min(serviceKm, capped));
+ }
  }
  this.syncStepsFromDistance(false);
  this.updateStepCounterDisplay();
@@ -7037,21 +7043,26 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  const gpsKm = (this.stepCounter.distanceKm || 0) + (this.stepCounter.pendingSegmentKm || 0);
- // Prefer the higher of GPS and step-derived KM so neither sensor alone under-counts
- return Math.max(gpsKm, stepKm);
+ const pathLen = Array.isArray(this.stepCounter.path) ? this.stepCounter.path.length : 0;
+ const gpsReady = pathLen >= 6 || gpsKm >= 0.12;
+ if (gpsReady) {
+ // Prefer GPS. Allow steps to fill only a small under-count — never let
+ // aggressive step-stride blow past the GPS track (Hari: ~3 KM real → 5 KM shown).
+ const cappedStep = Math.min(stepKm, gpsKm * 1.12 + 0.08);
+ return Number(Math.max(gpsKm, cappedStep).toFixed(3));
+ }
+ // GPS still cold / locked with no track: use conservative step distance
+ return Number(Math.max(gpsKm, stepKm).toFixed(3));
  }
 
  /**
- * Hardware pedometers report fewer steps than browser DeviceMotion.
- * Use a slightly shorter stride (more KM per step) on native Android so outdoor
- * distance stays comparable to iPhone web tracking for the same walk.
+ * Steps-per-KM for distance estimates. Keep outdoor stride conservative —
+ * shorter "steps/KM" over-counts distance and trips the pace gate.
  */
  getStepsPerKmForTracking() {
  const base = this.challengeConfig.stepsPerKm || 1300;
- const isNative = !!(window.WowNative && window.WowNative.isNative);
- // Hardware pedometer under-reports vs iPhone browser motion (~20% fewer steps).
- // Use ~1040 steps/KM on Android so the same walk yields comparable KM.
- return isNative ? Math.max(980, Math.round(base * 0.8)) : base;
+ // Native hardware pedometers are close enough; do not use 0.8× (was ~1040 and over-counted).
+ return base;
  }
 
  /**
@@ -8353,7 +8364,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         // Show success message
         setTimeout(() => {
  if (paceIllegal) {
- alert(`Activity saved but REJECTED for the day challenge.\n\nYour pace to the day goal was faster than ${this.challengeConfig.maxHumanSpeedKmh} km/h (~${this.formatDurationClock(this.minLegalFinishSecForGoal(goalKmForDay))} min for ${goalKmForDay} KM minimum).\nThis usually means a GPS glitch. Please try again outdoors with a steady GPS lock.${shareNote}`);
+ alert(`Activity saved but REJECTED for the day challenge.\n\nYour pace to the day goal was faster than ${this.challengeConfig.maxHumanSpeedKmh} km/h (~${this.formatDurationClock(this.minLegalFinishSecForGoal(goalKmForDay))} min for ${goalKmForDay} KM minimum).\n\nThis often means GPS/step distance was over-counted (app KM higher than real). Please update to the latest Android APK, try again outdoors with a steady GPS lock, and stop near the real day goal.${shareNote}`);
  } else {
  alert(`Saved successfully!\n\n${distanceKm.toFixed(2)} KM covered (~${steps.toLocaleString()} steps)\nCalories burned: ~${caloriesBurned} kcal\n\nYour leaderboard has been updated.${shareNote}`);
  }
