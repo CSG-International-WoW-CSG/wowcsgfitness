@@ -1689,3 +1689,35 @@ body.is-logged-in .container {
   font-weight: 600 !important;
 }
 
+/* iPhone/iPad: kill GPU-heavy layers that WebKit OOMs on reload */
+html.ios-lite body::before {
+  animation: none !important;
+  transform: none !important;
+  background:
+    linear-gradient(165deg, #ffe8df 0%, #e8f7ff 42%, #eef9f3 100%) !important;
+}
+html.ios-lite body::after {
+  display: none !important;
+  content: none !important;
+  background: none !important;
+}
+html.ios-lite *,
+html.ios-lite *::before,
+html.ios-lite *::after {
+  animation: none !important;
+  transition: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter: none !important;
+  will-change: auto !important;
+}
+html.ios-lite .brand-mark-orbit,
+html.ios-lite .csg-logo-shine,
+html.ios-lite .icon-glow,
+html.ios-lite .icon-ripple,
+html.ios-lite .info-item-shine,
+html.ios-lite .info-item-background {
+  display: none !important;
+}
+
+

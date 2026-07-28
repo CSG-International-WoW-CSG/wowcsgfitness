@@ -239,6 +239,13 @@ class StepathonApp {
     }
 
     async ensureLeafletLoaded() {
+        if (!document.querySelector('link[data-wowcsg-leaflet-css]')) {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+            link.dataset.wowcsgLeafletCss = '1';
+            document.head.appendChild(link);
+        }
         if (typeof L !== 'undefined') return true;
         await this.loadScriptOnce('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js');
         return typeof L !== 'undefined';
@@ -9072,14 +9079,23 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
     }
 }
 
-// Initialize the app and make it globally accessible
-try {
-    const app = new StepathonApp();
-    window.app = app; // Make app accessible globally for onclick handlers
-    console.log('StepathonApp initialized successfully');
-} catch (error) {
-    console.error('Error initializing StepathonApp:', error);
-    console.error('Error stack:', error.stack);
-    // Still set window.app to null so admin.html can detect the error
-    window.app = null;
-}
+// Initialize after a tick so iOS can paint CSS before constructor work
+(function bootStepathon() {
+    function start() {
+        try {
+            const app = new StepathonApp();
+            window.app = app;
+            try {
+                const key = window.__WOWCSG_BOOT_KEY__ || 'wowcsg_boot_fails_v81';
+                sessionStorage.setItem(key, '0');
+            } catch (e0) { /* ignore */ }
+            console.log('StepathonApp initialized successfully');
+        } catch (error) {
+            console.error('Error initializing StepathonApp:', error);
+            window.app = null;
+        }
+    }
+    const delay = window.__WOWCSG_IOS__ ? 120 : 0;
+    if (delay) setTimeout(start, delay);
+    else start();
+})();

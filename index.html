@@ -11,18 +11,48 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com data:; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://unpkg.com https://cdn.jsdelivr.net https://statics.teams.cdn.office.net; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebase.com https://*.cloudfunctions.net wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://www.google-analytics.com https://unpkg.com https://cdn.jsdelivr.net; worker-src 'self' blob:;">
     <title>WOW-CSG 7 Days Fitness Challenge</title>
     <meta name="theme-color" content="#003366">
-    <!-- Silent crash hardening for iPhone Chrome/Safari (reload OOM). No tap gate. -->
+    <!-- iOS WebKit kill hardening: lite CSS + delayed JS + auto-repair. -->
     <script>
     (function () {
-      var KEY = 'wowcsg_boot_fails_v80';
+      var KEY = 'wowcsg_boot_fails_v81';
       var ua = navigator.userAgent || '';
-      var isIos = /iPhone|iPad|iPod/i.test(ua);
+      var isIos = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
       window.__WOWCSG_IOS__ = isIos;
+      window.__WOWCSG_BOOT_KEY__ = KEY;
       try {
+        if (isIos) document.documentElement.classList.add('ios-lite');
         var n = Number(sessionStorage.getItem(KEY) || '0');
         sessionStorage.setItem(KEY, String(n + 1));
-        // After any failed load, or always on iOS, use lean boot (drop heavy caches).
         window.__WOWCSG_SAFE_BOOT__ = n >= 1 || isIos;
+        // After 2 failed boots, leave the heavy page and repair from a tiny HTML shell
+        if (isIos && n >= 2 && !/recover\.html/i.test(location.pathname) && location.search.indexOf('recovered=1') < 0) {
+          location.replace('./recover.html?auto=1');
+          return;
+        }
+        function dropHeavyCaches() {
+          try {
+            localStorage.removeItem('stepEntries');
+            localStorage.removeItem('stepEntries_cache');
+            localStorage.removeItem('participants_cache');
+            localStorage.removeItem('wowcsg_active_activity_v1');
+          } catch (e1) {}
+        }
+        function wipeIdb() {
+          try {
+            if (!window.indexedDB) return;
+            if (typeof indexedDB.databases === 'function') {
+              indexedDB.databases().then(function (dbs) {
+                (dbs || []).forEach(function (db) {
+                  if (db && db.name) try { indexedDB.deleteDatabase(db.name); } catch (e0) {}
+                });
+              }).catch(function () {});
+            } else {
+              ['firebaseLocalStorageDb', 'firebase-heartbeat-database', 'firebase-installations-database'].forEach(function (name) {
+                try { indexedDB.deleteDatabase(name); } catch (e1) {}
+              });
+            }
+          } catch (e2) {}
+        }
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.getRegistrations().then(function (regs) {
             regs.forEach(function (r) { r.unregister(); });
@@ -33,30 +63,22 @@
             return Promise.all(keys.map(function (k) { return caches.delete(k); }));
           }).catch(function () {});
         }
-        function dropHeavyCaches() {
-          try {
-            localStorage.removeItem('stepEntries');
-            localStorage.removeItem('stepEntries_cache');
-            localStorage.removeItem('participants_cache');
-          } catch (e1) {}
-        }
-        if (window.__WOWCSG_SAFE_BOOT__) {
+        if (n >= 1) {
+          // Previous load crashed — wipe storage that can poison WebKit
+          dropHeavyCaches();
+          wipeIdb();
+        } else if (isIos) {
+          // Lean iOS open: drop entry caches only (keep Firebase login)
           dropHeavyCaches();
         } else {
-          // Proactively drop oversized caches before script.js parses them
           try {
             var raw = localStorage.getItem('stepEntries_cache') || localStorage.getItem('stepEntries') || '';
-            if (raw.length > 400000) dropHeavyCaches();
-          } catch (e2) {}
+            if (raw.length > 250000) dropHeavyCaches();
+          } catch (e3) {}
         }
-        window.addEventListener('load', function () {
-          try { sessionStorage.setItem(KEY, '0'); } catch (e3) {}
-        });
-        window.addEventListener('pagehide', function () {
-          // If the tab is killed mid-boot, keep the fail counter elevated
-        });
       } catch (e) {
         window.__WOWCSG_SAFE_BOOT__ = true;
+        try { document.documentElement.classList.add('ios-lite'); } catch (e4) {}
       }
     })();
     </script>
@@ -65,12 +87,9 @@
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=55">
     <link rel="apple-touch-icon" href="favicon.svg?v=55">
-    <link rel="stylesheet" href="styles.css?v=58">
-    <link rel="stylesheet" href="ui-refresh.css?v=71">
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-    <noscript><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet"></noscript>
-    <!-- Leaflet CSS only; JS loads when map opens. -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+    <link rel="stylesheet" href="styles.css?v=81">
+    <link rel="stylesheet" href="ui-refresh.css?v=81">
+    <!-- Fonts + Leaflet are deferred; both are known to add reload pressure on iOS WebKit. -->
 </head>
 <body>
     <div class="container">
@@ -801,24 +820,59 @@
         </div>
     </div>
 
-    <!-- Firebase + app (Storage loaded only when sharing a photo). Site opens normally. -->
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-    <script src="firebase-config.js"></script>
-    <script src="security-config.js?v=2"></script>
-    <script src="native-bridge.js?v=55"></script>
-    <script src="script.js?v=80"></script>
+    <!-- Load app JS after first paint. On iOS, stagger Firebase + script.js to avoid WebKit kills. -->
     <script>
-        (function () {
-            window.addEventListener('load', function () {
-                document.body.style.overflow = '';
-                document.documentElement.style.overflow = '';
-                // Do not register a service worker (prevents open→reload→crash on phones).
-            });
-        })();
+    (function () {
+      var isIos = !!window.__WOWCSG_IOS__;
+      var scripts = [
+        'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
+        'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js',
+        'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js',
+        'firebase-config.js',
+        'security-config.js?v=2',
+        'native-bridge.js?v=55',
+        'script.js?v=81'
+      ];
+      function loadCss(href) {
+        var l = document.createElement('link');
+        l.rel = 'stylesheet';
+        l.href = href;
+        document.head.appendChild(l);
+      }
+      function loadSeq(i) {
+        if (i >= scripts.length) {
+          document.body.style.overflow = '';
+          document.documentElement.style.overflow = '';
+          return;
+        }
+        var s = document.createElement('script');
+        s.src = scripts[i];
+        s.async = false;
+        s.onload = function () {
+          var gap = isIos ? 60 : 0;
+          if (gap) setTimeout(function () { loadSeq(i + 1); }, gap);
+          else loadSeq(i + 1);
+        };
+        s.onerror = function () { loadSeq(i + 1); };
+        document.body.appendChild(s);
+      }
+      function start() {
+        if (!isIos) {
+          loadCss('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+          loadCss('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
+        }
+        loadSeq(0);
+      }
+      // Paint local CSS first, then parse Firebase + app (do not wait on images)
+      var delay = isIos ? 250 : 0;
+      function schedule() { setTimeout(start, delay); }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', schedule);
+      } else {
+        schedule();
+      }
+    })();
     </script>
-    
 </body>
 </html>
 

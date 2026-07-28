@@ -25,18 +25,41 @@
     <h1>Repair site access</h1>
     <p>Only for phones that show “Can’t open this page” or keep reloading. This clears broken offline data, then opens the normal site.</p>
     <button type="button" id="repairBtn">Clear cache &amp; reopen site</button>
-    <a class="btn" href="./index.html">Skip — open site</a>
+    <a class="btn" href="./index.html?recovered=1">Skip — open site</a>
     <div id="log"></div>
   </div>
   <script>
     (function () {
       var logEl = document.getElementById('log');
       function log(msg) { logEl.textContent += msg + '\n'; }
-      document.getElementById('repairBtn').addEventListener('click', function () {
+      function wipeIdb() {
+        try {
+          if (!window.indexedDB) return Promise.resolve();
+          if (typeof indexedDB.databases === 'function') {
+            return indexedDB.databases().then(function (dbs) {
+              return Promise.all((dbs || []).map(function (db) {
+                return new Promise(function (resolve) {
+                  if (!db || !db.name) return resolve();
+                  var req = indexedDB.deleteDatabase(db.name);
+                  req.onsuccess = req.onerror = req.onblocked = function () { resolve(); };
+                });
+              }));
+            });
+          }
+          ['firebaseLocalStorageDb', 'firebase-heartbeat-database', 'firebase-installations-database'].forEach(function (name) {
+            try { indexedDB.deleteDatabase(name); } catch (e0) {}
+          });
+        } catch (e1) {}
+        return Promise.resolve();
+      }
+      function repair() {
         var tasks = [];
         log('Clearing…');
         try {
-          ['stepEntries', 'stepEntries_cache', 'participants_cache', 'wowcsg_boot_fails_v69', 'wowcsg_boot_fails_v80'].forEach(function (k) {
+          [
+            'stepEntries', 'stepEntries_cache', 'participants_cache', 'wowcsg_active_activity_v1',
+            'wowcsg_boot_fails_v69', 'wowcsg_boot_fails_v80', 'wowcsg_boot_fails_v81'
+          ].forEach(function (k) {
             try { localStorage.removeItem(k); } catch (e0) {}
             try { sessionStorage.removeItem(k); } catch (e1) {}
           });
@@ -53,13 +76,19 @@
             return Promise.all(keys.map(function (k) { return caches.delete(k); }));
           }).then(function () { log('Cleared caches'); }));
         }
+        tasks.push(wipeIdb().then(function () { log('Cleared offline DB'); }));
         Promise.all(tasks).then(function () {
           log('Done. Opening site…');
           setTimeout(function () { location.replace('./index.html?recovered=1'); }, 350);
         }).catch(function () {
           setTimeout(function () { location.replace('./index.html?recovered=1'); }, 700);
         });
-      });
+      }
+      document.getElementById('repairBtn').addEventListener('click', repair);
+      if (/[?&]auto=1/.test(location.search)) {
+        log('Auto-repair started…');
+        setTimeout(repair, 200);
+      }
     })();
   </script>
 </body>
