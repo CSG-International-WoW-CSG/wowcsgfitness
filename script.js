@@ -21,8 +21,8 @@ class StepathonApp {
  treadmillSpeedWalkMaxKmh: 7,
  treadmillSpeedDefaultKmh: 5,
  // Day board / auto-approve: faster than this is treated as GPS glitch or invalid
- // 18 km/h ≈ 3:20 min/km (beyond normal corporate challenge pace; WR ~2:12/km)
- maxHumanSpeedKmh: 18,
+ // 15 km/h ≈ 4:00 min/km (strong recreational run; blocks elite/GPS-glitch day wins)
+ maxHumanSpeedKmh: 15,
  dayGoalsKm: [1, 2, 3, 4, 5, 6, 7]
  };
 
@@ -4682,7 +4682,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
     /**
      * Reject approved entries whose time-to-goal implies speed above maxHumanSpeedKmh.
-     * Clears GPS-glitch day-board winners (e.g. 1 KM in under ~3:20).
+     * Clears GPS-glitch day-board winners (e.g. 1 KM in under ~4:00).
      */
     async rejectImplausibleApprovedEntries({ silent = false } = {}) {
         if (!this.isAdmin) {
@@ -5416,13 +5416,13 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const finishSec = this.estimateTimeToGoalSec(entry, goal);
  if (finishSec == null) return false;
  const speed = this.impliedSpeedKmh(finishSec, goal);
- const maxKmh = Number(this.challengeConfig.maxHumanSpeedKmh) || 18;
+ const maxKmh = Number(this.challengeConfig.maxHumanSpeedKmh) || 15;
  return speed != null && speed > maxKmh;
  }
 
  minLegalFinishSecForGoal(goalKm) {
  const goal = goalKm > 0 ? goalKm : 1;
- const maxKmh = Number(this.challengeConfig.maxHumanSpeedKmh) || 18;
+ const maxKmh = Number(this.challengeConfig.maxHumanSpeedKmh) || 15;
  return Math.ceil((goal / maxKmh) * 3600);
  }
 
