@@ -595,7 +595,13 @@ class StepathonApp {
  }
 
  isCurrentSeasonEntry(entry) {
- return entry && entry.season === this.dataSeason;
+ if (!entry) return false;
+ if (entry.season === this.dataSeason) return true;
+ // Legacy rows missing season: keep if they fall inside this challenge window
+ if (!entry.season && entry.date) {
+ return this.getChallengeDayNumber(this.parseEntryDate(entry.date)) > 0;
+ }
+ return false;
  }
 
  filterCurrentSeasonParticipants(list) {
@@ -5349,27 +5355,79 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  isApprovedEntry(entry) {
- return entry && (entry.status || 'pending') === 'approved';
+ return entry && String(entry.status || 'pending').toLowerCase() === 'approved';
+ }
+
+ /** Normalize Firestore Timestamp / ISO / Date into a valid Date. */
+ parseEntryDate(value) {
+ if (value == null || value === '') return new Date();
+ if (value instanceof Date) {
+ return Number.isNaN(value.getTime()) ? new Date() : value;
+ }
+ if (typeof value.toDate === 'function') {
+ try {
+ const d = value.toDate();
+ if (d instanceof Date && !Number.isNaN(d.getTime())) return d;
+ } catch (e) { /* fall through */ }
+ }
+ if (typeof value === 'object') {
+ const sec = value.seconds != null ? value.seconds : value._seconds;
+ if (sec != null && Number.isFinite(Number(sec))) {
+ return new Date(Number(sec) * 1000);
+ }
+ }
+ const d = new Date(value);
+ return Number.isNaN(d.getTime()) ? new Date() : d;
  }
 
  /**
- * Day-board eligibility: approved, or previously pace-rejected entries that
- * pass the current estimate (live goal spike was illegal but session pace is fine).
+ * Legal finish seconds for day-board ranking.
+ * Ignores impossible live timeToGoalSec spikes and falls back to session pace.
+ */
+ getDayBoardFinishSec(entry, goalKm) {
+ if (!entry || !(goalKm > 0)) return null;
+ const maxKmh = Number(this.challengeConfig.maxHumanSpeedKmh) || 15;
+ const isLegal = (sec) => {
+ if (!(sec > 0)) return false;
+ const speed = this.impliedSpeedKmh(sec, goalKm);
+ return speed == null || speed <= maxKmh;
+ };
+ let finish = this.estimateTimeToGoalSec(entry, goalKm);
+ if (isLegal(finish)) return finish;
+ // Strip glitch snapshot and retry from duration / path only
+ const retry = this.estimateTimeToGoalSec({ ...entry, timeToGoalSec: null }, goalKm);
+ if (isLegal(retry)) return retry;
+ return null;
+ }
+
+ /**
+ * Day-board eligibility: approved, pending (same as Team Feed supplement),
+ * or pace-rejected rows that are legal under the current estimator.
  * Pass goalKmOverride when ranking a specific day board so goal matches that day.
  */
  isDayBoardEligibleEntry(entry, goalKmOverride = null) {
  if (!entry) return false;
- if (this.isApprovedEntry(entry)) return true;
- const st = entry.status || '';
- if (st !== 'rejected') return false;
- const why = `${entry.notes || ''} ${entry.validatedBy || ''}`;
- if (!/pace/i.test(why)) return false;
+ const st = String(entry.status || 'pending').toLowerCase();
  const goalKm = goalKmOverride != null
  ? goalKmOverride
- : this.getDailyGoalKm(entry.date ? new Date(entry.date) : new Date());
- if (!this.meetsDailyGoal(Number(entry.distanceKm) || 0, goalKm)) return false;
- if (this.isImplausibleChallengePace(entry, goalKm)) return false;
- return this.estimateTimeToGoalSec(entry, goalKm) != null;
+ : this.getDailyGoalKm(this.parseEntryDate(entry.date));
+ const dist = Number(entry.distanceKm) || 0;
+
+ if (st === 'rejected') {
+ const why = `${entry.notes || ''} ${entry.validatedBy || ''}`;
+ if (!/pace/i.test(why)) return false;
+ if (!this.meetsDailyGoal(dist, goalKm)) return false;
+ return this.getDayBoardFinishSec(entry, goalKm) != null;
+ }
+
+ // approved + pending appear on the Team Feed; rank them when pace is legal
+ if (st !== 'approved' && st !== 'pending') return false;
+ if (!this.meetsDailyGoal(dist, goalKm)) {
+ // Still allow in-progress rows (distance toward the day goal)
+ return dist > 0.005 || (Number(entry.steps) || 0) > 0;
+ }
+ // Goal reached: only eligible if finish pace is legal (blocks GPS-glitch "wins")
+ return this.getDayBoardFinishSec(entry, goalKm) != null;
  }
 
  /**
@@ -5521,7 +5579,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
    if (isLegalFinish(candidate)) return candidate;
    const scaled = scaledFinish();
    if (scaled != null && isLegalFinish(scaled)) return scaled;
-   return candidate; // keep illegal candidate so pace gate can reject
+   // Prefer scaled even if borderline; ranking layer strips remaining illegals
+   if (scaled != null) return scaled;
+   return candidate;
  }
  if (!this.meetsDailyGoal(distanceKm, goalKm)) return null;
  if (durationSec <= 0) return null;
@@ -5564,12 +5624,15 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  * Reject GPS glitches / fake tracking: e.g. 1 KM in 1:44 (~34 km/h) is not a valid challenge finish.
  */
  isImplausibleChallengePace(entry, goalKm) {
- const goal = goalKm > 0 ? goalKm : this.getDailyGoalKm(entry && entry.date ? new Date(entry.date) : new Date());
- const finishSec = this.estimateTimeToGoalSec(entry, goal);
- if (finishSec == null) return false;
- const speed = this.impliedSpeedKmh(finishSec, goal);
- const maxKmh = Number(this.challengeConfig.maxHumanSpeedKmh) || 15;
- return speed != null && speed > maxKmh;
+ const goal = goalKm > 0 ? goalKm : this.getDailyGoalKm(entry && entry.date ? this.parseEntryDate(entry.date) : new Date());
+ const dist = Number(entry && entry.distanceKm) || 0;
+ if (!this.meetsDailyGoal(dist, goal)) return false;
+ // Legal finish after stripping live spikes → not implausible
+ if (this.getDayBoardFinishSec(entry, goal) != null) return false;
+ const durationSec = Number(entry && entry.durationSec) || 0;
+ const liveGoalSec = Number(entry && entry.timeToGoalSec);
+ // Only flag when we have timing evidence that cannot yield a legal finish
+ return durationSec > 0 || (Number.isFinite(liveGoalSec) && liveGoalSec > 0);
  }
 
  minLegalFinishSecForGoal(goalKm) {
@@ -5589,9 +5652,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const entries = this.filterCurrentSeasonEntries(this.stepEntries || []);
 
  entries.forEach((entry) => {
- // Bucket ONLY by Asia/Kolkata calendar day from entry.date.
- // Never trust stored challengeDay alone — a wrong/stale tag put Day 3 winners on Day 4.
- const entryDay = this.getChallengeDayNumber(entry.date ? new Date(entry.date) : new Date());
+ // Bucket by Asia/Kolkata calendar day from entry.date (not stale challengeDay alone).
+ const entryDay = this.getChallengeDayNumber(this.parseEntryDate(entry.date));
  if (entryDay !== dayNum) return;
  if (!this.isDayBoardEligibleEntry(entry, goalKm)) return;
 
@@ -5608,9 +5670,10 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  );
  const dist = Number(entry.distanceKm) || 0;
  const steps = Number(entry.steps) || 0;
- // GPS-glitch finishes: skip for ranking, but keep slower/in-progress attempts
- if (this.isImplausibleChallengePace(entry, goalKm)) return;
- const finishSec = this.estimateTimeToGoalSec(entry, goalKm);
+ // Legal finish only (strips timeToGoalSec GPS spikes that falsely DQ real finishers)
+ const finishSec = this.getDayBoardFinishSec(entry, goalKm);
+ // Goal reached but pace still illegal after spike-strip → exclude (cheat / glitch)
+ if (this.meetsDailyGoal(dist, goalKm) && finishSec == null) return;
 
  const row = byKey.get(key) || {
  name: this.resolveDisplayName(participant && participant.name, entry.userName) || 'Unknown',
@@ -5672,6 +5735,40 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  });
  }
 
+ /**
+ * Promote pending legal day-goal finishes to approved so they stick on
+ * day boards, totals, and the team feed after a refresh.
+ */
+ async healPendingDayBoardEntries(dayNum) {
+ const goalKm = this.challengeConfig.dayGoalsKm[dayNum - 1] || dayNum;
+ const entries = this.filterCurrentSeasonEntries(this.stepEntries || []);
+ const toHeal = [];
+ for (const entry of entries) {
+ if (!entry || !entry.id) continue;
+ const st = String(entry.status || 'pending').toLowerCase();
+ if (st !== 'pending') continue;
+ if (this.getChallengeDayNumber(this.parseEntryDate(entry.date)) !== dayNum) continue;
+ if (!this.meetsDailyGoal(Number(entry.distanceKm) || 0, goalKm)) continue;
+ if (this.getDayBoardFinishSec(entry, goalKm) == null) continue;
+ entry.status = 'approved';
+ entry.validatedBy = entry.validatedBy || 'Day board auto-heal';
+ entry.validatedAt = new Date().toISOString();
+ entry.notes = entry.notes || `Auto-approved: legal Day ${dayNum} finish (${goalKm} KM).`;
+ toHeal.push(entry);
+ }
+ if (!toHeal.length) return;
+ this.saveStepEntries();
+ for (const entry of toHeal) {
+ try {
+ await this.upsertStepEntryInFirebase(entry);
+ await this.syncActivityFeedForEntry(entry);
+ } catch (e) {
+ console.warn('healPendingDayBoardEntries failed for', entry.id, e);
+ }
+ }
+ this.recalculateAllParticipantTotalsFromApproved();
+ }
+
  updateLeaderboardSubtitle(filter) {
  const el = document.getElementById('leaderboardSubtitle');
  if (!el) return;
@@ -5729,6 +5826,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (dayMatch) {
  const dayNum = parseInt(dayMatch[1], 10);
  sorted = this.getDayLeaderboardRows(dayNum);
+ // Heal pending legal finishers so totals/feed stay in sync with the day board
+ this.healPendingDayBoardEntries(dayNum).catch(() => {});
  if (sorted.length === 0) {
  list.innerHTML = `<div class="leaderboard-item"><div class="rank">-</div><div class="name">No approved finishers for Day ${dayNum} yet</div><div class="steps">Be the first!</div></div>`;
  return;
@@ -9081,7 +9180,15 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 }
                 entrySnap.docs.forEach((d) => {
                     const e = d.data();
-                    if (!e || (e.status && e.status === 'rejected')) return;
+                    if (!e || !e.id) return;
+                    const st = String(e.status || 'pending').toLowerCase();
+                    if (st === 'rejected') return;
+                    // Keep feed aligned with day board: pending only if legal finish for that day
+                    if (st !== 'approved') {
+                        const goalKm = this.getDailyGoalKm(this.parseEntryDate(e.date));
+                        if (!this.meetsDailyGoal(Number(e.distanceKm) || 0, goalKm)) return;
+                        if (this.getDayBoardFinishSec(e, goalKm) == null) return;
+                    }
                     const key = e.id;
                     if (!key || byEntry.has(key)) return;
                     byEntry.set(key, {
