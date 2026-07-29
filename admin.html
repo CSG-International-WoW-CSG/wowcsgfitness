@@ -124,8 +124,8 @@
  <!-- Validations Tab -->
  <div class="admin-tab-content active" id="validationsTab">
  <div class="admin-filters">
- <button class="filter-btn active" data-filter="pending">Pending</button>
- <button class="filter-btn" data-filter="approved">Approved</button>
+ <button class="filter-btn" data-filter="pending">Pending</button>
+ <button class="filter-btn active" data-filter="approved">Approved</button>
  <button class="filter-btn" data-filter="rejected">Rejected</button>
  <button class="filter-btn" data-filter="all">All</button>
  <button class="filter-btn" id="refreshDashboardBtn" style="background: #4caf50;" title="Refresh Dashboard"> Refresh</button>
@@ -463,7 +463,7 @@
  }
 
  // Load script and initialize (cache-bust so Pages/SW cannot keep old admin/admin123 builds)
- loadScript('script.js?v=93')
+ loadScript('script.js?v=94')
  .then(() => {
  console.log('Script loaded, initializing admin page...');
  initAdminPage();

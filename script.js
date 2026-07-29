@@ -3590,21 +3590,36 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         this.updateAdminDashboard();
     }
 
-    async updateAdminDashboard() {
+    async updateAdminDashboard(options = {}) {
         try {
  if (!this.requireAdmin()) {
  return;
  }
             if (this.firebaseEnabled) {
-                // Pull participants + entries from Firebase (local cache is often empty on admin devices)
-                await this.syncParticipantsFromFirebase({ skipEntries: false });
+                // Admin must always force-refresh — 10-min public cache hid new activities
+                await this.syncParticipantsFromFirebase({
+                    skipEntries: false,
+                    force: true,
+                    skipLeaderboardRefresh: true
+                });
+                // Merge Team Feed posts missing from stepEntries (feed≠admin gap)
+                try {
+                    await this.hydrateAdminEntriesFromFeed();
+                } catch (feedHydrateErr) {
+                    console.warn('Admin feed hydrate skipped:', feedHydrateErr);
+                }
             }
             // Reload entries from localStorage to ensure we have the latest data
-            this.stepEntries = this.loadStepEntries();
+            // Prefer in-memory (just synced); only fall back to cache if empty
+            if (!Array.isArray(this.stepEntries) || this.stepEntries.length === 0) {
+                this.stepEntries = this.loadStepEntries();
+            }
+            this.stepEntries = this.filterCurrentSeasonEntries(this.stepEntries || []);
             // Prefer in-memory roster from Firebase; only fall back to cache if empty
             if (!Array.isArray(this.participants) || this.participants.length === 0) {
                 this.participants = this.loadParticipants();
             }
+            this.participants = this.filterCurrentSeasonParticipants(this.participants || []);
             
             if (!Array.isArray(this.stepEntries)) {
                 console.error('stepEntries is not an array!', typeof this.stepEntries, this.stepEntries);
@@ -3684,12 +3699,24 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 totalCaloriesCountEl.textContent = Math.round(totalCalories).toLocaleString();
             }
 
-            // Get current filter or default to 'pending'
+            // Default Validations to Approved (GPS saves auto-approve; Pending is often empty)
             const activeFilter = document.querySelector('.admin-filters .filter-btn.active');
-            const filter = activeFilter ? (activeFilter.dataset.filter || 'pending') : 'pending';
+            let filter = activeFilter && activeFilter.dataset.filter
+                ? activeFilter.dataset.filter
+                : 'approved';
+            // If still on Pending with nothing pending, switch to Approved so admins see activities
+            if (filter === 'pending' && pending === 0 && approved > 0 && !(options && options.keepFilter)) {
+                document.querySelectorAll('.admin-filters .filter-btn').forEach((b) => {
+                    if (b.dataset && b.dataset.filter) b.classList.remove('active');
+                });
+                const approvedBtn = document.querySelector('.admin-filters .filter-btn[data-filter="approved"]');
+                if (approvedBtn) approvedBtn.classList.add('active');
+                filter = 'approved';
+            }
             
             // Render validation list asynchronously to not block stats update
-            setTimeout(() => this.renderValidationList(filter), 0);
+            // Skip remote re-sync — updateAdminDashboard already force-synced + hydrated
+            setTimeout(() => this.renderValidationList(filter, { skipRemoteSync: true }), 0);
         } catch (error) {
             console.error('Error in updateAdminDashboard:', error);
             alert('Error updating admin dashboard: ' + error.message);
@@ -4650,7 +4677,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         window.location.href = `mailto:wow-csg@csgi.com?subject=${subject}&body=${body}`;
     }
 
-    async renderValidationList(filter = 'pending') {
+    async renderValidationList(filter = 'approved', options = {}) {
         try {
             const validationList = document.getElementById('validationList');
             if (!validationList) {
@@ -4658,14 +4685,19 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 return;
             }
 
-            if (this.firebaseEnabled) {
-                if (!Array.isArray(this.stepEntries) || this.stepEntries.length === 0) {
-                    await this.syncStepEntriesFromFirebase();
+            if (this.firebaseEnabled && !options.skipRemoteSync) {
+                // Always force on admin render so new cloud saves appear
+                await this.syncStepEntriesFromFirebase({ force: true });
+                try {
+                    await this.hydrateAdminEntriesFromFeed();
+                } catch (e) {
+                    console.warn('Admin feed hydrate on render skipped:', e);
                 }
-            } else {
+            } else if (!this.firebaseEnabled) {
                 // Ensure entries are loaded for local-only mode
                 this.stepEntries = this.loadStepEntries();
             }
+            this.stepEntries = this.filterCurrentSeasonEntries(this.stepEntries || []);
             
             // Show loading state
             validationList.innerHTML = '<p class="no-entries">Loading entries...</p>';
@@ -4674,31 +4706,35 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             requestAnimationFrame(() => {
                 // Optimize: Single pass filtering (no array copy needed)
                 let entries = [];
-                const filterLower = filter.toLowerCase();
+                const filterLower = String(filter || 'all').toLowerCase();
                 
                 for (let i = 0; i < this.stepEntries.length; i++) {
                     const e = this.stepEntries[i];
                     if (!e) continue;
-                    if (filter === 'all' || (e.status || 'pending').toLowerCase() === filterLower) {
+                    if (filterLower === 'all' || (e.status || 'pending').toLowerCase() === filterLower) {
                         entries.push(e);
                     }
                 }
 
                 // Optimized sorting - use getTime() for faster comparison
                 entries.sort((a, b) => {
-                    const dateA = a.date ? new Date(a.date).getTime() : 0;
-                    const dateB = b.date ? new Date(b.date).getTime() : 0;
+                    const dateA = a.date ? this.parseEntryDate(a.date).getTime() : 0;
+                    const dateB = b.date ? this.parseEntryDate(b.date).getTime() : 0;
                     return dateB - dateA;
                 });
 
                 if (entries.length === 0) {
-                    const filterText = filter === 'all' ? '' : ` for "${filter}" status`;
-                    validationList.innerHTML = `<p class="no-entries">No entries found${filterText}. Total entries in system: ${this.stepEntries.length}</p>`;
+                    let hint = '';
+                    if (filterLower === 'pending') {
+                        hint = ' GPS/treadmill saves auto-approve — check the <strong>Approved</strong> or <strong>All</strong> tab.';
+                    }
+                    validationList.innerHTML =
+                        `<p class="no-entries">No entries found${filterLower === 'all' ? '' : ` for "${filter}" status`}.${hint} Total season entries: ${this.stepEntries.length}</p>`;
                     return;
                 }
 
-                // Limit initial render for performance (show first 100 entries)
-                const maxEntries = 100;
+                // Show more entries so recent Day boards aren't truncated out of view
+                const maxEntries = 300;
                 const entriesToRender = entries.slice(0, maxEntries);
                 
                 // Batch create HTML string (faster than individual DOM operations)
@@ -4715,6 +4751,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 }
                 
                 validationList.innerHTML = html;
+                // Draw GPS maps after HTML is in the DOM
+                setTimeout(() => {
+                    if (typeof this.renderAdminActivityMaps === 'function') {
+                        this.renderAdminActivityMaps(entriesToRender);
+                    }
+                }, 50);
             });
         } catch (error) {
             console.error('Error in renderValidationList:', error);
@@ -4723,6 +4765,76 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 validationList.innerHTML = `<p class="no-entries" style="color: red;">Error rendering entries: ${error.message}</p>`;
             }
         }
+    }
+
+    /**
+     * Ensure admin Validations sees everything the public feed/leaderboard shows.
+     * Some activities were feed-only (cloud stepEntry write failed earlier).
+     */
+    async hydrateAdminEntriesFromFeed() {
+        if (!this.firebaseEnabled || !this.db) return 0;
+        let snap;
+        try {
+            snap = await this.activityFeedCol()
+                .where('season', '==', this.dataSeason)
+                .where('visible', '==', true)
+                .orderBy('date', 'desc')
+                .limit(100)
+                .get();
+        } catch (idxErr) {
+            snap = await this.activityFeedCol()
+                .where('season', '==', this.dataSeason)
+                .limit(120)
+                .get();
+        }
+        if (!Array.isArray(this.stepEntries)) this.stepEntries = [];
+        const byId = new Map(
+            (this.stepEntries || []).filter((e) => e && e.id).map((e) => [String(e.id), e])
+        );
+        let added = 0;
+        snap.docs.forEach((doc) => {
+            const p = doc.data();
+            if (!p || p.visible === false) return;
+            const entryId = String(p.entryId || p.id || '');
+            if (!entryId) return;
+            if (byId.has(entryId)) {
+                const existing = byId.get(entryId);
+                // Patch missing timing/distance from feed denormalized copy
+                if (!(Number(existing.durationSec) > 0) && Number(p.durationSec) > 0) {
+                    existing.durationSec = Number(p.durationSec);
+                }
+                if (!(Number(existing.distanceKm) > 0) && Number(p.distanceKm) > 0) {
+                    existing.distanceKm = Number(p.distanceKm);
+                }
+                return;
+            }
+            const synthesized = {
+                id: entryId,
+                userUid: p.userUid || null,
+                userId: p.userId || null,
+                userName: p.userName || 'Teammate',
+                userEmail: p.userEmail || null,
+                steps: Number(p.steps) || 0,
+                distanceKm: Number(p.distanceKm) || 0,
+                caloriesBurned: Number(p.caloriesBurned) || 0,
+                durationSec: p.durationSec == null ? null : Number(p.durationSec),
+                date: p.date || new Date().toISOString(),
+                challengeDay: this.getChallengeDayNumber(this.parseEntryDate(p.date || new Date())),
+                status: 'approved',
+                validatedBy: 'Admin feed hydrate',
+                validatedAt: new Date().toISOString(),
+                notes: 'Visible on Team Feed / leaderboard; restored into admin list (stepEntry was missing).',
+                source: p.source || 'gps-counter',
+                trackingMode: p.trackingMode || null,
+                season: this.dataSeason,
+                _fromFeed: true
+            };
+            this.stepEntries.unshift(synthesized);
+            byId.set(entryId, synthesized);
+            added += 1;
+        });
+        if (added) this.saveStepEntries();
+        return added;
     }
 
     createEntryHTML(entry) {
@@ -4790,7 +4902,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                         <p class="entry-date">${formattedDate}</p>
                         <p class="entry-id" style="font-size: 0.8rem; color: #666;">Entry ID: ${safeEntryId || 'N/A'}</p>
                         <p class="entry-user-id" style="font-size: 0.8rem; color: #666;">User ID: ${this.escapeHtml(String(userId))}</p>
-                        <p style="margin-top: 6px;"><span class="activity-type-badge">${this.escapeHtml(activityType)}</span></p>
+                        <p style="margin-top: 6px;"><span class="activity-type-badge">${this.escapeHtml(activityType)}</span>${entry._fromFeed ? ' <span class="activity-type-badge" style="background:#fff3e0;color:#e65100;">Feed-only</span>' : ''}</p>
                     </div>
                     <div class="entry-status ${statusClass}">
                         ${entryStatus.toUpperCase()}
