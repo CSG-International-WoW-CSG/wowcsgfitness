@@ -43,6 +43,8 @@ class StepathonApp {
         this.pendingShareSave = null;
         this.sharePhotoFile = null;
         this.isMigratingUsers = false;
+        // Entry ids waiting for cloud confirm — never drop these on Firebase sync
+        this._pendingEntryIds = new Set();
         this.initFirebase();
         this.participants = this.loadParticipants();
         
@@ -221,8 +223,22 @@ class StepathonApp {
             // iOS Chrome OOMs well below 1.5MB — especially after reload with GPS caches
             const maxChars = this.isLowMemoryClient() ? 350000 : 1500000;
             if (raw && raw.length > maxChars) {
-                console.warn('Dropping oversized stepEntries cache:', raw.length);
-                localStorage.removeItem(storageKey);
+                console.warn('Trimming oversized stepEntries cache:', raw.length);
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed)) {
+                        const lean = parsed
+                            .map((e) => this.leanStepEntry(e))
+                            .filter((e) => e && e.id)
+                            .sort((a, b) => this.entryTimestampMs(b) - this.entryTimestampMs(a))
+                            .slice(0, 250);
+                        localStorage.setItem(storageKey, JSON.stringify(lean));
+                        return lean;
+                    }
+                } catch (trimErr) {
+                    console.warn('Trim failed, keeping empty until Firebase sync:', trimErr);
+                }
+                // Never delete the key before we have a trimmed copy — sync will refill
                 return [];
             }
         } catch (e) {
@@ -234,6 +250,58 @@ class StepathonApp {
             return entries.map((e) => this.leanStepEntry(e));
         }
         return entries;
+    }
+
+    /** Sortable timestamp for merge / history (ms). */
+    entryTimestampMs(entry) {
+        if (!entry) return 0;
+        const candidates = [entry.lastModifiedAt, entry.validatedAt, entry.date];
+        for (const c of candidates) {
+            if (!c) continue;
+            const ms = this.parseEntryDate(c).getTime();
+            if (Number.isFinite(ms)) return ms;
+        }
+        return 0;
+    }
+
+    /**
+     * Merge local + remote step entries by id.
+     * Never drop local-only or still-pending cloud writes (fixes "saved then vanished").
+     */
+    mergeStepEntries(localList, remoteList) {
+        const byId = new Map();
+        const pending = this._pendingEntryIds || new Set();
+
+        (remoteList || []).forEach((e) => {
+            if (e && e.id) byId.set(String(e.id), leanPrefer(e));
+        });
+
+        const self = this;
+        function leanPrefer(entry) {
+            return self.isLowMemoryClient() ? self.leanStepEntry(entry) : entry;
+        }
+
+        (localList || []).forEach((e) => {
+            if (!e || !e.id) return;
+            const id = String(e.id);
+            if (pending.has(id)) {
+                byId.set(id, leanPrefer(e));
+                return;
+            }
+            if (!byId.has(id)) {
+                // Keep local-only rows (cloud write failed / delayed)
+                byId.set(id, leanPrefer(e));
+                return;
+            }
+            const remote = byId.get(id);
+            if (this.entryTimestampMs(e) > this.entryTimestampMs(remote)) {
+                byId.set(id, leanPrefer(e));
+            }
+        });
+
+        return Array.from(byId.values()).sort(
+            (a, b) => this.entryTimestampMs(b) - this.entryTimestampMs(a)
+        );
     }
 
     loadScriptOnce(src) {
@@ -3079,6 +3147,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         // Pull latest entries so Today / Day progress aren't stuck at 0 after a walk
         if (this.firebaseEnabled) {
             try {
+                await this.retryPendingCloudUploads();
                 await this.syncStepEntriesFromFirebase();
             } catch (e) {
                 console.warn('Dashboard entry sync skipped:', e);
@@ -3092,6 +3161,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         }
         
         this.updateDashboard();
+        this.updateActivities();
         this.loadActivityFeed();
  this.switchInputMethod('counter');
  setTimeout(() => {
@@ -5913,30 +5983,68 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
     updateActivities() {
         const list = document.getElementById('activityList');
+        if (!list) return;
         list.innerHTML = '';
 
-        if (!this.currentUser.activities || this.currentUser.activities.length === 0) {
- list.innerHTML = '<p class="no-activity">No activity yet. Start walking! -</p>';
+        if (!this.currentUser) {
+            list.innerHTML = '<p class="no-activity">No activity yet. Start walking!</p>';
             return;
         }
 
-        this.currentUser.activities.slice(0, 10).forEach(activity => {
-            const item = document.createElement('div');
-            item.className = 'activity-item';
-            
-            const date = new Date(activity.date);
-            const timeStr = date.toLocaleString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
+        // Single source of truth: stepEntries (survives profile reload / sync)
+        const fromEntries = (this.stepEntries || [])
+            .filter((e) => e && this.entryBelongsToParticipant(e, this.currentUser))
+            .sort((a, b) => this.entryTimestampMs(b) - this.entryTimestampMs(a))
+            .slice(0, 15)
+            .map((e) => {
+                const dist = Number(e.distanceKm) || 0;
+                const steps = Number(e.steps) || 0;
+                const kcal = Number(e.caloriesBurned) || 0;
+                const st = String(e.status || 'pending').toLowerCase();
+                const mode = this.getActivityTypeLabel
+                    ? this.getActivityTypeLabel(e)
+                    : (e.trackingMode || 'Activity');
+                const statusNote = st === 'rejected' ? ' (not counted — pace check)' : '';
+                return {
+                    date: e.date,
+                    message: `${mode}: ${dist.toFixed(2)} KM · ${steps.toLocaleString()} steps · ~${Math.round(kcal)} kcal${statusNote}`,
+                    entryId: e.id
+                };
             });
 
+        const legacy = Array.isArray(this.currentUser.activities) ? this.currentUser.activities : [];
+        const seen = new Set(fromEntries.map((a) => a.entryId).filter(Boolean));
+        const merged = fromEntries.slice();
+        legacy.forEach((a) => {
+            if (a && a.entryId && seen.has(a.entryId)) return;
+            merged.push(a);
+        });
+        merged.sort((a, b) => this.entryTimestampMs(b) - this.entryTimestampMs(a));
+        const rows = merged.slice(0, 15);
+
+        if (!rows.length) {
+            list.innerHTML = '<p class="no-activity">No activity yet. Start walking!</p>';
+            return;
+        }
+
+        rows.forEach((activity) => {
+            const item = document.createElement('div');
+            item.className = 'activity-item';
+            let timeStr = '';
+            try {
+                timeStr = this.parseEntryDate(activity.date).toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch (e) {
+                timeStr = '';
+            }
             item.innerHTML = `
  <div>${this.escapeHtml(activity.message || '')}</div>
                 <div class="activity-time">${timeStr}</div>
             `;
-
             list.appendChild(item);
         });
     }
@@ -6250,16 +6358,28 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         }
         this._leaderboardSyncInFlight = (async () => {
             try {
+                const localBefore = Array.isArray(this.stepEntries)
+                    ? this.stepEntries.slice()
+                    : this.loadStepEntriesSafely();
                 const snapshot = await this.stepEntriesCol().get();
                 const lean = this.isLowMemoryClient();
-                this.stepEntries = this.filterCurrentSeasonEntries(
+                const remote = this.filterCurrentSeasonEntries(
                     snapshot.docs.map((doc) => {
                         const data = doc.data();
+                        // Ensure id is always present (some older docs relied on doc id only)
+                        if (data && !data.id && doc.id) data.id = doc.id;
                         return lean ? this.leanStepEntry(data) : data;
                     })
                 );
+                // MERGE — never replace local saves with a stale remote snapshot
+                this.stepEntries = this.filterCurrentSeasonEntries(
+                    this.mergeStepEntries(localBefore, remote)
+                );
                 this._lastStepEntriesSyncAt = Date.now();
                 this.saveStepEntries();
+                if (this.currentUser) {
+                    this.refreshCurrentUserTotalsFromEntries();
+                }
             } catch (error) {
                 console.warn('Failed to sync step entries from Firebase:', error);
             } finally {
@@ -6272,23 +6392,55 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
     async upsertStepEntryInFirebase(entry) {
         await this.ensureFirestore();
         if (!this.firebaseEnabled || !this.db || !entry || !entry.id) {
-            return;
+            return false;
         }
+        if (!this._pendingEntryIds) this._pendingEntryIds = new Set();
+        this._pendingEntryIds.add(String(entry.id));
         try {
- const payload = { ...entry };
- delete payload.screenshot;
- delete payload.bodyWeightKg;
- delete payload.password;
- if (payload.path) {
- payload.path = this.sanitizePathForCloud(payload.path);
- }
- if (!payload.userUid && this.auth && this.auth.currentUser) {
- payload.userUid = this.auth.currentUser.uid;
- }
- await this.stepEntriesCol().doc(entry.id).set(payload, { merge: true });
+            const payload = { ...entry };
+            delete payload.screenshot;
+            delete payload.bodyWeightKg;
+            delete payload.password;
+            delete payload._cloudSynced;
+            delete payload._cloudSyncError;
+            if (payload.path) {
+                payload.path = this.sanitizePathForCloud(payload.path);
+            }
+            if (!payload.userUid && this.auth && this.auth.currentUser) {
+                payload.userUid = this.auth.currentUser.uid;
+            }
+            await this.stepEntriesCol().doc(entry.id).set(payload, { merge: true });
+            this._pendingEntryIds.delete(String(entry.id));
+            entry._cloudSynced = true;
+            entry._cloudSyncError = null;
+            return true;
         } catch (error) {
             console.warn('Failed to upsert step entry in Firebase:', error);
+            entry._cloudSynced = false;
+            entry._cloudSyncError = String((error && error.message) || error);
+            // Keep id in _pendingEntryIds so sync cannot wipe this local save
+            return false;
         }
+    }
+
+    /** Re-upload local entries that never made it to Firebase. */
+    async retryPendingCloudUploads() {
+        if (!this.firebaseEnabled || !this.db) return;
+        if (!this._pendingEntryIds) this._pendingEntryIds = new Set();
+        const mine = (this.stepEntries || []).filter((e) => {
+            if (!e || !e.id) return false;
+            if (e._cloudSynced === false || e._cloudSyncError) return true;
+            if (this._pendingEntryIds.has(String(e.id))) return true;
+            return false;
+        });
+        for (const entry of mine) {
+            try {
+                await this.upsertStepEntryInFirebase(entry);
+            } catch (e) {
+                console.warn('retryPendingCloudUploads failed for', entry.id, e);
+            }
+        }
+        if (mine.length) this.saveStepEntries();
     }
 
     async deleteStepEntryFromFirebase(entryId) {
@@ -8616,10 +8768,16 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         console.log('Total entries before save:', this.stepEntries.length);
         
         this.saveStepEntries();
-        await this.upsertStepEntryInFirebase(stepEntry);
+        const cloudOk = await this.upsertStepEntryInFirebase(stepEntry);
+        // Prevent an immediate leaderboard sync from racing and wiping this save
+        this._lastStepEntriesSyncAt = Date.now();
 
         // Align personal dashboard with public leaderboard (approved entries only)
         this.recalculateParticipantTotalsFromApproved(this.currentUser);
+        // Pending legal finishes still count on personal Today progress
+        if (typeof this.refreshCurrentUserTotalsFromEntries === 'function') {
+            this.refreshCurrentUserTotalsFromEntries();
+        }
 
         let shareNote = '';
         // Team feed is for approved challenge activity only (pace rejects stay off the feed)
@@ -8640,6 +8798,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         }
         } else if (paceIllegal) {
             shareNote = '\n\nNot posted to Team Feed (pace rejected for day board).';
+        }
+        if (!cloudOk) {
+            shareNote += '\n\nWarning: cloud sync failed — activity is kept on this device and will retry. Keep this browser/app open a moment, then refresh.';
         }
         
         // Verify save immediately
@@ -8714,9 +8875,10 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         // Show success
  this.showCounterNotification(` ${distanceKm.toFixed(2)} KM - ${caloriesBurned} kcal saved!`);
         
-        // Update dashboard and leaderboard immediately
+        // Update dashboard and leaderboard immediately (do NOT remote-sync — that raced and wiped saves)
         this.updateDashboard();
-        this.updateLeaderboard();
+        this.updateActivities();
+        await this.updateLeaderboard(null, { skipRemoteSync: true });
         this.loadActivityFeed();
         
         // Show success message

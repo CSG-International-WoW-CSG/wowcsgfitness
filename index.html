@@ -31,12 +31,19 @@
           return;
         }
         function dropHeavyCaches() {
+          // Clear in-progress session only. Never wipe stepEntries_cache —
+          // that deleted users' just-saved activities on every iPhone reload.
+          try {
+            localStorage.removeItem('wowcsg_active_activity_v1');
+          } catch (e1) {}
+        }
+        function dropAllLocalCaches() {
           try {
             localStorage.removeItem('stepEntries');
             localStorage.removeItem('stepEntries_cache');
             localStorage.removeItem('participants_cache');
             localStorage.removeItem('wowcsg_active_activity_v1');
-          } catch (e1) {}
+          } catch (e1b) {}
         }
         function wipeIdb() {
           try {
@@ -60,7 +67,8 @@
             return Promise.all(keys.map(function (k) { return caches.delete(k); }));
           }).catch(function () {});
         }
-        if (n >= 1) { dropHeavyCaches(); wipeIdb(); }
+        // Only full-wipe on repeated crash recovery — not on every iOS visit
+        if (n >= 2) { dropAllLocalCaches(); wipeIdb(); }
         else if (isIos) { dropHeavyCaches(); }
       } catch (e) {
         window.__WOWCSG_SAFE_BOOT__ = true;
@@ -691,7 +699,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-29-v87 | Android APK v1.0.25</p>
+            <p class="footer-subtext">Site version: 2026-07-29-v88 | Android APK v1.0.25</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#androidAppCard" class="help-link">Download Android App</a>
@@ -826,7 +834,7 @@
       if (!isIos) {
         scripts.push('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js');
       }
-      scripts.push('firebase-config.js', 'security-config.js?v=2', 'native-bridge.js?v=55', isIos ? 'script.min.js?v=87' : 'script.js?v=87');
+      scripts.push('firebase-config.js', 'security-config.js?v=2', 'native-bridge.js?v=55', isIos ? 'script.min.js?v=88' : 'script.js?v=88');
       function loadCss(href) {
         var l = document.createElement('link');
         l.rel = 'stylesheet';

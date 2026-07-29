@@ -66,19 +66,30 @@ service cloud.firestore {
       allow create: if isCorporateEmail()
         && request.resource.data.userUid == request.auth.uid
         && request.resource.data.keys().hasAll(['id', 'userUid', 'season', 'status', 'source'])
-        && request.resource.data.status in ['pending', 'approved']
+        && request.resource.data.status in ['pending', 'approved', 'rejected']
         && request.resource.data.source in [
           'gps-counter', 'treadmill-counter', 'manual', 'native'
         ]
         && !request.resource.data.keys().hasAny(['password', 'screenshot']);
 
+      // Owners may update their own stats; status changes remain admin-only
+      // except pending→approved self-heal for legal finishes (validatedBy Day board auto-heal).
       allow update: if isAdmin()
         || (
           isCorporateEmail()
           && resource.data.userUid == request.auth.uid
           && request.resource.data.userUid == resource.data.userUid
           && !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['status', 'validatedBy', 'validatedAt', 'userUid', 'userId'])
+              .hasAny(['userUid', 'userId'])
+          && (
+            !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['status', 'validatedBy', 'validatedAt'])
+            || (
+              resource.data.status == 'pending'
+              && request.resource.data.status == 'approved'
+              && request.resource.data.validatedBy is string
+            )
+          )
         );
 
       allow delete: if isAdmin()
