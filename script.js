@@ -1016,6 +1016,20 @@ class StepathonApp {
         if (refreshFeedBtn) {
             refreshFeedBtn.addEventListener('click', () => this.loadActivityFeed(true));
         }
+        const recoverUnsyncedBtn = document.getElementById('recoverUnsyncedBtn');
+        if (recoverUnsyncedBtn) {
+            recoverUnsyncedBtn.addEventListener('click', async () => {
+                recoverUnsyncedBtn.disabled = true;
+                const prev = recoverUnsyncedBtn.textContent;
+                recoverUnsyncedBtn.textContent = 'Recovering...';
+                try {
+                    await this.recoverUnsyncedActivitiesForCurrentUser({ silent: false });
+                } finally {
+                    recoverUnsyncedBtn.disabled = false;
+                    recoverUnsyncedBtn.textContent = prev || 'Recover unsaved activities';
+                }
+            });
+        }
 
         const sharePhotoInput = document.getElementById('shareActivityPhoto');
         if (sharePhotoInput) {
@@ -3144,10 +3158,10 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         // Check challenge status and disable features if challenge is over
         this.updateDates(); // This will call checkChallengeStatus
 
-        // Pull latest entries so Today / Day progress aren't stuck at 0 after a walk
+        // Pull latest entries + recover any local saves that never reached Firebase
         if (this.firebaseEnabled) {
             try {
-                await this.retryPendingCloudUploads();
+                await this.recoverUnsyncedActivitiesForCurrentUser({ silent: true });
                 await this.syncStepEntriesFromFirebase();
             } catch (e) {
                 console.warn('Dashboard entry sync skipped:', e);
@@ -6453,22 +6467,245 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
     /** Re-upload local entries that never made it to Firebase. */
     async retryPendingCloudUploads() {
-        if (!this.firebaseEnabled || !this.db) return;
-        if (!this._pendingEntryIds) this._pendingEntryIds = new Set();
-        const mine = (this.stepEntries || []).filter((e) => {
+        return this.recoverUnsyncedActivitiesForCurrentUser({ silent: true });
+    }
+
+    /** Keep a durable backup of cloud-failed saves (survives stepEntries cache wipes). */
+    persistUnsyncedBackup(entry) {
+        if (!entry || !entry.id) return;
+        try {
+            const key = 'wowcsg_unsynced_entries_v1';
+            let list = [];
+            try {
+                list = JSON.parse(localStorage.getItem(key) || '[]');
+            } catch (e) {
+                list = [];
+            }
+            if (!Array.isArray(list)) list = [];
+            const lean = {
+                ...this.leanStepEntry(entry),
+                _cloudSynced: false,
+                _cloudSyncError: entry._cloudSyncError || 'pending upload'
+            };
+            const idx = list.findIndex((e) => e && String(e.id) === String(entry.id));
+            if (idx >= 0) list[idx] = lean;
+            else list.unshift(lean);
+            localStorage.setItem(key, JSON.stringify(list.slice(0, 80)));
+        } catch (e) {
+            console.warn('persistUnsyncedBackup failed:', e);
+        }
+    }
+
+    loadUnsyncedBackup() {
+        try {
+            const list = JSON.parse(localStorage.getItem('wowcsg_unsynced_entries_v1') || '[]');
+            return Array.isArray(list) ? list.filter((e) => e && e.id) : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    clearUnsyncedBackupIds(ids) {
+        if (!ids || !ids.length) return;
+        try {
+            const key = 'wowcsg_unsynced_entries_v1';
+            const set = new Set(ids.map(String));
+            const list = this.loadUnsyncedBackup().filter((e) => !set.has(String(e.id)));
+            localStorage.setItem(key, JSON.stringify(list));
+        } catch (e) { /* ignore */ }
+    }
+
+    /**
+     * Rebuild a step entry from the Recent Activity log when stepEntries was wiped.
+     */
+    rebuildEntryFromActivityLog(activity) {
+        if (!activity || !this.currentUser) return null;
+        const authUid = (this.auth && this.auth.currentUser && this.auth.currentUser.uid)
+            || this.currentUser.uid;
+        if (!authUid) return null;
+        const id = activity.entryId || `RECOVER_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const distanceKm = Number(activity.distanceKm) || 0;
+        const steps = Number(activity.steps) || 0;
+        if (distanceKm <= 0 && steps <= 0) return null;
+        const msg = String(activity.message || '').toLowerCase();
+        const trackingMode = /treadmill/.test(msg) ? 'treadmill' : 'outdoor';
+        return {
+            id,
+            userId: this.currentUser.id || this.currentUser.employeeId || 'unknown',
+            userUid: authUid,
+            userName: this.resolveDisplayName(this.currentUser.name, this.currentUser.username) || 'Unknown User',
+            userEmail: this.currentUser.email || this.currentUser.emailId || '',
+            steps,
+            distanceKm: Number(distanceKm.toFixed(3)),
+            caloriesBurned: Number(activity.caloriesBurned) || 0,
+            path: [],
+            durationSec: null,
+            timeToGoalSec: null,
+            date: activity.date || new Date().toISOString(),
+            challengeDay: this.getChallengeDayNumber(this.parseEntryDate(activity.date || new Date())),
+            status: 'approved',
+            validatedBy: 'Local activity recovery',
+            validatedAt: new Date().toISOString(),
+            notes: activity.message || 'Recovered from local activity history',
+            source: trackingMode === 'treadmill' ? 'treadmill-counter' : 'gps-counter',
+            trackingMode,
+            season: this.dataSeason,
+            _cloudSynced: false,
+            _recoveredFromActivityLog: true
+        };
+    }
+
+    /**
+     * Recover activities that saved locally but never reached Firebase / history wipe.
+     * Sources: stepEntries (unsynced), durable backup key, currentUser.activities log.
+     */
+    async recoverUnsyncedActivitiesForCurrentUser(options = {}) {
+        const silent = !!(options && options.silent);
+        await this.ensureFirestore();
+        if (!this.firebaseEnabled || !this.db || !this.auth || !this.auth.currentUser) {
+            if (!silent) {
+                alert('Please log in with your @csgi.com email first, then tap Recover again.');
+            }
+            return { uploaded: 0, restored: 0, failed: 0 };
+        }
+        if (!this.currentUser) {
+            if (!silent) alert('No signed-in profile found.');
+            return { uploaded: 0, restored: 0, failed: 0 };
+        }
+
+        if (!Array.isArray(this.stepEntries)) {
+            this.stepEntries = this.loadStepEntriesSafely();
+        }
+
+        // 1) Merge durable backup into memory
+        let restored = 0;
+        const backup = this.loadUnsyncedBackup();
+        backup.forEach((e) => {
+            if (!e || !e.id) return;
+            if (!this.entryBelongsToParticipant(e, this.currentUser)
+                && String(e.userUid || '') !== String(this.auth.currentUser.uid)
+                && String(e.userEmail || '').toLowerCase() !== String(this.currentUser.email || this.currentUser.emailId || '').toLowerCase()) {
+                // Still keep if email/uid matches auth
+                const authEmail = String((this.auth.currentUser.email || '')).toLowerCase();
+                const eEmail = String(e.userEmail || '').toLowerCase();
+                if (String(e.userUid) !== String(this.auth.currentUser.uid) && eEmail !== authEmail) return;
+            }
+            const exists = (this.stepEntries || []).some((x) => x && String(x.id) === String(e.id));
+            if (!exists) {
+                this.stepEntries.unshift(e);
+                restored += 1;
+            }
+        });
+
+        // 2) Rebuild from Recent Activity log if missing from stepEntries
+        const logs = Array.isArray(this.currentUser.activities) ? this.currentUser.activities : [];
+        logs.forEach((act) => {
+            if (!act) return;
+            const id = act.entryId;
+            if (id && (this.stepEntries || []).some((x) => x && String(x.id) === String(id))) return;
+            if (!id && !(Number(act.distanceKm) > 0 || Number(act.steps) > 0)) return;
+            // Skip very old logs outside challenge
+            const day = this.getChallengeDayNumber(this.parseEntryDate(act.date || new Date()));
+            if (day < 1) return;
+            const rebuilt = this.rebuildEntryFromActivityLog(act);
+            if (!rebuilt) return;
+            const dup = (this.stepEntries || []).some((x) =>
+                x && String(x.id) === String(rebuilt.id)
+            );
+            if (dup) return;
+            this.stepEntries.unshift(rebuilt);
+            this.persistUnsyncedBackup(rebuilt);
+            restored += 1;
+        });
+
+        if (restored) this.saveStepEntries();
+
+        // 3) Find which of MY entries need cloud upload
+        const authUid = this.auth.currentUser.uid;
+        const backupIds = new Set(this.loadUnsyncedBackup().map((e) => String(e.id)));
+        const candidates = (this.stepEntries || []).filter((e) => {
             if (!e || !e.id) return false;
-            if (e._cloudSynced === false || e._cloudSyncError) return true;
-            if (this._pendingEntryIds.has(String(e.id))) return true;
+            if (!this.isCurrentSeasonEntry(e)) return false;
+            const mine = this.entryBelongsToParticipant(e, this.currentUser)
+                || String(e.userUid || '') === String(authUid)
+                || String(e.userEmail || '').toLowerCase() === String(this.auth.currentUser.email || '').toLowerCase();
+            if (!mine) return false;
+            if (e._cloudSynced === false || e._cloudSyncError || e._recoveredFromActivityLog) return true;
+            if (this._pendingEntryIds && this._pendingEntryIds.has(String(e.id))) return true;
+            if (backupIds.has(String(e.id))) return true;
+            // Manual Recover button: also re-check any local entry not known synced
+            if (!silent && e._cloudSynced !== true) return true;
             return false;
         });
-        for (const entry of mine) {
+
+        let uploaded = 0;
+        let failed = 0;
+        const uploadedIds = [];
+        for (const entry of candidates) {
             try {
-                await this.upsertStepEntryInFirebase(entry);
+                // Skip if already on Firebase (unless marked unsynced)
+                const force = entry._cloudSynced === false || !!entry._cloudSyncError || !!entry._recoveredFromActivityLog;
+                if (!force) {
+                    const snap = await this.stepEntriesCol().doc(entry.id).get();
+                    if (snap.exists) {
+                        entry._cloudSynced = true;
+                        entry._cloudSyncError = null;
+                        continue;
+                    }
+                }
+                entry.userUid = authUid;
+                const ok = await this.upsertStepEntryInFirebase(entry);
+                if (ok) {
+                    uploaded += 1;
+                    uploadedIds.push(entry.id);
+                    if ((entry.status || '') === 'approved') {
+                        try {
+                            await this.publishActivityFeedPost(entry, { shareToFeed: true, caption: null, photoFile: null });
+                        } catch (feedErr) {
+                            console.warn('Feed republish skipped:', feedErr);
+                        }
+                    }
+                } else {
+                    failed += 1;
+                    this.persistUnsyncedBackup(entry);
+                }
             } catch (e) {
-                console.warn('retryPendingCloudUploads failed for', entry.id, e);
+                failed += 1;
+                console.warn('recover upload failed for', entry && entry.id, e);
+                this.persistUnsyncedBackup(entry);
             }
         }
-        if (mine.length) this.saveStepEntries();
+
+        this.clearUnsyncedBackupIds(uploadedIds);
+        this.saveStepEntries();
+        this.refreshCurrentUserTotalsFromEntries();
+        this.recalculateParticipantTotalsFromApproved(this.currentUser);
+        this.saveParticipantsCache();
+        this.syncParticipantToFirebase(this.currentUser);
+        this.updateDashboard();
+        this.updateActivities();
+        await this.updateLeaderboard(null, { skipRemoteSync: true });
+        this.loadActivityFeed(true);
+
+        if (!silent) {
+            if (uploaded || restored) {
+                alert(
+                    `Recovery finished.\n\n` +
+                    `Restored locally: ${restored}\n` +
+                    `Uploaded to cloud: ${uploaded}\n` +
+                    (failed ? `Still failed: ${failed}\n` : '') +
+                    `\nCheck Recent Activity and the Day leaderboard.`
+                );
+            } else if (failed) {
+                alert(`Could not upload ${failed} activit(y/ies). Log out, log in again, then tap Recover once more.`);
+            } else {
+                alert('No unsaved local activities were found on this device to recover.\n\nIf they were wiped earlier, they cannot be restored from the cloud and need to be recorded again.');
+            }
+        } else if (uploaded > 0 && typeof this.showToast === 'function') {
+            this.showToast(`Recovered ${uploaded} activit${uploaded === 1 ? 'y' : 'ies'} to the cloud`);
+        }
+
+        return { uploaded, restored, failed };
     }
 
     async deleteStepEntryFromFirebase(entryId) {
@@ -8831,7 +9068,10 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             shareNote = '\n\nNot posted to Team Feed (pace rejected for day board).';
         }
         if (!cloudOk) {
-            shareNote += '\n\nWarning: cloud sync failed — activity is kept on this device and will retry.\nPlease log out and log in again with your @csgi.com email, then open the app once so it can re-upload.';
+            stepEntry._cloudSynced = false;
+            this.persistUnsyncedBackup(stepEntry);
+            this.saveStepEntries();
+            shareNote += '\n\nWarning: cloud sync failed — activity is kept on this device.\nTap “Recover unsaved activities” under Recent Activity after logging in again.';
         }
         
         // Verify save immediately

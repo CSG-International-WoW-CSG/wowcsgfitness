@@ -638,6 +638,9 @@
             <!-- Recent Activity -->
             <div class="card activity-card">
                 <h2>&#128221; Recent Activity</h2>
+                <div class="feed-toolbar" style="margin-bottom:10px;">
+                    <button type="button" class="btn btn-secondary btn-small" id="recoverUnsyncedBtn">Recover unsaved activities</button>
+                </div>
                 <div class="activity-list" id="activityList">
                     <p class="no-activity">No activity yet. Start walking!</p>
                 </div>
@@ -699,7 +702,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-29-v89 | Android APK v1.0.25</p>
+            <p class="footer-subtext">Site version: 2026-07-29-v90 | Android APK v1.0.25</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#androidAppCard" class="help-link">Download Android App</a>
@@ -834,7 +837,7 @@
       if (!isIos) {
         scripts.push('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js');
       }
-      scripts.push('firebase-config.js', 'security-config.js?v=2', 'native-bridge.js?v=55', isIos ? 'script.min.js?v=89' : 'script.js?v=89');
+      scripts.push('firebase-config.js', 'security-config.js?v=2', 'native-bridge.js?v=55', isIos ? 'script.min.js?v=90' : 'script.js?v=90');
       function loadCss(href) {
         var l = document.createElement('link');
         l.rel = 'stylesheet';
