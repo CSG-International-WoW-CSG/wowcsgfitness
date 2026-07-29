@@ -5335,6 +5335,38 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  /**
+ * Day-board eligibility: approved, or previously pace-rejected entries that
+ * pass the current estimate (live goal spike was illegal but session pace is fine).
+ */
+ isDayBoardEligibleEntry(entry) {
+ if (!entry) return false;
+ if (this.isApprovedEntry(entry)) return true;
+ const st = entry.status || '';
+ if (st !== 'rejected') return false;
+ const why = `${entry.notes || ''} ${entry.validatedBy || ''}`;
+ if (!/pace/i.test(why)) return false;
+ const goalKm = this.getDailyGoalKm(entry.date ? new Date(entry.date) : new Date());
+ if (!this.meetsDailyGoal(Number(entry.distanceKm) || 0, goalKm)) return false;
+ if (this.isImplausibleChallengePace(entry, goalKm)) return false;
+ return this.estimateTimeToGoalSec(entry, goalKm) != null;
+ }
+
+ /** Challenge calendar day key in Asia/Kolkata (YYYY-MM-DD). */
+ getChallengeCalendarDayKey(date = new Date()) {
+ try {
+ return new Intl.DateTimeFormat('en-CA', {
+ timeZone: 'Asia/Kolkata',
+ year: 'numeric',
+ month: '2-digit',
+ day: '2-digit'
+ }).format(new Date(date));
+ } catch (e) {
+ const d = new Date(date);
+ return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+ }
+ }
+
+ /**
  * Rebuild participant totals from approved step entries only.
  * Fixes leaderboard drift when rejected/pending entries were still counted.
  */
@@ -5456,14 +5488,33 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  * Time (seconds) to reach the day's target KM within a single activity.
  * Prefers live goal-crossing snapshot, then GPS path crossing, then pace scale.
  * Example: 3 KM in 30 min on a 1 KM day → ~10 min (not 30).
+ *
+ * If live timeToGoalSec is an impossible spike (GPS/step glitch) but the full
+ * session pace is legal, fall back to scaled session time so the day board
+ * still ranks real finishers who appear on the activity feed.
  */
  estimateTimeToGoalSec(entry, goalKm) {
  if (!entry || !(goalKm > 0)) return null;
  const distanceKm = Number(entry.distanceKm) || 0;
  const durationSec = Number(entry.durationSec) || 0;
+ const maxKmh = Number(this.challengeConfig.maxHumanSpeedKmh) || 15;
+ const scaledFinish = () => {
+   if (!this.meetsDailyGoal(distanceKm, goalKm) || durationSec <= 0) return null;
+   return Math.max(1, Math.round(durationSec * (goalKm / Math.max(distanceKm, goalKm))));
+ };
+ const isLegalFinish = (sec) => {
+   if (!(sec > 0)) return false;
+   const speed = this.impliedSpeedKmh(sec, goalKm);
+   return speed == null || speed <= maxKmh;
+ };
+
  const liveGoalSec = Number(entry.timeToGoalSec);
  if (Number.isFinite(liveGoalSec) && liveGoalSec > 0) {
- return Math.min(Math.round(liveGoalSec), durationSec > 0 ? durationSec : Math.round(liveGoalSec));
+   const candidate = Math.min(Math.round(liveGoalSec), durationSec > 0 ? durationSec : Math.round(liveGoalSec));
+   if (isLegalFinish(candidate)) return candidate;
+   const scaled = scaledFinish();
+   if (scaled != null && isLegalFinish(scaled)) return scaled;
+   return candidate; // keep illegal candidate so pace gate can reject
  }
  if (!this.meetsDailyGoal(distanceKm, goalKm)) return null;
  if (durationSec <= 0) return null;
@@ -5482,18 +5533,18 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const prev = cum;
  cum += seg;
  if (this.meetsDailyGoal(cum, goalKm) || cum >= goalKm) {
- // Interpolate within the segment that crossed the goal
  const need = Math.max(0, goalKm - prev);
  const frac = seg > 0.00001 ? Math.min(1, need / seg) : 1;
  const crossedAt = Number(a.t) + frac * (Number(b.t) - Number(a.t));
  const elapsed = Math.max(1, Math.round((crossedAt - t0) / 1000));
- return Math.min(elapsed, durationSec);
+ const pathFinish = Math.min(elapsed, durationSec);
+ if (isLegalFinish(pathFinish)) return pathFinish;
+ break;
  }
  }
  }
 
- // Constant-pace fallback: time to cover only the goal distance
- return Math.max(1, Math.round(durationSec * (goalKm / Math.max(distanceKm, goalKm))));
+ return scaledFinish();
  }
 
  /** Implied average speed (km/h) for covering goalKm in finishSec. */
@@ -5526,19 +5577,24 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  */
  getDayLeaderboardRows(dayNum) {
  const goalKm = this.challengeConfig.dayGoalsKm[dayNum - 1] || dayNum;
- const dateKey = this.getChallengeDayDate(dayNum).toDateString();
+ const dateKey = this.getChallengeCalendarDayKey(this.getChallengeDayDate(dayNum));
  const byKey = new Map();
  const entries = this.filterCurrentSeasonEntries(this.stepEntries || []);
 
  entries.forEach((entry) => {
- if (!this.isApprovedEntry(entry)) return;
+ if (!this.isDayBoardEligibleEntry(entry)) return;
  let entryDateKey;
  try {
- entryDateKey = new Date(entry.date).toDateString();
+ entryDateKey = this.getChallengeCalendarDayKey(entry.date);
  } catch (err) {
  return;
  }
- if (entryDateKey !== dateKey) return;
+ const entryDayNum = Number(entry.challengeDay) || 0;
+ if (entryDayNum > 0) {
+ if (entryDayNum !== dayNum) return;
+ } else if (entryDateKey !== dateKey) {
+ return;
+ }
 
  const participant = this.findParticipantForEntry(entry);
  // Prefer stable auth/employee ids from the entry so missing profiles still rank
@@ -5558,7 +5614,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const finishSec = this.estimateTimeToGoalSec(entry, goalKm);
 
  const row = byKey.get(key) || {
- name: (participant && participant.name) || entry.userName || 'Unknown',
+ name: this.resolveDisplayName(participant && participant.name, entry.userName) || 'Unknown',
  department: (participant && participant.department) || '',
  steps: 0,
  distanceKm: 0,
@@ -8425,6 +8481,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  timeToGoalSec: trackMeta && trackMeta.timeToGoalSec != null ? Number(trackMeta.timeToGoalSec) : null,
  screenshot: null,
             date: new Date().toISOString(),
+ challengeDay: dayNum || this.getChallengeDayNumber() || null,
  status: autoOk ? 'approved' : (paceIllegal ? 'rejected' : 'pending'),
  validatedBy: paceIllegal ? 'App pace check' : (fromStepCounter ? 'App GPS Counter' : null),
  validatedAt: (autoOk || paceIllegal) ? new Date().toISOString() : null,
@@ -8462,8 +8519,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         this.recalculateParticipantTotalsFromApproved(this.currentUser);
 
         let shareNote = '';
-        // Always publish a team-feed summary so colleagues can see activity;
-        // photo/caption are optional extras from the share dialog.
+        // Team feed is for approved challenge activity only (pace rejects stay off the feed)
+        if ((stepEntry.status || '') === 'approved') {
         try {
             const opts = shareOptions || { shareToFeed: true, caption: null, photoFile: null };
             await this.publishActivityFeedPost(stepEntry, {
@@ -8477,6 +8534,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         } catch (shareErr) {
             console.warn('Feed share failed:', shareErr);
             shareNote = '\n\nActivity saved, but Team Feed post failed: ' + (shareErr.message || 'unknown error');
+        }
+        } else if (paceIllegal) {
+            shareNote = '\n\nNot posted to Team Feed (pace rejected for day board).';
         }
         
         // Verify save immediately
@@ -8804,7 +8864,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             source: stepEntry.source || null,
             date: stepEntry.date || new Date().toISOString(),
             season: this.dataSeason,
-            visible: true
+            // Only approved activities should appear on the public team feed
+            visible: (stepEntry.status || 'pending') === 'approved'
         };
 
         try {
