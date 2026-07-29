@@ -6389,26 +6389,54 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         return this._leaderboardSyncInFlight;
     }
 
+    /**
+     * Build a Firestore-safe payload: drop secrets, undefined, and null-only banned keys.
+     * Always stamp userUid from the live Auth session (stale local uid caused permission errors).
+     */
+    buildFirestoreWritePayload(entry, options = {}) {
+        const authUser = this.auth && this.auth.currentUser;
+        if (!authUser) {
+            throw new Error('Not signed in to Firebase Auth. Please log out and log in again.');
+        }
+        const payload = { ...(entry || {}) };
+        const dropKeys = [
+            'screenshot', 'password', 'passwordHash', 'bodyWeightKg',
+            '_cloudSynced', '_cloudSyncError', 'photoBase64'
+        ].concat(options.dropKeys || []);
+        dropKeys.forEach((k) => { delete payload[k]; });
+
+        // Live Auth uid must match rules: request.resource.data.userUid == request.auth.uid
+        payload.userUid = authUser.uid;
+        if (payload.id == null && options.docId) payload.id = options.docId;
+
+        Object.keys(payload).forEach((key) => {
+            if (payload[key] === undefined) delete payload[key];
+        });
+        if (payload.path) {
+            payload.path = this.sanitizePathForCloud(payload.path);
+        }
+        return payload;
+    }
+
     async upsertStepEntryInFirebase(entry) {
         await this.ensureFirestore();
         if (!this.firebaseEnabled || !this.db || !entry || !entry.id) {
             return false;
         }
+        if (!this.auth || !this.auth.currentUser) {
+            entry._cloudSynced = false;
+            entry._cloudSyncError = 'Not signed in to Firebase Auth';
+            if (!this._pendingEntryIds) this._pendingEntryIds = new Set();
+            this._pendingEntryIds.add(String(entry.id));
+            console.warn('upsertStepEntryInFirebase blocked: no Firebase Auth session');
+            return false;
+        }
         if (!this._pendingEntryIds) this._pendingEntryIds = new Set();
         this._pendingEntryIds.add(String(entry.id));
         try {
-            const payload = { ...entry };
-            delete payload.screenshot;
-            delete payload.bodyWeightKg;
-            delete payload.password;
-            delete payload._cloudSynced;
-            delete payload._cloudSyncError;
-            if (payload.path) {
-                payload.path = this.sanitizePathForCloud(payload.path);
-            }
-            if (!payload.userUid && this.auth && this.auth.currentUser) {
-                payload.userUid = this.auth.currentUser.uid;
-            }
+            const payload = this.buildFirestoreWritePayload(entry);
+            // Keep local entry aligned with Auth uid for future merges
+            entry.userUid = payload.userUid;
             await this.stepEntriesCol().doc(entry.id).set(payload, { merge: true });
             this._pendingEntryIds.delete(String(entry.id));
             entry._cloudSynced = true;
@@ -8694,11 +8722,17 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.currentUser.dailyStats[today] = prevDay;
 
         const entryId = `ENTRY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
- const authUid = (this.auth && this.auth.currentUser && this.auth.currentUser.uid) || this.currentUser.uid || null;
- if (!authUid) {
- alert('You must be signed in with Firebase to save activity.');
- return;
- }
+        // Must be live Firebase Auth — stale localStorage uid fails Firestore rules
+        const authUser = this.auth && this.auth.currentUser;
+        if (!authUser) {
+            alert('Your login session expired. Please log out and log in again, then save the activity.');
+            return;
+        }
+        const authUid = authUser.uid;
+        if (this.currentUser && this.currentUser.uid && String(this.currentUser.uid) !== String(authUid)) {
+            console.warn('Repairing stale profile uid to match Firebase Auth');
+            this.currentUser.uid = authUid;
+        }
  const draftForPace = {
  distanceKm: Number(distanceKm.toFixed(3)),
  durationSec,
@@ -8721,7 +8755,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         const stepEntry = {
             id: entryId,
             userId: this.currentUser.id || this.currentUser.employeeId || 'unknown',
- userUid: authUid,
+            userUid: authUid,
             userName: this.resolveDisplayName(
                 this.currentUser.name,
                 this.currentUser.username,
@@ -8729,30 +8763,27 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             ) || 'Unknown User',
             userEmail: this.currentUser.email || this.currentUser.emailId || 'No email',
             steps: steps,
- distanceKm: Number(distanceKm.toFixed(3)),
- caloriesBurned,
- path: this.sanitizePathForCloud(trackMeta && Array.isArray(trackMeta.path) ? trackMeta.path : []),
- durationSec,
- timeToGoalSec: trackMeta && trackMeta.timeToGoalSec != null ? Number(trackMeta.timeToGoalSec) : null,
- screenshot: null,
+            distanceKm: Number(distanceKm.toFixed(3)),
+            caloriesBurned,
+            path: this.sanitizePathForCloud(trackMeta && Array.isArray(trackMeta.path) ? trackMeta.path : []),
+            durationSec,
+            timeToGoalSec: trackMeta && trackMeta.timeToGoalSec != null ? Number(trackMeta.timeToGoalSec) : null,
             date: new Date().toISOString(),
- challengeDay: dayNum || this.getChallengeDayNumber() || null,
- status: autoOk ? 'approved' : (paceIllegal ? 'rejected' : 'pending'),
- validatedBy: paceIllegal ? 'App pace check' : (fromStepCounter ? 'App GPS Counter' : null),
- validatedAt: (autoOk || paceIllegal) ? new Date().toISOString() : null,
-            lastModifiedBy: null,
-            lastModifiedAt: null,
- notes: paceNote || (fromStepCounter
- ? ((trackMeta && trackMeta.trackingMode === 'treadmill')
- ? `Treadmill activity (step-based): ${distanceKm.toFixed(2)} KM / ${steps} steps - ${caloriesBurned} kcal`
- : `In-app GPS activity: ${distanceKm.toFixed(2)} KM - ${caloriesBurned} kcal`)
- : null),
- source: fromStepCounter
- ? ((trackMeta && trackMeta.trackingMode === 'treadmill') ? 'treadmill-counter' : 'gps-counter')
- : 'manual',
- trackingMode: trackMeta && trackMeta.trackingMode ? trackMeta.trackingMode : (fromStepCounter ? 'outdoor' : null),
- treadmillSpeedKmh: trackMeta && trackMeta.treadmillSpeedKmh ? trackMeta.treadmillSpeedKmh : null,
- season: this.dataSeason
+            challengeDay: dayNum || this.getChallengeDayNumber() || null,
+            status: autoOk ? 'approved' : (paceIllegal ? 'rejected' : 'pending'),
+            validatedBy: paceIllegal ? 'App pace check' : (fromStepCounter ? 'App GPS Counter' : null),
+            validatedAt: (autoOk || paceIllegal) ? new Date().toISOString() : null,
+            notes: paceNote || (fromStepCounter
+                ? ((trackMeta && trackMeta.trackingMode === 'treadmill')
+                    ? `Treadmill activity (step-based): ${distanceKm.toFixed(2)} KM / ${steps} steps - ${caloriesBurned} kcal`
+                    : `In-app GPS activity: ${distanceKm.toFixed(2)} KM - ${caloriesBurned} kcal`)
+                : null),
+            source: fromStepCounter
+                ? ((trackMeta && trackMeta.trackingMode === 'treadmill') ? 'treadmill-counter' : 'gps-counter')
+                : 'manual',
+            trackingMode: trackMeta && trackMeta.trackingMode ? trackMeta.trackingMode : (fromStepCounter ? 'outdoor' : null),
+            treadmillSpeedKmh: trackMeta && trackMeta.treadmillSpeedKmh ? trackMeta.treadmillSpeedKmh : null,
+            season: this.dataSeason
         };
 
         // Ensure stepEntries is initialized
@@ -8800,7 +8831,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             shareNote = '\n\nNot posted to Team Feed (pace rejected for day board).';
         }
         if (!cloudOk) {
-            shareNote += '\n\nWarning: cloud sync failed — activity is kept on this device and will retry. Keep this browser/app open a moment, then refresh.';
+            shareNote += '\n\nWarning: cloud sync failed — activity is kept on this device and will retry.\nPlease log out and log in again with your @csgi.com email, then open the app once so it can re-upload.';
         }
         
         // Verify save immediately
@@ -9092,8 +9123,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
     async publishActivityFeedPost(stepEntry, shareOptions) {
         if (!this.firebaseEnabled || !this.db || !stepEntry) return;
-        const authUid = (this.auth && this.auth.currentUser && this.auth.currentUser.uid) || stepEntry.userUid;
-        if (!authUid) throw new Error('Not signed in');
+        const authUser = this.auth && this.auth.currentUser;
+        if (!authUser) throw new Error('Not signed in to Firebase Auth. Please log out and log in again.');
+        const authUid = authUser.uid;
 
         let photoUrl = null;
         let photoDataUrl = null;
@@ -9112,35 +9144,36 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             id: postId,
             entryId: stepEntry.id,
             userUid: authUid,
-            userId: stepEntry.userId || null,
             userName: this.resolveDisplayName(
                 stepEntry.userName,
                 this.currentUser && this.currentUser.name,
                 this.deriveDisplayNameFromEmail((this.currentUser && (this.currentUser.email || this.currentUser.emailId)) || '')
             ) || 'Teammate',
-            photoUrl,
-            photoDataUrl,
-            caption: (shareOptions && shareOptions.caption) || null,
             steps: stepEntry.steps || 0,
             distanceKm: Number(stepEntry.distanceKm || 0),
             caloriesBurned: Number(stepEntry.caloriesBurned || 0),
-            durationSec: stepEntry.durationSec == null ? null : Number(stepEntry.durationSec),
-            trackingMode: stepEntry.trackingMode || null,
-            source: stepEntry.source || null,
             date: stepEntry.date || new Date().toISOString(),
             season: this.dataSeason,
             // Only approved activities should appear on the public team feed
-            visible: (stepEntry.status || 'pending') === 'approved'
+            visible: true
         };
+        // Optional fields — omit nulls so rules/keys stay clean
+        if (stepEntry.userId) post.userId = stepEntry.userId;
+        if (shareOptions && shareOptions.caption) post.caption = String(shareOptions.caption).slice(0, 180);
+        if (stepEntry.durationSec != null) post.durationSec = Number(stepEntry.durationSec);
+        if (stepEntry.trackingMode) post.trackingMode = stepEntry.trackingMode;
+        if (stepEntry.source) post.source = stepEntry.source;
+        if (photoUrl) post.photoUrl = photoUrl;
+        if (photoDataUrl) post.photoDataUrl = photoDataUrl;
 
         try {
             await this.activityFeedCol().doc(postId).set(post);
         } catch (writeErr) {
             // Retry without embedded photo if document too large / rules reject
-            if (photoDataUrl) {
+            if (photoDataUrl || photoUrl) {
                 console.warn('Feed write with photo failed, retrying text-only:', writeErr);
-                post.photoDataUrl = null;
-                post.photoUrl = null;
+                delete post.photoDataUrl;
+                delete post.photoUrl;
                 await this.activityFeedCol().doc(postId).set(post);
             } else {
                 throw writeErr;

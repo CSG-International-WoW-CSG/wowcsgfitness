@@ -12,7 +12,11 @@ service cloud.firestore {
 
     function isCorporateEmail() {
       return signedIn()
-        && (email().matches('.*@csgi[.]com$') || email().matches('.*@csg[.]com$'));
+        && request.auth.token.email != null
+        && (
+          email().matches('.*@csgi[.]com$')
+          || email().matches('.*@csg[.]com$')
+        );
     }
 
     function isAdmin() {
@@ -70,7 +74,10 @@ service cloud.firestore {
         && request.resource.data.source in [
           'gps-counter', 'treadmill-counter', 'manual', 'native'
         ]
-        && !request.resource.data.keys().hasAny(['password', 'screenshot']);
+        // Ban secret fields only when actually present with a value
+        && !('password' in request.resource.data)
+        && !('passwordHash' in request.resource.data)
+        && (!('screenshot' in request.resource.data) || request.resource.data.screenshot == null);
 
       // Owners may update their own stats; status changes remain admin-only
       // except pending→approved self-heal for legal finishes (validatedBy Day board auto-heal).
@@ -107,7 +114,9 @@ service cloud.firestore {
         ])
         && request.resource.data.season is string
         && request.resource.data.visible == true
-        && !request.resource.data.keys().hasAny(['password', 'screenshot', 'photoBase64']);
+        && !('password' in request.resource.data)
+        && !('screenshot' in request.resource.data)
+        && !('photoBase64' in request.resource.data);
         // photoUrl (Storage) and/or photoDataUrl (compressed JPEG data URL) are allowed
 
       allow update: if isAdmin()
