@@ -1769,28 +1769,47 @@ class StepathonApp {
 
  getChallengeBounds() {
  const cfg = this.challengeConfig;
- const startDate = new Date(cfg.startYear, cfg.startMonth, cfg.startDay);
- startDate.setHours(0, 0, 0, 0);
- const endDate = new Date(cfg.endYear, cfg.endMonth, cfg.endDay);
- endDate.setHours(23, 59, 59, 999);
+ // Anchor bounds at India local dates so day boards don't shift by browser TZ
+ const startDate = new Date(Date.parse(
+ `${cfg.startYear}-${String(cfg.startMonth + 1).padStart(2, '0')}-${String(cfg.startDay).padStart(2, '0')}T00:00:00+05:30`
+ ));
+ const endDate = new Date(Date.parse(
+ `${cfg.endYear}-${String(cfg.endMonth + 1).padStart(2, '0')}-${String(cfg.endDay).padStart(2, '0')}T23:59:59+05:30`
+ ));
  return { startDate, endDate };
  }
 
- /** Challenge day number 1-7 for a given date, or 0 if outside the challenge window */
- getChallengeDayNumber(date = new Date()) {
- const { startDate, endDate } = this.getChallengeBounds();
+ /** Challenge calendar day key in Asia/Kolkata (YYYY-MM-DD). */
+ getChallengeCalendarDayKey(date = new Date()) {
+ try {
+ return new Intl.DateTimeFormat('en-CA', {
+ timeZone: 'Asia/Kolkata',
+ year: 'numeric',
+ month: '2-digit',
+ day: '2-digit'
+ }).format(new Date(date));
+ } catch (e) {
  const d = new Date(date);
- d.setHours(0, 0, 0, 0);
- if (d < startDate || d > endDate) return 0;
- const diffMs = d.getTime() - startDate.getTime();
- const dayIndex = Math.floor(diffMs / (1000 * 60 * 60 * 24));
- return dayIndex + 1; // 1..7
+ return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+ }
+ }
+
+ /** Challenge day number 1-7 in Asia/Kolkata, or 0 if outside the window */
+ getChallengeDayNumber(date = new Date()) {
+ const cfg = this.challengeConfig;
+ const startKey = `${cfg.startYear}-${String(cfg.startMonth + 1).padStart(2, '0')}-${String(cfg.startDay).padStart(2, '0')}`;
+ const dayKey = this.getChallengeCalendarDayKey(date);
+ const startMs = Date.parse(`${startKey}T00:00:00+05:30`);
+ const dayMs = Date.parse(`${dayKey}T00:00:00+05:30`);
+ if (!Number.isFinite(startMs) || !Number.isFinite(dayMs)) return 0;
+ const dayIndex = Math.round((dayMs - startMs) / 86400000);
+ if (dayIndex < 0 || dayIndex >= (cfg.durationDays || 7)) return 0;
+ return dayIndex + 1;
  }
 
  getDailyGoalKm(date = new Date()) {
  const day = this.getChallengeDayNumber(date);
  if (day < 1 || day > 7) {
- // Outside window: show Day 1 goal as preview / fallback
  return this.challengeConfig.dayGoalsKm[0];
  }
  return this.challengeConfig.dayGoalsKm[day - 1];
@@ -1798,6 +1817,13 @@ class StepathonApp {
 
  getDailyGoalSteps(date = new Date()) {
  return this.getDailyGoalKm(date) * this.challengeConfig.stepsPerKm;
+ }
+
+ getChallengeDayDate(dayNum) {
+ const cfg = this.challengeConfig;
+ const startKey = `${cfg.startYear}-${String(cfg.startMonth + 1).padStart(2, '0')}-${String(cfg.startDay).padStart(2, '0')}`;
+ const startMs = Date.parse(`${startKey}T12:00:00+05:30`);
+ return new Date(startMs + (Math.max(1, dayNum) - 1) * 86400000);
  }
 
  updateDates() {
@@ -5257,14 +5283,6 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         return idx >= 0 ? idx + 1 : 0;
     }
 
- getChallengeDayDate(dayNum) {
- const { startDate } = this.getChallengeBounds();
- const d = new Date(startDate);
- d.setDate(d.getDate() + (dayNum - 1));
- d.setHours(0, 0, 0, 0);
- return d;
- }
-
  formatDurationClock(totalSec) {
  if (totalSec == null || !Number.isFinite(totalSec) || totalSec < 0) {
  return '--';
@@ -5337,33 +5355,21 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  /**
  * Day-board eligibility: approved, or previously pace-rejected entries that
  * pass the current estimate (live goal spike was illegal but session pace is fine).
+ * Pass goalKmOverride when ranking a specific day board so goal matches that day.
  */
- isDayBoardEligibleEntry(entry) {
+ isDayBoardEligibleEntry(entry, goalKmOverride = null) {
  if (!entry) return false;
  if (this.isApprovedEntry(entry)) return true;
  const st = entry.status || '';
  if (st !== 'rejected') return false;
  const why = `${entry.notes || ''} ${entry.validatedBy || ''}`;
  if (!/pace/i.test(why)) return false;
- const goalKm = this.getDailyGoalKm(entry.date ? new Date(entry.date) : new Date());
+ const goalKm = goalKmOverride != null
+ ? goalKmOverride
+ : this.getDailyGoalKm(entry.date ? new Date(entry.date) : new Date());
  if (!this.meetsDailyGoal(Number(entry.distanceKm) || 0, goalKm)) return false;
  if (this.isImplausibleChallengePace(entry, goalKm)) return false;
  return this.estimateTimeToGoalSec(entry, goalKm) != null;
- }
-
- /** Challenge calendar day key in Asia/Kolkata (YYYY-MM-DD). */
- getChallengeCalendarDayKey(date = new Date()) {
- try {
- return new Intl.DateTimeFormat('en-CA', {
- timeZone: 'Asia/Kolkata',
- year: 'numeric',
- month: '2-digit',
- day: '2-digit'
- }).format(new Date(date));
- } catch (e) {
- const d = new Date(date);
- return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
- }
  }
 
  /**
@@ -5474,14 +5480,15 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  /**
- * Goal check matching the live counter (2 decimal places).
- * Prevents "UI showed 2.00 KM" but board treats 1.995 as incomplete.
+ * Goal check matching the live counter (2 decimal places), plus ~5 m GPS tolerance.
+ * Prevents "UI showed 4.00 KM" but board treats 3.995 as incomplete.
  */
  meetsDailyGoal(distanceKm, goalKm) {
  const d = Number(distanceKm) || 0;
  const g = Number(goalKm) || 0;
  if (!(g > 0) || !(d > 0)) return false;
- return Number(d.toFixed(2)) >= Number(g.toFixed(2));
+ if (Number(d.toFixed(2)) >= Number(g.toFixed(2))) return true;
+ return d + 0.005 >= g;
  }
 
  /**
@@ -5582,19 +5589,11 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const entries = this.filterCurrentSeasonEntries(this.stepEntries || []);
 
  entries.forEach((entry) => {
- if (!this.isDayBoardEligibleEntry(entry)) return;
- let entryDateKey;
- try {
- entryDateKey = this.getChallengeCalendarDayKey(entry.date);
- } catch (err) {
- return;
- }
- const entryDayNum = Number(entry.challengeDay) || 0;
- if (entryDayNum > 0) {
- if (entryDayNum !== dayNum) return;
- } else if (entryDateKey !== dateKey) {
- return;
- }
+ // Bucket ONLY by Asia/Kolkata calendar day from entry.date.
+ // Never trust stored challengeDay alone — a wrong/stale tag put Day 3 winners on Day 4.
+ const entryDay = this.getChallengeDayNumber(entry.date ? new Date(entry.date) : new Date());
+ if (entryDay !== dayNum) return;
+ if (!this.isDayBoardEligibleEntry(entry, goalKm)) return;
 
  const participant = this.findParticipantForEntry(entry);
  // Prefer stable auth/employee ids from the entry so missing profiles still rank
@@ -5695,9 +5694,13 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  async updateLeaderboard(filter, options = {}) {
  if (!filter) {
- const active = document.querySelector('.filter-btn.active, .day-filter-btn.active');
- filter = (active && active.dataset.filter) || 'total';
+ // Scope to leaderboard card — admin dashboard also uses .filter-btn.active
+ const active = document.querySelector(
+ '#leaderboardCard .day-filter-btn.active, #leaderboardCard .filter-btn.active, #dayLeaderboardFilters .day-filter-btn.active'
+ );
+ filter = (active && active.dataset.filter) || this._leaderboardRenderFilter || 'total';
  }
+ this._leaderboardRenderFilter = filter;
         const list = document.getElementById('leaderboardList');
         if (!list) return; // Element doesn't exist on admin page
         list.innerHTML = '';
@@ -5710,7 +5713,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  // Refresh from Firebase when needed — but never thrash on every paint (iOS Safari OOM)
  if (this.firebaseEnabled && !skipRemoteSync && (forceSync || syncIsStale)) {
- await this.syncParticipantsFromFirebase({ skipEntries: false });
+ // Skip nested leaderboard refresh; this call will render with the correct filter
+ await this.syncParticipantsFromFirebase({ skipEntries: false, skipLeaderboardRefresh: true });
  } else if (!Array.isArray(this.stepEntries) || this.stepEntries.length === 0) {
  this.stepEntries = this.loadStepEntries();
  }
@@ -6129,8 +6133,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  await this.syncStepEntriesFromFirebase();
  this.recalculateAllParticipantTotalsFromApproved();
  }
-            if (!window.location.pathname.includes('admin.html')) {
-                await this.updateLeaderboard(null, { skipRemoteSync: true });
+            if (!options.skipLeaderboardRefresh && !window.location.pathname.includes('admin.html')) {
+                await this.updateLeaderboard(this._leaderboardRenderFilter || null, { skipRemoteSync: true });
             }
         } catch (error) {
             console.warn('Failed to sync participants from Firebase:', error);
