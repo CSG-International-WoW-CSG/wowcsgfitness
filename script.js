@@ -2494,6 +2494,94 @@ class StepathonApp {
  return clean;
     }
 
+    isPlaceholderDisplayName(name) {
+        const n = String(name || '').trim().toLowerCase();
+        if (!n) return true;
+        return (
+            n === 'challenge participant' ||
+            n === 'unknown user' ||
+            n === 'unknown' ||
+            n === 'teammate' ||
+            n === 'user'
+        );
+    }
+
+    /** utkarsh.bajpai@csgi.com → Utkarsh Bajpai */
+    deriveDisplayNameFromEmail(email) {
+        const local = String(email || '').split('@')[0] || '';
+        if (!local) return '';
+        return local
+            .replace(/[._+\-]+/g, ' ')
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+            .join(' ');
+    }
+
+    resolveDisplayName(...candidates) {
+        for (const c of candidates) {
+            if (!this.isPlaceholderDisplayName(c)) return String(c).trim();
+        }
+        return '';
+    }
+
+    /**
+     * Fix profiles stuck as "Challenge Participant" (season reclaim / missing displayName).
+     * Also backfills userName on this user's recent entries + feed posts.
+     */
+    async repairPlaceholderProfileName(profile, authUser) {
+        if (!profile) return profile;
+        if (!this.isPlaceholderDisplayName(profile.name)) return profile;
+
+        const email = profile.email || profile.emailId || (authUser && authUser.email) || '';
+        const fixed = this.resolveDisplayName(
+            authUser && authUser.displayName,
+            profile.username && !/^\d+$/.test(String(profile.username)) ? String(profile.username).replace(/[._]/g, ' ') : '',
+            this.deriveDisplayNameFromEmail(email)
+        );
+        if (!fixed) return profile;
+
+        profile.name = fixed;
+        this.currentUser = this.stripSecretsFromParticipant(profile);
+        try {
+            localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
+        } catch (e0) { /* ignore */ }
+
+        const idx = (this.participants || []).findIndex(
+            (p) => (p.uid && profile.uid && p.uid === profile.uid) ||
+                (String(p.email || '').toLowerCase() === String(email).toLowerCase())
+        );
+        if (idx >= 0) {
+            this.participants[idx] = { ...this.participants[idx], name: fixed };
+            this.saveParticipantsCache();
+        }
+
+        if (this.firebaseEnabled && this.db && profile.uid) {
+            try {
+                await this.ensureFirestore();
+                await this.participantsCol().doc(profile.uid).set({ name: fixed }, { merge: true });
+            } catch (e1) {
+                console.warn('Could not persist repaired display name:', e1);
+            }
+            // Backfill denormalized names on recent activities / feed
+            try {
+                const mine = (this.stepEntries || []).filter((e) => this.entryBelongsToParticipant(e, profile));
+                for (const entry of mine.slice(0, 40)) {
+                    if (!this.isPlaceholderDisplayName(entry.userName)) continue;
+                    entry.userName = fixed;
+                    await this.upsertStepEntryInFirebase(entry);
+                    await this.syncActivityFeedForEntry(entry);
+                }
+                this.saveStepEntries();
+            } catch (e2) {
+                console.warn('Could not backfill activity display names:', e2);
+            }
+        }
+        return profile;
+    }
+
+
     initializeEmailJS() {
         // Check if EmailJS is available
         if (typeof emailjs !== 'undefined') {
@@ -2963,6 +3051,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             } catch (e) {
                 console.warn('Dashboard entry sync skipped:', e);
             }
+        }
+
+        // Fix "Challenge Participant" placeholder names (e.g. Utkarsh after season reclaim)
+        if (this.currentUser && this.isPlaceholderDisplayName(this.currentUser.name)) {
+            const authUser = this.auth && this.auth.currentUser;
+            await this.repairPlaceholderProfileName(this.currentUser, authUser);
         }
         
         this.updateDashboard();
@@ -5753,6 +5847,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  this.currentUser = this.stripSecretsFromParticipant(profile);
+ await this.repairPlaceholderProfileName(this.currentUser, credential.user);
  localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
 
             document.getElementById('loginForm').reset();
@@ -5824,11 +5919,17 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  const safeId = String((prior && (prior.id || prior.employeeId)) || `USER_${Date.now()}`);
  const usernameBase = String((prior && prior.username) || emailFinal.split('@')[0] || 'user');
+ const resolvedName = this.resolveDisplayName(
+   prior && prior.name,
+   authUser.displayName,
+   usernameBase.includes('.') || usernameBase.includes('_') ? usernameBase.replace(/[._]/g, ' ') : '',
+   this.deriveDisplayNameFromEmail(emailFinal || (prior && prior.email))
+ ) || 'Challenge Participant';
  const participant = {
  uid,
  id: safeId,
  employeeId: safeId,
- name: (prior && prior.name) || (authUser.displayName) || 'Challenge Participant',
+ name: resolvedName,
  email: emailFinal || (prior && prior.email) || '',
  emailLower: emailFinal || String((prior && prior.email) || '').toLowerCase(),
  username: usernameBase,
@@ -5944,6 +6045,10 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  return null;
  }
  this.currentUser = this.stripSecretsFromParticipant(participant);
+ if (this.isPlaceholderDisplayName(this.currentUser.name)) {
+   const authUser = this.auth && this.auth.currentUser;
+   await this.repairPlaceholderProfileName(this.currentUser, authUser);
+ }
  localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
  return this.currentUser;
         } catch (error) {
@@ -8306,7 +8411,11 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             id: entryId,
             userId: this.currentUser.id || this.currentUser.employeeId || 'unknown',
  userUid: authUid,
-            userName: this.currentUser.name || 'Unknown User',
+            userName: this.resolveDisplayName(
+                this.currentUser.name,
+                this.currentUser.username,
+                this.deriveDisplayNameFromEmail(this.currentUser.email || this.currentUser.emailId)
+            ) || 'Unknown User',
             userEmail: this.currentUser.email || this.currentUser.emailId || 'No email',
             steps: steps,
  distanceKm: Number(distanceKm.toFixed(3)),
@@ -8679,7 +8788,11 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             entryId: stepEntry.id,
             userUid: authUid,
             userId: stepEntry.userId || null,
-            userName: stepEntry.userName || (this.currentUser && this.currentUser.name) || 'Teammate',
+            userName: this.resolveDisplayName(
+                stepEntry.userName,
+                this.currentUser && this.currentUser.name,
+                this.deriveDisplayNameFromEmail((this.currentUser && (this.currentUser.email || this.currentUser.emailId)) || '')
+            ) || 'Teammate',
             photoUrl,
             photoDataUrl,
             caption: (shareOptions && shareOptions.caption) || null,
@@ -8909,6 +9022,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                     byEntry.set(key, {
                         id: `derived_${key}`,
                         entryId: key,
+                        userUid: e.userUid || null,
+                        userId: e.userId || null,
+                        userEmail: e.userEmail || null,
                         userName: e.userName || 'Teammate',
                         photoUrl: null,
                         photoDataUrl: null,
@@ -8949,6 +9065,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         }
 
         list.innerHTML = posts.map((post) => {
+            const participant = this.findParticipantForEntry(post);
+            const author = this.resolveDisplayName(
+                participant && participant.name,
+                post.userName,
+                this.deriveDisplayNameFromEmail(post.userEmail || (participant && participant.email))
+            ) || 'Teammate';
             const mode = post.trackingMode === 'treadmill' ? 'Treadmill' : 'Outdoor';
             const when = (() => {
                 try { return new Date(post.date).toLocaleString(); } catch (e) { return post.date || ''; }
@@ -8959,12 +9081,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 ? imgSrc
                 : '';
             const photo = safeImg
-                ? `<div class="feed-photo-wrap"><img class="feed-photo" src="${safeImg.replace(/"/g, '&quot;')}" alt="Activity photo by ${this.escapeHtml(post.userName || 'teammate')}" loading="lazy"></div>`
+                ? `<div class="feed-photo-wrap"><img class="feed-photo" src="${safeImg.replace(/"/g, '&quot;')}" alt="Activity photo by ${this.escapeHtml(author)}" loading="lazy"></div>`
                 : '';
             return `
                 <article class="feed-post">
                     <div class="feed-post-header">
-                        <strong class="feed-author">${this.escapeHtml(post.userName || 'Teammate')}</strong>
+                        <strong class="feed-author">${this.escapeHtml(author)}</strong>
                         <span class="feed-meta">${this.escapeHtml(mode)} · ${this.escapeHtml(when)}</span>
                     </div>
                     ${photo}
