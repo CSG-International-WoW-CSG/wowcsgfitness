@@ -5484,9 +5484,15 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  return null;
  }
 
+ /** True when the entry has any timing we can use to judge pace. */
+ hasTimingEvidence(entry) {
+ if (!entry) return false;
+ return (Number(entry.durationSec) || 0) > 0 || (Number(entry.timeToGoalSec) || 0) > 0;
+ }
+
  /**
- * Day-board eligibility: approved, pending (same as Team Feed supplement),
- * or pace-rejected rows that are legal under the current estimator.
+ * Day-board eligibility aligned with Team Feed:
+ * approved/pending goal finishers count unless timing proves an illegal pace.
  * Pass goalKmOverride when ranking a specific day board so goal matches that day.
  */
  isDayBoardEligibleEntry(entry, goalKmOverride = null) {
@@ -5501,17 +5507,124 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const why = `${entry.notes || ''} ${entry.validatedBy || ''}`;
  if (!/pace/i.test(why)) return false;
  if (!this.meetsDailyGoal(dist, goalKm)) return false;
+ // Recover false pace-rejects when session pace is legal now
  return this.getDayBoardFinishSec(entry, goalKm) != null;
  }
 
- // approved + pending appear on the Team Feed; rank them when pace is legal
  if (st !== 'approved' && st !== 'pending') return false;
  if (!this.meetsDailyGoal(dist, goalKm)) {
  // Still allow in-progress rows (distance toward the day goal)
  return dist > 0.005 || (Number(entry.steps) || 0) > 0;
  }
- // Goal reached: only eligible if finish pace is legal (blocks GPS-glitch "wins")
- return this.getDayBoardFinishSec(entry, goalKm) != null;
+ const finish = this.getDayBoardFinishSec(entry, goalKm);
+ if (finish != null) return true;
+ // Goal met, no timing → count it (matches Team Feed); cannot DQ without evidence
+ if (!this.hasTimingEvidence(entry)) return true;
+ // Timing present but illegal pace → exclude
+ return false;
+ }
+
+ /**
+ * Pull Team Feed posts into stepEntries for a challenge day so feed finishers
+ * are never missing from that day's leaderboard.
+ */
+ async hydrateDayBoardEntriesFromFeed(dayNum) {
+ if (!this.firebaseEnabled || !this.db) return 0;
+ const goalKm = this.challengeConfig.dayGoalsKm[dayNum - 1] || dayNum;
+ let addedOrPatched = 0;
+ try {
+ let snap;
+ try {
+ snap = await this.activityFeedCol()
+ .where('season', '==', this.dataSeason)
+ .where('visible', '==', true)
+ .orderBy('date', 'desc')
+ .limit(80)
+ .get();
+ } catch (idxErr) {
+ snap = await this.activityFeedCol()
+ .where('season', '==', this.dataSeason)
+ .limit(120)
+ .get();
+ }
+ if (!Array.isArray(this.stepEntries)) this.stepEntries = [];
+ const byId = new Map(
+ (this.stepEntries || []).filter((e) => e && e.id).map((e) => [String(e.id), e])
+ );
+
+ snap.docs.forEach((doc) => {
+ const p = doc.data();
+ if (!p || p.visible === false) return;
+ const entryId = p.entryId || p.id;
+ if (!entryId) return;
+ const dateVal = p.date;
+ const entryDay = this.getChallengeDayNumber(this.parseEntryDate(dateVal));
+ if (entryDay !== dayNum) return;
+
+ const dist = Number(p.distanceKm) || 0;
+ const steps = Number(p.steps) || 0;
+ if (dist <= 0.005 && steps <= 0) return;
+
+ const existing = byId.get(String(entryId));
+ if (existing) {
+ let patched = false;
+ // Fill gaps so day-board pace/finish can be computed like the feed UI
+ if (!(Number(existing.durationSec) > 0) && Number(p.durationSec) > 0) {
+ existing.durationSec = Number(p.durationSec);
+ patched = true;
+ }
+ if (!(Number(existing.distanceKm) > 0) && dist > 0) {
+ existing.distanceKm = dist;
+ patched = true;
+ }
+ if (!(Number(existing.steps) > 0) && steps > 0) {
+ existing.steps = steps;
+ patched = true;
+ }
+ if (!existing.userName && p.userName) {
+ existing.userName = p.userName;
+ patched = true;
+ }
+ // Feed-visible posts should not stay stuck as pending for day boards
+ if (String(existing.status || '').toLowerCase() === 'pending') {
+ existing.status = 'approved';
+ existing.validatedBy = existing.validatedBy || 'Feed hydrate';
+ patched = true;
+ }
+ if (patched) addedOrPatched += 1;
+ return;
+ }
+
+ const synthesized = {
+ id: String(entryId),
+ userUid: p.userUid || null,
+ userId: p.userId || null,
+ userName: p.userName || 'Teammate',
+ userEmail: p.userEmail || null,
+ steps,
+ distanceKm: dist,
+ caloriesBurned: Number(p.caloriesBurned) || 0,
+ durationSec: p.durationSec == null ? null : Number(p.durationSec),
+ timeToGoalSec: p.timeToGoalSec == null ? null : Number(p.timeToGoalSec),
+ date: dateVal || new Date().toISOString(),
+ challengeDay: dayNum,
+ status: 'approved',
+ validatedBy: 'Team feed hydrate',
+ validatedAt: new Date().toISOString(),
+ notes: `Hydrated from Team Feed for Day ${dayNum} (${goalKm} KM)`,
+ source: p.source || 'gps-counter',
+ trackingMode: p.trackingMode || null,
+ season: this.dataSeason,
+ _fromFeed: true
+ };
+ this.stepEntries.push(synthesized);
+ byId.set(String(entryId), synthesized);
+ addedOrPatched += 1;
+ });
+ } catch (err) {
+ console.warn('hydrateDayBoardEntriesFromFeed failed:', err);
+ }
+ return addedOrPatched;
  }
 
  /**
@@ -5756,8 +5869,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const steps = Number(entry.steps) || 0;
  // Legal finish only (strips timeToGoalSec GPS spikes that falsely DQ real finishers)
  const finishSec = this.getDayBoardFinishSec(entry, goalKm);
- // Goal reached but pace still illegal after spike-strip → exclude (cheat / glitch)
- if (this.meetsDailyGoal(dist, goalKm) && finishSec == null) return;
+ const goalMet = this.meetsDailyGoal(dist, goalKm);
+ // Goal reached + timing proves illegal pace → exclude. No timing → still count (feed parity).
+ if (goalMet && finishSec == null && this.hasTimingEvidence(entry)) return;
 
  const row = byKey.get(key) || {
  name: this.resolveDisplayName(participant && participant.name, entry.userName) || 'Unknown',
@@ -5787,6 +5901,10 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  row.steps = steps;
  row.bestEntryId = entry.id;
  }
+ } else if (goalMet && !this.hasTimingEvidence(entry)) {
+ // Finished the KM goal but device did not store a duration — still count as a finisher
+ row.completed = true;
+ row.bestEntryId = row.bestEntryId || entry.id;
  }
  byKey.set(key, row);
  });
@@ -5909,6 +6027,13 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  if (dayMatch) {
  const dayNum = parseInt(dayMatch[1], 10);
+ // Bring Team Feed finishers into stepEntries before ranking (fixes feed≠board gap)
+ try {
+ await this.hydrateDayBoardEntriesFromFeed(dayNum);
+ } catch (hydrateErr) {
+ console.warn('Day board feed hydrate skipped:', hydrateErr);
+ }
+ this.stepEntries = this.filterCurrentSeasonEntries(this.stepEntries || []);
  sorted = this.getDayLeaderboardRows(dayNum);
  // Heal pending legal finishers so totals/feed stay in sync with the day board
  this.healPendingDayBoardEntries(dayNum).catch(() => {});
@@ -5921,7 +6046,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const item = document.createElement('div');
  item.className = 'leaderboard-item' + (participant.completed && index === 0 ? ' is-day-winner' : '');
  const status = participant.completed
+ ? (participant.durationSec != null
  ? `Finished - ${this.formatDurationClock(participant.durationSec)}`
+ : `Finished - ${participant.distanceKm.toFixed(2)} KM`)
  : `${participant.distanceKm.toFixed(2)} KM - in progress`;
  const detail = participant.completed
  ? `${participant.goalKm} KM goal`

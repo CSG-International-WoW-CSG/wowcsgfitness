@@ -103,9 +103,10 @@ service cloud.firestore {
         || (isCorporateEmail() && resource.data.userUid == request.auth.uid);
     }
 
-    // Team activity feed (optional photo posts after saving an activity)
+    // Team activity feed — public READ so day boards can hydrate finishers;
+    // writes remain corporate-auth gated
     match /activityFeed/{postId} {
-      allow read: if isCorporateEmail();
+      allow read: if true;
 
       allow create: if isCorporateEmail()
         && request.resource.data.userUid == request.auth.uid
