@@ -45,6 +45,9 @@ class StepathonApp {
         this.isMigratingUsers = false;
         // Entry ids waiting for cloud confirm — never drop these on Firebase sync
         this._pendingEntryIds = new Set();
+        this._lastParticipantsSyncAt = 0;
+        this._lastStepEntriesSyncAt = 0;
+        this._feedHydrateCache = {};
         this.initFirebase();
         this.participants = this.loadParticipants();
         
@@ -150,7 +153,11 @@ class StepathonApp {
                         iosLoadBtn.addEventListener('click', () => {
                             iosLoadBtn.disabled = true;
                             iosLoadBtn.textContent = 'Loading…';
-                            this.ensureFirestore().then(() => this.syncParticipantsFromFirebase({ skipEntries: false }))
+                            this.ensureFirestore()
+                                .then(() => this.syncParticipantsFromFirebase({
+                                    skipEntries: false,
+                                    force: true
+                                }))
                                 .then(() => {
                                     this.ensurePublicLeaderboardReady();
                                     iosLoadBtn.textContent = 'Rankings loaded';
@@ -1214,9 +1221,9 @@ class StepathonApp {
  const filter = button.dataset.filter;
  document.querySelectorAll('.filter-btn, .day-filter-btn').forEach(b => b.classList.remove('active'));
  button.classList.add('active');
- // Day boards need fresh approve/reject status; throttle still applies unless forced
- const forceSync = String(filter || '').startsWith('day-');
- this.updateLeaderboard(filter, { forceSync });
+ // Do NOT forceSync on every day-tab click — that re-downloaded ALL
+ // participants + stepEntries (hundreds of reads) and blew Spark quota.
+ this.updateLeaderboard(filter, { forceSync: false });
             });
         });
     }
@@ -5527,9 +5534,17 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  /**
  * Pull Team Feed posts into stepEntries for a challenge day so feed finishers
  * are never missing from that day's leaderboard.
+ * Cached per day for 10 minutes to avoid re-reading 80 feed docs on every tab click.
  */
  async hydrateDayBoardEntriesFromFeed(dayNum) {
  if (!this.firebaseEnabled || !this.db) return 0;
+ if (!this._feedHydrateCache) this._feedHydrateCache = {};
+ const cacheTtlMs = 10 * 60 * 1000;
+ const cached = this._feedHydrateCache[dayNum];
+ if (cached && (Date.now() - cached.at) < cacheTtlMs) {
+ return cached.addedOrPatched || 0;
+ }
+
  const goalKm = this.challengeConfig.dayGoalsKm[dayNum - 1] || dayNum;
  let addedOrPatched = 0;
  try {
@@ -5539,12 +5554,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  .where('season', '==', this.dataSeason)
  .where('visible', '==', true)
  .orderBy('date', 'desc')
- .limit(80)
+ .limit(40)
  .get();
  } catch (idxErr) {
  snap = await this.activityFeedCol()
  .where('season', '==', this.dataSeason)
- .limit(120)
+ .limit(60)
  .get();
  }
  if (!Array.isArray(this.stepEntries)) this.stepEntries = [];
@@ -5624,6 +5639,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  } catch (err) {
  console.warn('hydrateDayBoardEntriesFromFeed failed:', err);
  }
+ this._feedHydrateCache[dayNum] = { at: Date.now(), addedOrPatched };
  return addedOrPatched;
  }
 
@@ -6007,13 +6023,18 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  const skipRemoteSync = !!(options && options.skipRemoteSync);
  const forceSync = !!(options && options.forceSync);
- const syncStaleMs = 45000;
+ // Was 45s — too aggressive. Full collection dumps × many visitors = Spark 50k/day burn.
+ const syncStaleMs = 10 * 60 * 1000; // 10 minutes
  const syncIsStale = !this._lastStepEntriesSyncAt || (Date.now() - this._lastStepEntriesSyncAt) > syncStaleMs;
 
  // Refresh from Firebase when needed — but never thrash on every paint (iOS Safari OOM)
  if (this.firebaseEnabled && !skipRemoteSync && (forceSync || syncIsStale)) {
  // Skip nested leaderboard refresh; this call will render with the correct filter
- await this.syncParticipantsFromFirebase({ skipEntries: false, skipLeaderboardRefresh: true });
+ await this.syncParticipantsFromFirebase({
+ skipEntries: false,
+ skipLeaderboardRefresh: true,
+ force: forceSync
+ });
  } else if (!Array.isArray(this.stepEntries) || this.stepEntries.length === 0) {
  this.stepEntries = this.loadStepEntries();
  }
@@ -6027,7 +6048,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  if (dayMatch) {
  const dayNum = parseInt(dayMatch[1], 10);
- // Bring Team Feed finishers into stepEntries before ranking (fixes feed≠board gap)
+ // Hydrate from feed at most once per day-tab per 10 minutes (was every click)
  try {
  await this.hydrateDayBoardEntriesFromFeed(dayNum);
  } catch (hydrateErr) {
@@ -6470,28 +6491,67 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         if (!this.firebaseEnabled || !this.db) {
             return;
         }
-        try {
- const snapshot = await this.participantsCol().get();
- this.participants = this.filterCurrentSeasonParticipants(
- snapshot.docs.map((doc) => this.stripSecretsFromParticipant(doc.data()))
- );
- this.saveParticipantsCache();
- if (!options.skipEntries) {
- // Always refresh entries first — local cache can still say "approved" after admin reject
- await this.syncStepEntriesFromFirebase();
- this.recalculateAllParticipantTotalsFromApproved();
- }
+        const force = !!(options && options.force);
+        const minIntervalMs = 10 * 60 * 1000; // align with leaderboard stale window
+        if (
+            !force &&
+            this._lastParticipantsSyncAt &&
+            (Date.now() - this._lastParticipantsSyncAt) < minIntervalMs &&
+            Array.isArray(this.participants) &&
+            this.participants.length > 0
+        ) {
+            // Recent enough — optionally refresh entries only if needed
+            if (!options.skipEntries) {
+                await this.syncStepEntriesFromFirebase({ force: false });
+                this.recalculateAllParticipantTotalsFromApproved();
+            }
             if (!options.skipLeaderboardRefresh && !window.location.pathname.includes('admin.html')) {
                 await this.updateLeaderboard(this._leaderboardRenderFilter || null, { skipRemoteSync: true });
             }
-        } catch (error) {
-            console.warn('Failed to sync participants from Firebase:', error);
+            return;
         }
+        if (this._participantsSyncInFlight) {
+            return this._participantsSyncInFlight;
+        }
+        this._participantsSyncInFlight = (async () => {
+            try {
+                const snapshot = await this.participantsCol().get();
+                this.participants = this.filterCurrentSeasonParticipants(
+                    snapshot.docs.map((doc) => this.stripSecretsFromParticipant(doc.data()))
+                );
+                this.saveParticipantsCache();
+                this._lastParticipantsSyncAt = Date.now();
+                if (!options.skipEntries) {
+                    // Always refresh entries first — local cache can still say "approved" after admin reject
+                    await this.syncStepEntriesFromFirebase({ force });
+                    this.recalculateAllParticipantTotalsFromApproved();
+                }
+                if (!options.skipLeaderboardRefresh && !window.location.pathname.includes('admin.html')) {
+                    await this.updateLeaderboard(this._leaderboardRenderFilter || null, { skipRemoteSync: true });
+                }
+            } catch (error) {
+                console.warn('Failed to sync participants from Firebase:', error);
+            } finally {
+                this._participantsSyncInFlight = null;
+            }
+        })();
+        return this._participantsSyncInFlight;
     }
 
-    async syncStepEntriesFromFirebase() {
+    async syncStepEntriesFromFirebase(options = {}) {
         await this.ensureFirestore();
         if (!this.firebaseEnabled || !this.db) {
+            return;
+        }
+        const force = !!(options && options.force);
+        const minIntervalMs = 10 * 60 * 1000;
+        if (
+            !force &&
+            this._lastStepEntriesSyncAt &&
+            (Date.now() - this._lastStepEntriesSyncAt) < minIntervalMs &&
+            Array.isArray(this.stepEntries) &&
+            this.stepEntries.length > 0
+        ) {
             return;
         }
         if (this._leaderboardSyncInFlight) {
@@ -9733,22 +9793,29 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 if (entry.date) post.date = entry.date;
             }
 
-            // 2) Fallback / supplement: recent approved activities so the feed is never empty
-            //    when people have saved workouts but feed posts failed earlier.
-            try {
+            // 2) Fallback / supplement: only if feed is nearly empty.
+            // Was always querying another 40–80 stepEntries docs on every Refresh feed.
+            if (byEntry.size >= 8) {
+                // Feed already populated — skip expensive stepEntries query
+            } else try {
                 let entrySnap;
                 try {
                     entrySnap = await this.stepEntriesCol()
                         .where('season', '==', this.dataSeason)
                         .where('status', '==', 'approved')
                         .orderBy('date', 'desc')
-                        .limit(40)
+                        .limit(20)
                         .get();
                 } catch (idx2) {
-                    entrySnap = await this.stepEntriesCol()
-                        .where('season', '==', this.dataSeason)
-                        .limit(80)
-                        .get();
+                    // Avoid unfiltered dump — use in-memory entries instead
+                    entrySnap = { docs: [] };
+                    (this.stepEntries || [])
+                        .filter((e) => e && (e.status || '') === 'approved')
+                        .sort((a, b) => this.entryTimestampMs(b) - this.entryTimestampMs(a))
+                        .slice(0, 20)
+                        .forEach((e) => {
+                            entrySnap.docs.push({ data: () => e, id: e.id });
+                        });
                 }
                 entrySnap.docs.forEach((d) => {
                     const e = d.data();
