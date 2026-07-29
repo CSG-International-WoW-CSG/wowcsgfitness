@@ -7830,7 +7830,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  path: (this.stepCounter.path || []).map((p) => ({ lat: p.lat, lng: p.lng, t: p.t })),
  timeToGoalSec: this.stepCounter.timeToGoalSec,
  trackingMode: this.stepCounter.trackingMode || 'outdoor',
- treadmillSpeedKmh: this.stepCounter.treadmillSpeedKmh || null
+ treadmillSpeedKmh: this.stepCounter.treadmillSpeedKmh || null,
+ startTime: this.stepCounter.startTime || null
  };
 
  this.applyPausedActivityUi();
@@ -9029,7 +9030,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  treadmillSpeedKmh: mode === 'treadmill'
  ? ((frozen && frozen.treadmillSpeedKmh) || this.stepCounter.treadmillSpeedKmh || null)
  : null,
- path
+ path,
+ startedAt: (frozen && frozen.startTime) || this.stepCounter.startTime || Date.now()
  });
  // Enrich share summary with goal timing when available
  const summary = document.getElementById('shareActivitySummary');
@@ -9039,7 +9041,6 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  async saveStepsWithScreenshot(steps, screenshotData, fromStepCounter = false, trackMeta = null, shareOptions = null) {
-        const today = new Date().toDateString();
         // Do not bump totals here — leaderboard uses approved entries only.
         // Totals are rebuilt from approved entries after this entry is stored.
         this.currentUser.lastActivity = new Date().toISOString();
@@ -9058,10 +9059,18 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  // Per-day completion stats for daily leaderboards (shortest time wins)
  if (!this.currentUser.dailyStats) this.currentUser.dailyStats = {};
- const dayNum = this.getChallengeDayNumber();
+ // Use activity start time so a save after midnight still counts on the day you walked
+ const activityStartedAt = (trackMeta && trackMeta.startedAt)
+  || (trackMeta && trackMeta.startTime)
+  || this.stepCounter.startTime
+  || ((this.stepCounter.frozenForSave && this.stepCounter.frozenForSave.startTime) || null)
+  || Date.now();
+ const activityDate = this.parseEntryDate(activityStartedAt);
+ const dayNum = this.getChallengeDayNumber(activityDate);
  const goalKmForDay = dayNum >= 1 && dayNum <= 7
  ? this.challengeConfig.dayGoalsKm[dayNum - 1]
- : this.getDailyGoalKm();
+ : this.getDailyGoalKm(activityDate);
+ const today = activityDate.toDateString();
  const prevDay = this.currentUser.dailyStats[today] || {
  distanceKm: 0,
  durationSec: 0,
@@ -9132,8 +9141,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             path: this.sanitizePathForCloud(trackMeta && Array.isArray(trackMeta.path) ? trackMeta.path : []),
             durationSec,
             timeToGoalSec: trackMeta && trackMeta.timeToGoalSec != null ? Number(trackMeta.timeToGoalSec) : null,
-            date: new Date().toISOString(),
-            challengeDay: dayNum || this.getChallengeDayNumber() || null,
+            date: activityDate.toISOString(),
+            challengeDay: dayNum || null,
             status: autoOk ? 'approved' : (paceIllegal ? 'rejected' : 'pending'),
             validatedBy: paceIllegal ? 'App pace check' : (fromStepCounter ? 'App GPS Counter' : null),
             validatedAt: (autoOk || paceIllegal) ? new Date().toISOString() : null,
@@ -9400,7 +9409,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 caloriesBurned: pending.caloriesBurned,
                 bodyWeightKg: pending.bodyWeightKg,
                 trackingMode: pending.trackingMode,
-                treadmillSpeedKmh: pending.treadmillSpeedKmh
+                treadmillSpeedKmh: pending.treadmillSpeedKmh,
+                startedAt: pending.startedAt || null
             }, shareOptions);
         } finally {
             if (confirmBtn) {

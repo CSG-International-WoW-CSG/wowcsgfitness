@@ -67,17 +67,19 @@ service cloud.firestore {
     match /stepEntries/{entryId} {
       allow read: if true;
 
-      allow create: if isCorporateEmail()
-        && request.resource.data.userUid == request.auth.uid
-        && request.resource.data.keys().hasAll(['id', 'userUid', 'season', 'status', 'source'])
-        && request.resource.data.status in ['pending', 'approved', 'rejected']
-        && request.resource.data.source in [
-          'gps-counter', 'treadmill-counter', 'manual', 'native'
-        ]
-        // Ban secret fields only when actually present with a value
-        && !('password' in request.resource.data)
-        && !('passwordHash' in request.resource.data)
-        && (!('screenshot' in request.resource.data) || request.resource.data.screenshot == null);
+      allow create: if isAdmin()
+        || (
+          isCorporateEmail()
+          && request.resource.data.userUid == request.auth.uid
+          && request.resource.data.keys().hasAll(['id', 'userUid', 'season', 'status', 'source'])
+          && request.resource.data.status in ['pending', 'approved', 'rejected']
+          && request.resource.data.source in [
+            'gps-counter', 'treadmill-counter', 'manual', 'native'
+          ]
+          && !('password' in request.resource.data)
+          && !('passwordHash' in request.resource.data)
+          && (!('screenshot' in request.resource.data) || request.resource.data.screenshot == null)
+        );
 
       // Owners may update their own stats; status changes remain admin-only
       // except pending→approved self-heal for legal finishes (validatedBy Day board auto-heal).
@@ -108,17 +110,19 @@ service cloud.firestore {
     match /activityFeed/{postId} {
       allow read: if true;
 
-      allow create: if isCorporateEmail()
-        && request.resource.data.userUid == request.auth.uid
-        && request.resource.data.keys().hasAll([
-          'id', 'userUid', 'userName', 'season', 'date', 'visible', 'entryId'
-        ])
-        && request.resource.data.season is string
-        && request.resource.data.visible == true
-        && !('password' in request.resource.data)
-        && !('screenshot' in request.resource.data)
-        && !('photoBase64' in request.resource.data);
-        // photoUrl (Storage) and/or photoDataUrl (compressed JPEG data URL) are allowed
+      allow create: if isAdmin()
+        || (
+          isCorporateEmail()
+          && request.resource.data.userUid == request.auth.uid
+          && request.resource.data.keys().hasAll([
+            'id', 'userUid', 'userName', 'season', 'date', 'visible', 'entryId'
+          ])
+          && request.resource.data.season is string
+          && request.resource.data.visible == true
+          && !('password' in request.resource.data)
+          && !('screenshot' in request.resource.data)
+          && !('photoBase64' in request.resource.data)
+        );
 
       allow update: if isAdmin()
         || (
