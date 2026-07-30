@@ -3737,9 +3737,10 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                     force: true,
                     skipLeaderboardRefresh: true
                 });
-                // Merge Team Feed posts missing from stepEntries (feed≠admin gap)
+ // Merge Team Feed posts missing from stepEntries (feed≠admin gap) and
+                // persist restored rows so profile details stop showing empty after a wipe.
                 try {
-                    await this.hydrateAdminEntriesFromFeed();
+                    await this.hydrateAdminEntriesFromFeed({ persist: true });
                 } catch (feedHydrateErr) {
                     console.warn('Admin feed hydrate skipped:', feedHydrateErr);
                 }
@@ -4708,17 +4709,19 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  const confirmed = confirm(
  'Clear ALL challenge user data for this season?\n\n' +
- 'This removes participants and step entries from the app/local cache.\n' +
+ 'This removes participants, step entries, AND Team Feed posts from Firebase/local cache.\n' +
+ 'Activities teammates can see on the feed will also be removed.\n' +
  'This cannot be undone.'
  );
  if (!confirmed) return;
 
- const confirmedAgain = confirm('Final confirmation: delete all current-season user data now?');
+ const confirmedAgain = confirm('Final confirmation: delete all current-season user data + Team Feed now?');
  if (!confirmedAgain) return;
 
  try {
  let deletedParticipants = 0;
  let deletedEntries = 0;
+ let deletedFeed = 0;
 
  if (this.firebaseEnabled && this.db) {
  await this.syncParticipantsFromFirebase();
@@ -4742,6 +4745,20 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  } catch (err) {
  console.warn('Could not delete step entry', docSnap.id, err);
  }
+ }
+
+ try {
+ const feedSnap = await this.activityFeedCol().get();
+ for (const docSnap of feedSnap.docs) {
+ try {
+ await docSnap.ref.delete();
+ deletedFeed += 1;
+ } catch (err) {
+ console.warn('Could not delete feed post', docSnap.id, err);
+ }
+ }
+ } catch (feedErr) {
+ console.warn('Could not wipe activityFeed:', feedErr);
  }
  }
 
@@ -4771,7 +4788,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  `Challenge user data cleared.\n\n` +
  `Season collections wiped where permitted:\n` +
  `- Participants deleted: ${deletedParticipants}\n` +
- `- Step entries deleted: ${deletedEntries}\n\n` +
+ `- Step entries deleted: ${deletedEntries}\n` +
+ `- Team Feed posts deleted: ${deletedFeed}\n\n` +
  `Note: Firebase Auth login accounts (email/password) are separate.\n` +
  `If someone needs a fully new Auth account, delete users in Firebase Console → Authentication.`
  );
@@ -5095,23 +5113,26 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
     }
 
     /**
-     * Ensure admin Validations sees everything the public feed/leaderboard shows.
-     * Some activities were feed-only (cloud stepEntry write failed earlier).
+     * Ensure admin / day boards see everything the public Team Feed shows.
+     * After a season wipe or failed stepEntry write, feed posts can remain while
+     * stepEntries are gone — restore them, relink orphaned uids, and (as admin)
+     * write durable stepEntries back to Firestore.
      */
-    async hydrateAdminEntriesFromFeed() {
+    async hydrateAdminEntriesFromFeed(options = {}) {
         if (!this.firebaseEnabled || !this.db) return 0;
+        const persist = options.persist !== false && !!this.isAdmin;
         let snap;
         try {
             snap = await this.activityFeedCol()
                 .where('season', '==', this.dataSeason)
                 .where('visible', '==', true)
                 .orderBy('date', 'desc')
-                .limit(100)
+                .limit(250)
                 .get();
         } catch (idxErr) {
             snap = await this.activityFeedCol()
                 .where('season', '==', this.dataSeason)
-                .limit(120)
+                .limit(300)
                 .get();
         }
         if (!Array.isArray(this.stepEntries)) this.stepEntries = [];
@@ -5119,6 +5140,42 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             (this.stepEntries || []).filter((e) => e && e.id).map((e) => [String(e.id), e])
         );
         let added = 0;
+        let relinked = 0;
+        const toPersist = [];
+
+        const attachOwner = (entry, feedPost) => {
+            if (!entry) return false;
+            let changed = false;
+            const owner = this.findParticipantForEntry(entry) ||
+                (feedPost && this.findParticipantForEntry({
+                    ...entry,
+                    userName: feedPost.userName || entry.userName,
+                    userEmail: feedPost.userEmail || entry.userEmail
+                }));
+            if (!owner) return false;
+            const nextUid = owner.uid || entry.userUid || null;
+            const nextId = owner.employeeId || owner.id || entry.userId || null;
+            const nextEmail = owner.email || owner.emailId || owner.emailLower || entry.userEmail || null;
+            const nextName = owner.name || entry.userName || null;
+            if (nextUid && String(entry.userUid || '') !== String(nextUid)) {
+                entry.userUid = nextUid;
+                changed = true;
+            }
+            if (nextId && String(entry.userId || '') !== String(nextId)) {
+                entry.userId = nextId;
+                changed = true;
+            }
+            if (nextEmail && String(entry.userEmail || '').toLowerCase() !== String(nextEmail).toLowerCase()) {
+                entry.userEmail = nextEmail;
+                changed = true;
+            }
+            if (nextName && entry.userName !== nextName) {
+                entry.userName = nextName;
+                changed = true;
+            }
+            return changed;
+        };
+
         snap.docs.forEach((doc) => {
             const p = doc.data();
             if (!p || p.visible === false) return;
@@ -5132,6 +5189,19 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 }
                 if (!(Number(existing.distanceKm) > 0) && Number(p.distanceKm) > 0) {
                     existing.distanceKm = Number(p.distanceKm);
+                }
+                if (!(Number(existing.steps) > 0) && Number(p.steps) > 0) {
+                    existing.steps = Number(p.steps);
+                }
+                if (!existing.userEmail && p.userEmail) existing.userEmail = p.userEmail;
+                if (!existing.userName && p.userName) existing.userName = p.userName;
+                if (String(existing.status || '').toLowerCase() === 'pending') {
+                    existing.status = 'approved';
+                    existing.validatedBy = existing.validatedBy || 'Feed hydrate';
+                }
+                if (attachOwner(existing, p)) {
+                    relinked += 1;
+                    toPersist.push(existing);
                 }
                 return;
             }
@@ -5150,18 +5220,73 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 status: 'approved',
                 validatedBy: 'Admin feed hydrate',
                 validatedAt: new Date().toISOString(),
-                notes: 'Visible on Team Feed / leaderboard; restored into admin list (stepEntry was missing).',
+                notes: 'Visible on Team Feed / leaderboard; restored into stepEntries (cloud entry was missing).',
                 source: p.source || 'gps-counter',
                 trackingMode: p.trackingMode || null,
                 season: this.dataSeason,
                 _fromFeed: true
             };
+            attachOwner(synthesized, p);
             this.stepEntries.unshift(synthesized);
             byId.set(entryId, synthesized);
             added += 1;
+            toPersist.push(synthesized);
         });
-        if (added) this.saveStepEntries();
-        return added;
+
+        // Also relink any in-memory orphans not present on this feed page
+        (this.stepEntries || []).forEach((entry) => {
+            if (!entry || !entry.id) return;
+            if (!this.isCurrentSeasonEntry(entry)) return;
+            if (attachOwner(entry, null)) {
+                relinked += 1;
+                if (!toPersist.some((e) => String(e.id) === String(entry.id))) {
+                    toPersist.push(entry);
+                }
+            }
+        });
+
+        if (added || relinked) this.saveStepEntries();
+
+        if (persist && toPersist.length) {
+            let written = 0;
+            for (const entry of toPersist) {
+                try {
+                    const ok = await this.upsertStepEntryInFirebase(entry);
+                    if (ok) written += 1;
+                } catch (e) {
+                    console.warn('Failed to persist restored feed entry', entry && entry.id, e);
+                }
+            }
+            console.log('Feed restore persisted', written, 'of', toPersist.length, 'stepEntries');
+        }
+
+        if (added || relinked) {
+            this.recalculateAllParticipantTotalsFromApproved();
+        }
+        return added + relinked;
+    }
+
+    /** Admin one-click: rebuild missing stepEntries from Team Feed and rewrite ownership. */
+    async restoreAllActivitiesFromTeamFeed() {
+        if (!this.requireAdmin()) return;
+        if (!this.firebaseEnabled || !this.db) {
+            alert('Firebase is required for feed restore.');
+            return;
+        }
+        try {
+            await this.syncStepEntriesFromFirebase({ force: true });
+            const n = await this.hydrateAdminEntriesFromFeed({ persist: true });
+            await this.updateAdminDashboard({ skipRemoteSync: true });
+            alert(
+                (n > 0
+                    ? `Restored / relinked ${n} activities from Team Feed into stepEntries.\n\n`
+                    : 'No missing feed activities found to restore (or feed could not be read).\n\n') +
+                'Open the user again — activities that teammates could see on the feed should now appear under their profile.'
+            );
+        } catch (err) {
+            console.error(err);
+            alert('Feed restore failed: ' + (err && err.message ? err.message : err));
+        }
     }
 
     createEntryHTML(entry) {
@@ -5885,12 +6010,44 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const eEmail = String(entry.userEmail || entry.email || '').toLowerCase().trim();
  if (pEmail && eEmail && pEmail === eEmail) return true;
 
- // Soft name match only when entry has no usable email/id (orphaned feed rows)
- const hasEntryIdentity = !!(eEmail || entryIds.length);
- if (hasEntryIdentity) return false;
- const pName = this.normalizePersonName(participant.name || participant.username || '');
- const eName = this.normalizePersonName(entry.userName || entry.name || '');
- return !!(pName && eName && (pName === eName || pName.includes(eName) || eName.includes(pName)));
+ // Team Feed / wiped stepEntries often keep a STALE userUid (old account or admin).
+ // Still attach by distinctive name when that uid is not owned by another real user.
+ if (eEmail && pEmail && eEmail !== pEmail) return false;
+ if (!this.namesStronglyMatch(
+ participant.name || participant.username || '',
+ entry.userName || entry.name || ''
+ )) return false;
+ return this.isEntryIdentityOrphaned(entry);
+ }
+
+ /** True when entry uid is missing, unknown, or parked on the admin account. */
+ isEntryIdentityOrphaned(entry) {
+ if (!entry) return true;
+ const uid = entry.userUid != null && entry.userUid !== '' ? String(entry.userUid) : '';
+ if (!uid) return true;
+ const owner = (this.participants || []).find((p) => p && p.uid && String(p.uid) === uid);
+ if (!owner) return true;
+ const adminEmails = (this.securityCfg().adminEmails || []).map((e) => String(e).toLowerCase());
+ const ownerEmail = String(owner.email || owner.emailId || owner.emailLower || '').toLowerCase();
+ if (ownerEmail && adminEmails.includes(ownerEmail)) return true;
+ return false;
+ }
+
+ namesStronglyMatch(a, b) {
+ const na = this.normalizePersonName(a);
+ const nb = this.normalizePersonName(b);
+ if (!na || !nb) return false;
+ if (na === nb) return true;
+ // Require a long distinctive overlap (avoids matching short common first names)
+ if (na.length >= 10 && nb.length >= 10 && (na.includes(nb) || nb.includes(na))) return true;
+ const ta = na.split(' ').filter(Boolean);
+ const tb = nb.split(' ').filter(Boolean);
+ if (ta.length >= 2 && tb.length >= 2) {
+ const setB = new Set(tb);
+ const shared = ta.filter((t) => t.length >= 4 && setB.has(t));
+ if (shared.length >= 2) return true;
+ }
+ return false;
  }
 
  normalizePersonName(value) {
@@ -6010,12 +6167,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  .where('season', '==', this.dataSeason)
  .where('visible', '==', true)
  .orderBy('date', 'desc')
- .limit(40)
+ .limit(120)
  .get();
  } catch (idxErr) {
  snap = await this.activityFeedCol()
  .where('season', '==', this.dataSeason)
- .limit(60)
+ .limit(150)
  .get();
  }
  if (!Array.isArray(this.stepEntries)) this.stepEntries = [];
