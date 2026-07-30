@@ -3977,7 +3977,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         // Reload participants to ensure we have the latest data
         this.participants = this.loadParticipants();
         if (this.firebaseEnabled) {
-            await this.syncStepEntriesFromFirebase();
+            await this.syncStepEntriesFromFirebase({ force: true });
+            try {
+                await this.hydrateAdminEntriesFromFeed();
+            } catch (e) {
+                console.warn('Admin user-details feed hydrate skipped:', e);
+            }
         } else {
             this.stepEntries = this.loadStepEntries();
         }
@@ -3985,6 +3990,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         if (!Array.isArray(this.stepEntries)) {
             this.stepEntries = this.loadStepEntries();
         }
+        this.stepEntries = this.filterCurrentSeasonEntries(this.stepEntries || []);
         
         // Handle user_ prefix from index-based IDs
         let searchId = userId;
@@ -3996,12 +4002,17 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             }
         }
         
+        const searchLower = String(searchId || '').toLowerCase().trim();
         const user = this.participants.find(p => 
             (p.id && p.id === searchId) || 
             (p.employeeId && p.employeeId === searchId) ||
             (p.id && String(p.id) === String(searchId)) ||
             (p.employeeId && String(p.employeeId) === String(searchId)) ||
-            (p.uid && String(p.uid) === String(searchId))
+            (p.uid && String(p.uid) === String(searchId)) ||
+            (p.username && String(p.username).toLowerCase() === searchLower) ||
+            (p.email && String(p.email).toLowerCase() === searchLower) ||
+            (p.emailId && String(p.emailId).toLowerCase() === searchLower) ||
+            (p.emailLower && String(p.emailLower).toLowerCase() === searchLower)
         );
         
         if (!user) {
@@ -4011,6 +4022,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         }
 
         const actualUserId = user.id || user.employeeId || searchId;
+        // Relink orphaned feed/admin-rewritten rows back onto this participant
+        try {
+            await this.healOrphanedEntriesForParticipant(user);
+        } catch (healErr) {
+            console.warn('healOrphanedEntriesForParticipant skipped:', healErr);
+        }
         let userActivities = (this.stepEntries || []).filter((entry) =>
             this.entryBelongsToParticipant(entry, user)
         ).sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -4026,8 +4043,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         
         if (!modal || !content) return;
 
-        // Leaderboard-aligned totals (approved only)
+        // Leaderboard-aligned totals (approved only) — also repairs stale lastActivity
         this.recalculateParticipantTotalsFromApproved(user);
+        this.saveParticipantsCache();
+        if (this.firebaseEnabled && user.uid) {
+            try { await this.syncParticipantToFirebase(user); } catch (e) { /* non-fatal */ }
+        }
         const totalSteps = user.totalSteps || 0;
         const dailySteps = user.dailySteps || {};
         const dailyStepsCount = Object.keys(dailySteps).length;
@@ -4257,12 +4278,20 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 </div>
             `;
         } else {
+            const safeRecoverId = this.escapeHtml(String(actualUserId || ''));
             activitiesHtml = `
                 <div class="user-activities-section">
                     <h3>Activity Details</h3>
-                    <div style="padding: 30px; text-align: center; background: #f8f9fa; border-radius: 8px; margin-top: 15px;">
-                        <p style="font-size: 1.1rem; color: #666; margin: 0;">No activities recorded yet.</p>
-                        <p style="font-size: 0.9rem; color: #999; margin-top: 8px;">This user hasn't submitted any step entries.</p>
+                    <div style="padding: 24px; text-align: center; background: #fff8e1; border-radius: 8px; margin-top: 15px; border: 1px solid #ffe082;">
+                        <p style="font-size: 1.05rem; color: #6d4c41; margin: 0;">No step entries found in the cloud for this user.</p>
+                        <p style="font-size: 0.9rem; color: #8d6e63; margin-top: 8px;">
+                            This usually means the walk stayed on their phone (failed sync) or ownership was broken.
+                            Use Recover to recreate the approved activity from their screenshot / Recent Activity.
+                        </p>
+                        <button type="button" class="btn btn-small" style="margin-top: 14px;"
+                            onclick="app.adminRecoverUserActivity('${safeRecoverId}')">
+                            Recover missing activity
+                        </button>
                     </div>
                 </div>
             `;
@@ -4789,6 +4818,169 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         if (modal) {
             modal.style.display = 'none';
         }
+    }
+
+    /**
+     * Relink stepEntries that match this person by name/email but lost ownership
+     * (e.g. admin upsert rewrote userUid onto the admin account).
+     */
+    async healOrphanedEntriesForParticipant(participant) {
+        if (!participant || !Array.isArray(this.stepEntries)) return 0;
+        const pEmail = String(participant.email || participant.emailId || participant.emailLower || '')
+            .toLowerCase()
+            .trim();
+        const pName = this.normalizePersonName(participant.name || participant.username || '');
+        const ownerUid = participant.uid || null;
+        const ownerId = participant.employeeId || participant.id || null;
+        let healed = 0;
+
+        for (const entry of this.stepEntries) {
+            if (!entry || !this.isCurrentSeasonEntry(entry)) continue;
+            if (this.entryBelongsToParticipant(entry, participant)) continue;
+
+            const eEmail = String(entry.userEmail || entry.email || '').toLowerCase().trim();
+            const eName = this.normalizePersonName(entry.userName || entry.name || '');
+            const emailMatch = !!(pEmail && eEmail && pEmail === eEmail);
+            const nameMatch = !!(pName && eName && (pName === eName || pName.includes(eName) || eName.includes(pName)));
+            if (!emailMatch && !nameMatch) continue;
+
+            // Avoid stealing clearly-owned rows from another participant
+            if (entry.userUid && ownerUid && String(entry.userUid) !== String(ownerUid)) {
+                const other = (this.participants || []).find(
+                    (p) => p && p.uid && String(p.uid) === String(entry.userUid)
+                );
+                if (other && other !== participant) {
+                    const otherEmail = String(other.email || other.emailId || '').toLowerCase().trim();
+                    if (otherEmail && pEmail && otherEmail !== pEmail) continue;
+                }
+            }
+
+            if (ownerUid) entry.userUid = ownerUid;
+            if (ownerId) entry.userId = ownerId;
+            if (pEmail) entry.userEmail = pEmail;
+            if (participant.name) entry.userName = participant.name;
+            healed += 1;
+            if (this.firebaseEnabled && this.isAdmin) {
+                try {
+                    await this.upsertStepEntryInFirebase(entry);
+                } catch (e) {
+                    console.warn('Failed to persist healed entry', entry.id, e);
+                }
+            }
+        }
+        if (healed) this.saveStepEntries();
+        return healed;
+    }
+
+    /**
+     * Admin: recreate a missing approved activity when Last Activity is set but
+     * stepEntries/feed rows never made it to the cloud (device-only save).
+     */
+    async adminRecoverUserActivity(userId) {
+        if (!this.requireAdmin()) return;
+        this.participants = this.loadParticipants();
+        const searchId = String(userId || '');
+        const user = (this.participants || []).find((p) =>
+            (p.id && String(p.id) === searchId) ||
+            (p.employeeId && String(p.employeeId) === searchId) ||
+            (p.uid && String(p.uid) === searchId) ||
+            (p.email && String(p.email).toLowerCase() === searchId.toLowerCase()) ||
+            (p.username && String(p.username).toLowerCase() === searchId.toLowerCase())
+        );
+        if (!user) {
+            alert('User not found.');
+            return;
+        }
+
+        const distStr = prompt('Distance KM from their Recent Activity (e.g. 5.15):', '5.15');
+        if (distStr == null) return;
+        const distanceKm = Number(distStr);
+        if (!(distanceKm > 0)) {
+            alert('Enter a valid distance in KM.');
+            return;
+        }
+
+        const stepsStr = prompt('Steps (optional — leave blank to estimate):', String(Math.round(distanceKm * (this.challengeConfig.stepsPerKm || 1300))));
+        if (stepsStr == null) return;
+        const steps = Math.max(0, Math.round(Number(stepsStr) || (distanceKm * (this.challengeConfig.stepsPerKm || 1300))));
+
+        const durStr = prompt('Duration as M:SS or total seconds (e.g. 26:30 or 1590):', '26:30');
+        if (durStr == null) return;
+        let durationSec = 0;
+        const clock = String(durStr).trim().match(/^(\d+)\s*:\s*(\d{1,2})$/);
+        if (clock) durationSec = (Number(clock[1]) * 60) + Number(clock[2]);
+        else durationSec = Math.round(Number(durStr) || 0);
+        if (!(durationSec > 0)) {
+            alert('Enter a valid duration.');
+            return;
+        }
+
+        const dayHint = this.getChallengeDayNumber(new Date()) || 5;
+        const dayStr = prompt('Challenge day number (1–7):', String(dayHint));
+        if (dayStr == null) return;
+        const day = Math.max(1, Math.min(7, Math.round(Number(dayStr) || dayHint)));
+        const dayOffset = day - 1;
+        const dateIso = new Date(Date.parse('2026-07-26T18:30:00+05:30') + dayOffset * 86400000).toISOString();
+        const calories = this.estimateCaloriesBurned(distanceKm, durationSec, 70);
+        const goalKm = this.challengeConfig.dayGoalsKm[day - 1] || day;
+        const finishSec = Math.max(1, Math.round(durationSec * (goalKm / Math.max(distanceKm, goalKm))));
+
+        const entryId = `ENTRY_RECOVER_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const entry = {
+            id: entryId,
+            userId: user.employeeId || user.id || 'unknown',
+            userUid: user.uid || null,
+            userName: user.name || user.username || 'Participant',
+            userEmail: user.email || user.emailId || user.emailLower || '',
+            steps,
+            distanceKm: Number(distanceKm.toFixed(3)),
+            caloriesBurned: calories,
+            durationSec,
+            timeToGoalSec: finishSec,
+            date: dateIso,
+            challengeDay: day,
+            status: 'approved',
+            validatedBy: 'Admin recovery (missing cloud entry)',
+            validatedAt: new Date().toISOString(),
+            notes: `Recovered Outdoor GPS activity: ${distanceKm.toFixed(2)} KM / ${steps} steps / ${durationSec}s`,
+            source: 'gps-counter',
+            trackingMode: 'outdoor',
+            season: this.dataSeason
+        };
+
+        if (!user.uid) {
+            const proceed = confirm(
+                'This participant has no Firebase uid on file. The entry will still be linked by email/employee ID.\n\nContinue?'
+            );
+            if (!proceed) return;
+            // Do NOT stamp the admin Auth uid — that orphans the row from this user.
+            entry.userUid = String(user.employeeId || user.id || entryId);
+        }
+
+        if (!Array.isArray(this.stepEntries)) this.stepEntries = this.loadStepEntries();
+        this.stepEntries.unshift(entry);
+        this.saveStepEntries();
+
+        const cloudOk = await this.upsertStepEntryInFirebase(entry);
+
+        try {
+            await this.publishActivityFeedPost(entry, { shareToFeed: true, caption: null, photoFile: null });
+        } catch (feedErr) {
+            console.warn('Recover feed post failed:', feedErr);
+        }
+
+        this.recalculateParticipantTotalsFromApproved(user);
+        this.saveParticipantsCache();
+        if (user.uid) await this.syncParticipantToFirebase(user);
+
+        alert(
+            (cloudOk ? 'Activity recovered in the cloud.\n\n' : 'Saved locally; cloud write may have failed (quota?). Retry when Firebase is healthy.\n\n') +
+            `${distanceKm.toFixed(2)} KM · ${steps} steps · ${this.formatDurationClock(durationSec)} · Day ${day}`
+        );
+        await this.viewUserDetails(user.id || user.employeeId || user.uid || searchId);
+        try {
+            await this.updateLeaderboard(null, { forceSync: true });
+        } catch (e) { /* non-fatal */ }
     }
 
     // Help Modal Functions
@@ -5678,18 +5870,35 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const ids = [
  participant.id,
  participant.employeeId,
- participant.uid
+ participant.uid,
+ participant.username
  ].filter((v) => v != null && v !== '').map((v) => String(v));
  const entryIds = [
  entry.userId,
  entry.userUid,
- entry.userEmployeeId
+ entry.userEmployeeId,
+ entry.username
  ].filter((v) => v != null && v !== '').map((v) => String(v));
  if (entryIds.some((id) => ids.includes(id))) return true;
 
  const pEmail = String(participant.email || participant.emailId || participant.emailLower || '').toLowerCase().trim();
  const eEmail = String(entry.userEmail || entry.email || '').toLowerCase().trim();
- return !!(pEmail && eEmail && pEmail === eEmail);
+ if (pEmail && eEmail && pEmail === eEmail) return true;
+
+ // Soft name match only when entry has no usable email/id (orphaned feed rows)
+ const hasEntryIdentity = !!(eEmail || entryIds.length);
+ if (hasEntryIdentity) return false;
+ const pName = this.normalizePersonName(participant.name || participant.username || '');
+ const eName = this.normalizePersonName(entry.userName || entry.name || '');
+ return !!(pName && eName && (pName === eName || pName.includes(eName) || eName.includes(pName)));
+ }
+
+ normalizePersonName(value) {
+ return String(value || '')
+ .toLowerCase()
+ .replace(/[^a-z0-9]+/g, ' ')
+ .replace(/\s+/g, ' ')
+ .trim();
  }
 
  isApprovedEntry(entry) {
@@ -5907,9 +6116,14 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const entries = (this.stepEntries || []).filter(
  (e) => this.isApprovedEntry(e) && this.isCurrentSeasonEntry(e) && this.entryBelongsToParticipant(e, participant)
  );
+ let newest = null;
  for (const entry of entries) {
  this.applyEntryContribution(participant, entry, 1);
+ const d = this.parseEntryDate(entry.date);
+ if (!newest || d.getTime() > newest.getTime()) newest = d;
  }
+ // Keep Last Activity aligned with real approved entries (clears stale dates with 0 steps)
+ participant.lastActivity = newest ? newest.toISOString() : null;
  }
 
  recalculateAllParticipantTotalsFromApproved() {
@@ -6849,12 +7063,22 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         const payload = { ...(entry || {}) };
         const dropKeys = [
             'screenshot', 'password', 'passwordHash', 'bodyWeightKg',
-            '_cloudSynced', '_cloudSyncError', 'photoBase64'
+            '_cloudSynced', '_cloudSyncError', 'photoBase64', '_fromFeed'
         ].concat(options.dropKeys || []);
         dropKeys.forEach((k) => { delete payload[k]; });
 
-        // Live Auth uid must match rules: request.resource.data.userUid == request.auth.uid
-        payload.userUid = authUser.uid;
+        // Self-saves must stamp live Auth uid (Firestore rules).
+        // Admin writes for another participant must KEEP the owner's userUid —
+        // overwriting with the admin uid orphaned activities (Last Activity set, list empty).
+        const ownerUid = entry && entry.userUid != null && entry.userUid !== ''
+            ? String(entry.userUid)
+            : '';
+        const writingForOtherOwner = !!(
+            this.isAdmin &&
+            ownerUid &&
+            ownerUid !== String(authUser.uid)
+        );
+        payload.userUid = writingForOtherOwner ? ownerUid : authUser.uid;
         if (payload.id == null && options.docId) payload.id = options.docId;
 
         Object.keys(payload).forEach((key) => {
@@ -6883,8 +7107,14 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         this._pendingEntryIds.add(String(entry.id));
         try {
             const payload = this.buildFirestoreWritePayload(entry);
-            // Keep local entry aligned with Auth uid for future merges
-            entry.userUid = payload.userUid;
+            // Align local uid with payload, but never steal ownership onto the admin account
+            if (
+                !this.isAdmin ||
+                !entry.userUid ||
+                String(entry.userUid) === String(payload.userUid)
+            ) {
+                entry.userUid = payload.userUid;
+            }
             await this.stepEntriesCol().doc(entry.id).set(payload, { merge: true });
             this._pendingEntryIds.delete(String(entry.id));
             entry._cloudSynced = true;
@@ -9577,10 +9807,10 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
  }
 
- async saveStepsWithScreenshot(steps, screenshotData, fromStepCounter = false, trackMeta = null, shareOptions = null) {
-        // Do not bump totals here — leaderboard uses approved entries only.
-        // Totals are rebuilt from approved entries after this entry is stored.
-        this.currentUser.lastActivity = new Date().toISOString();
+    async saveStepsWithScreenshot(steps, screenshotData, fromStepCounter = false, trackMeta = null, shareOptions = null) {
+        // Do not bump totals / lastActivity here — that caused admin cards to show
+        // "Last Activity" with 0 steps when the cloud entry write later failed.
+        // lastActivity is set from approved entries in recalculateParticipantTotalsFromApproved.
 
  const distanceKm = trackMeta && typeof trackMeta.distanceKm === 'number'
  ? trackMeta.distanceKm
@@ -10059,6 +10289,10 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         const authUser = this.auth && this.auth.currentUser;
         if (!authUser) throw new Error('Not signed in to Firebase Auth. Please log out and log in again.');
         const authUid = authUser.uid;
+        // Admin recovery / edits must attribute the feed post to the activity owner
+        const ownerUid = (this.isAdmin && stepEntry.userUid && String(stepEntry.userUid) !== String(authUid))
+            ? String(stepEntry.userUid)
+            : authUid;
 
         let photoUrl = null;
         let photoDataUrl = null;
@@ -10076,7 +10310,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         const post = {
             id: postId,
             entryId: stepEntry.id,
-            userUid: authUid,
+            userUid: ownerUid,
             userName: this.resolveDisplayName(
                 stepEntry.userName,
                 this.currentUser && this.currentUser.name,
@@ -10092,6 +10326,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         };
         // Optional fields — omit nulls so rules/keys stay clean
         if (stepEntry.userId) post.userId = stepEntry.userId;
+        if (stepEntry.userEmail || stepEntry.email) {
+            post.userEmail = stepEntry.userEmail || stepEntry.email;
+        }
         if (shareOptions && shareOptions.caption) post.caption = String(shareOptions.caption).slice(0, 180);
         if (stepEntry.durationSec != null) post.durationSec = Number(stepEntry.durationSec);
         if (stepEntry.trackingMode) post.trackingMode = stepEntry.trackingMode;
