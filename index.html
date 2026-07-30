@@ -7,6 +7,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="WOW-CSG Fitness">
     <meta name="description" content="WOW-CSG 7 Days Fitness Challenge - Step Together. Thrive Together. 26 July - 1 August.">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com data:; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://unpkg.com https://cdn.jsdelivr.net https://statics.teams.cdn.office.net; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebase.com https://*.cloudfunctions.net wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://www.google-analytics.com https://unpkg.com https://cdn.jsdelivr.net; worker-src 'self' blob:;">
     <title>WOW-CSG 7 Days Fitness Challenge</title>
@@ -79,9 +80,11 @@
     </script>
     <!-- PWA Manifest -->
     <link rel="manifest" href="./manifest.json">
-    <!-- Favicon -->
+    <!-- Favicon + iPhone home-screen icon (free PWA — no Mac / App Store needed) -->
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=55">
-    <link rel="apple-touch-icon" href="favicon.svg?v=55">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+    <link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512.png">
 </head>
 <body>
     <div class="container">
@@ -178,26 +181,27 @@
             </p>
         </div>
 
-        <!-- iOS app -->
+        <!-- iOS free install (PWA) -->
         <div class="card android-app-card guest-only" id="iosAppCard">
             <div class="challenge-header">
                 <div class="card-header-icon-wrapper">
                     <div class="card-header-icon">&#128241;</div>
                     <div class="icon-glow"></div>
                 </div>
-                <h2>iPhone / iOS App</h2>
+                <h2>iPhone app (free)</h2>
             </div>
             <p class="android-app-lead">
-                A native iOS app project is ready (Capacitor). Build it on a Mac with Xcode and share via TestFlight for better tracking than Safari alone.
+                No Mac and no App Store fee needed. Install this site as a home-screen app in Safari.
             </p>
             <ol class="android-install-steps">
-                <li><strong>Until TestFlight is published:</strong> use this website in Safari → Share → <strong>Add to Home Screen</strong>.</li>
-                <li>Hard-refresh so the footer shows the latest site version before you Start Activity.</li>
-                <li>Allow Location when prompted. Keep Safari open if you lock the phone — progress auto-saves for Resume.</li>
-                <li>CSG builders: see <code>IOS.md</code> in the repo for Xcode / CocoaPods / TestFlight steps.</li>
+                <li>Open this page in <strong>Safari</strong> (Chrome cannot Add to Home Screen reliably).</li>
+                <li>Tap the <strong>Share</strong> button (square with arrow).</li>
+                <li>Tap <strong>Add to Home Screen</strong> → <strong>Add</strong>.</li>
+                <li>Open <strong>WOW-CSG Fitness</strong> from your home screen and sign in with <code>@csgi.com</code>.</li>
+                <li>Allow Location when you Start Activity. If the phone locks and the page reloads, tap <strong>Resume</strong> or <strong>Save</strong> — do not Start again.</li>
             </ol>
             <p class="android-app-note">
-                Bundle ID: <code>com.csgi.wowcsgfitness</code> · Same Firebase login as Android / web (<code>@csgi.com</code>).
+                A native App Store / TestFlight build needs Apple&rsquo;s paid Developer Program (US$99/year). Until then, this free home-screen app is the supported iPhone path. Details: <code>IOS.md</code> in the repo.
             </p>
         </div>
 
@@ -719,7 +723,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-30-v97 | Android APK v1.0.25 · iOS via Xcode/TestFlight</p>
+            <p class="footer-subtext">Site version: 2026-07-30-v98 | Android APK v1.0.25 · iPhone: free Home Screen app</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#androidAppCard" class="help-link">Download Android App</a>
@@ -854,7 +858,7 @@
       if (!isIos) {
         scripts.push('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js');
       }
-      scripts.push('firebase-config.js', 'security-config.js?v=2', 'native-bridge.js?v=56', isIos ? 'script.min.js?v=97' : 'script.js?v=97');
+      scripts.push('firebase-config.js', 'security-config.js?v=2', 'native-bridge.js?v=56', isIos ? 'script.min.js?v=98' : 'script.js?v=98');
       function loadCss(href) {
         var l = document.createElement('link');
         l.rel = 'stylesheet';

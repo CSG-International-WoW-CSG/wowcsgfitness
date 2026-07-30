@@ -1,0 +1,77 @@
+# Free iOS path without owning a Mac:
+# 1) Primary: PWA Add to Home Screen (no build needed)
+# 2) This workflow: compile Capacitor iOS on GitHub's free public macOS runners
+#    (unsigned simulator build — validates the project; not installable on devices)
+name: iOS build (no Mac)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'ios/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'capacitor.config.json'
+      - 'scripts/copy-www.mjs'
+      - '.github/workflows/ios-build.yml'
+    branches: [main]
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ios:
+    name: Capacitor iOS (simulator, unsigned)
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install JS deps
+        run: npm ci
+
+      - name: Copy web assets + sync Capacitor iOS
+        run: |
+          npm run copy:www
+          npx cap sync ios
+
+      - name: Install CocoaPods
+        working-directory: ios/App
+        run: |
+          pod install --repo-update
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Build for iOS Simulator (no signing)
+        working-directory: ios/App
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Upload build logs / products
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-build
+          path: |
+            ios/App/DerivedData/Build/Products/Debug-iphonesimulator/
+          if-no-files-found: warn
+          retention-days: 7

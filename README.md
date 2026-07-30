@@ -55,18 +55,10 @@ npm install
 npm run android
 ```
 
-### Option 4: iOS App (Xcode / TestFlight)
+### Option 4: iPhone (free — no Mac)
 
-See **[IOS.md](./IOS.md)** — Capacitor iOS project (`ios/`).  
-Requires a **Mac + Xcode + Apple Developer** account to build and distribute via TestFlight.
-
-```bash
-npm install
-npm run ios:sync
-# then on a Mac: pod install && npm run ios
-```
-
-Until TestFlight is live, iPhone users can use the website (Add to Home Screen).
+See **[IOS.md](./IOS.md)**. Recommended path: Safari → **Add to Home Screen** (PWA).  
+Native App Store/TestFlight installs require Apple’s paid Developer Program (not free).
 
 ## Customization
 

@@ -24,12 +24,24 @@ const files = [
   'challenge-flyer.png'
 ];
 
+const iconFiles = ['icons/apple-touch-icon.png', 'icons/icon-512.png'];
+
 if (existsSync(www)) {
   rmSync(www, { recursive: true, force: true });
 }
 mkdirSync(www, { recursive: true });
 
 for (const file of files) {
+  const src = join(root, file);
+  if (!existsSync(src)) {
+    console.warn('skip missing:', file);
+    continue;
+  }
+  cpSync(src, join(www, file));
+}
+
+mkdirSync(join(www, 'icons'), { recursive: true });
+for (const file of iconFiles) {
   const src = join(root, file);
   if (!existsSync(src)) {
     console.warn('skip missing:', file);

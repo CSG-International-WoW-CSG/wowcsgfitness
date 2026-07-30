@@ -2,41 +2,43 @@
   "name": "WOW-CSG 7 Days Fitness Challenge",
   "short_name": "WOW-CSG Fitness",
   "description": "Step Together. Thrive Together. Progressive 1 KM to 7 KM challenge — 26 July to 1 August.",
-  "start_url": "./",
+  "start_url": "./index.html",
+  "scope": "./",
+  "id": "./",
   "display": "standalone",
-  "background_color": "#f4f7fa",
+  "display_override": ["standalone", "browser"],
+  "background_color": "#003366",
   "theme_color": "#003366",
-  "orientation": "portrait",
+  "orientation": "portrait-primary",
+  "lang": "en",
   "icons": [
+    {
+      "src": "icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "CSG_Logo_K_outline.jpg",
-      "sizes": "512x512",
-      "type": "image/jpeg",
       "purpose": "any"
     }
   ],
   "categories": ["health", "fitness", "lifestyle"],
-  "screenshots": [],
   "shortcuts": [
-    {
-      "name": "Add Steps",
-      "short_name": "Add Steps",
-      "description": "Log your daily walk/run steps",
-      "url": "./index.html?action=add-steps",
-      "icons": [{ "src": "favicon.svg", "sizes": "any" }]
-    },
     {
       "name": "Leaderboard",
       "short_name": "Leaderboard",
       "description": "View the leaderboard",
-      "url": "./index.html?action=leaderboard",
-      "icons": [{ "src": "favicon.svg", "sizes": "any" }]
+      "url": "./index.html#leaderboardCard",
+      "icons": [{ "src": "icons/apple-touch-icon.png", "sizes": "180x180" }]
     }
   ],
   "prefer_related_applications": false
