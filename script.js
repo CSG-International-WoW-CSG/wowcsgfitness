@@ -178,6 +178,11 @@ class StepathonApp {
                             list.innerHTML = '<div class="leaderboard-item"><div class="name">Tap “Load rankings” to refresh the board.</div></div>';
                         }
                     }
+                    // Successful paint — reset crash-loop counter so lock/reload is not treated as a crash
+                    try {
+                        const bootKey = window.__WOWCSG_BOOT_KEY__;
+                        if (bootKey) sessionStorage.setItem(bootKey, '0');
+                    } catch (eBoot) { /* ignore */ }
                 }, this.isLowMemoryClient() ? 500 : 100);
                 const iosTip = document.getElementById('iosTrackingTip');
                 if (iosTip && /iPhone|iPad|iPod/i.test(navigator.userAgent || '')) {
@@ -3188,9 +3193,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  setTimeout(() => {
  this.initActivityMap();
  // Restore in-progress activity if the phone killed/reloaded the page while locked
- this.tryRestoreActivitySession();
+ this.tryRestoreActivitySession({ asPaused: true });
  const startBtn = document.getElementById('startCounterBtn');
- if (startBtn && typeof startBtn.scrollIntoView === 'function') {
+ if (startBtn && typeof startBtn.scrollIntoView === 'function' && !this.stepCounter.isRunning && !this.stepCounter.isPaused) {
  startBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
  }
  }, 250);
@@ -7678,35 +7683,40 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  getActivitySessionUserKey() {
- if (!this.currentUser) return null;
+ if (!this.currentUser) return 'local';
  return this.currentUser.uid
  || this.currentUser.id
  || this.currentUser.employeeId
  || this.currentUser.email
  || this.currentUser.name
- || null;
+ || 'local';
  }
 
  persistActivitySession(force = false) {
  try {
  if (!this.stepCounter.isRunning && !this.stepCounter.isPaused) return;
  const now = Date.now();
- if (!force && now - (this._lastActivityPersistAt || 0) < 2000) return;
+ if (!force && now - (this._lastActivityPersistAt || 0) < 1500) return;
  this._lastActivityPersistAt = now;
 
  const userKey = this.getActivitySessionUserKey();
- if (!userKey) return;
-
  const path = (this.stepCounter.path || []).slice(-250).map((p) => ({
  lat: p.lat,
  lng: p.lng,
  t: p.t
  }));
+ const elapsedLive = this.stepCounter.isPaused
+ ? (Number(this.stepCounter.elapsedSecAtPause) || 0)
+ : (this.stepCounter.startTime
+ ? Math.max(0, Math.floor((now - this.stepCounter.startTime) / 1000))
+ : 0);
  const payload = {
- version: 1,
+ version: 2,
  isRunning: !!this.stepCounter.isRunning,
  isPaused: !!this.stepCounter.isPaused,
- elapsedSecAtPause: this.stepCounter.elapsedSecAtPause || 0,
+ elapsedSecAtPause: this.stepCounter.isPaused
+ ? (Number(this.stepCounter.elapsedSecAtPause) || elapsedLive)
+ : elapsedLive,
  userKey,
  startTime: this.stepCounter.startTime,
  stepCount: this.stepCounter.stepCount || 0,
@@ -7722,17 +7732,45 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  lastPosition: this.stepCounter.lastPosition || null,
  timeToGoalSec: this.stepCounter.timeToGoalSec,
  frozenForSave: this.stepCounter.frozenForSave || null,
+ trackedDistanceKm: this.getTrackedDistanceKm(),
  savedAt: now
  };
- localStorage.setItem(this.activitySessionKey, JSON.stringify(payload));
+ const raw = JSON.stringify(payload);
+ localStorage.setItem(this.activitySessionKey, raw);
+ try { sessionStorage.setItem(this.activitySessionKey, raw); } catch (e2) { /* ignore */ }
  } catch (error) {
  console.warn('Could not persist activity session:', error);
+ // localStorage full / blocked — try smaller sessionStorage payload
+ try {
+ const slim = {
+ version: 2,
+ isRunning: !!this.stepCounter.isRunning,
+ isPaused: !!this.stepCounter.isPaused,
+ elapsedSecAtPause: this.stepCounter.elapsedSecAtPause || 0,
+ userKey: this.getActivitySessionUserKey(),
+ startTime: this.stepCounter.startTime,
+ stepCount: this.stepCounter.stepCount || 0,
+ distanceKm: this.stepCounter.distanceKm || 0,
+ pendingSegmentKm: this.stepCounter.pendingSegmentKm || 0,
+ trackingMode: this.stepCounter.trackingMode || 'outdoor',
+ timeToGoalSec: this.stepCounter.timeToGoalSec,
+ trackedDistanceKm: this.getTrackedDistanceKm(),
+ path: [],
+ savedAt: Date.now()
+ };
+ sessionStorage.setItem(this.activitySessionKey, JSON.stringify(slim));
+ } catch (e3) {
+ console.warn('SessionStorage activity persist also failed:', e3);
+ }
  }
  }
 
  loadActivitySession() {
  try {
- const raw = localStorage.getItem(this.activitySessionKey);
+ let raw = localStorage.getItem(this.activitySessionKey);
+ if (!raw) {
+ try { raw = sessionStorage.getItem(this.activitySessionKey); } catch (e) { /* ignore */ }
+ }
  if (!raw) return null;
  const data = JSON.parse(raw);
  if (!data || !data.startTime) return null;
@@ -7750,34 +7788,56 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  } catch (error) {
  console.warn('Could not clear activity session:', error);
  }
+ try { sessionStorage.removeItem(this.activitySessionKey); } catch (e2) { /* ignore */ }
  }
 
- tryRestoreActivitySession() {
+ tryRestoreActivitySession(options = {}) {
  if (window.location.pathname.includes('admin.html')) return false;
 
+ if (this.stepCounter.isRunning || this.stepCounter.isPaused) {
  if (this.stepCounter.isRunning) {
  this.ensureActivityRuntimeAlive('Activity still running after unlock.');
+ }
  return true;
  }
 
  const data = this.loadActivitySession();
  if (!data) return false;
 
- const maxAgeMs = 8 * 60 * 60 * 1000;
+ const maxAgeMs = 12 * 60 * 60 * 1000;
  if (!data.savedAt || (Date.now() - data.savedAt) > maxAgeMs) {
  this.clearActivitySession();
  return false;
  }
 
  const userKey = this.getActivitySessionUserKey();
- if (userKey && data.userKey && data.userKey !== userKey) {
+ // Allow restore when logged-out key is "local" or profile not hydrated yet
+ if (
+ userKey &&
+ userKey !== 'local' &&
+ data.userKey &&
+ data.userKey !== 'local' &&
+ data.userKey !== userKey
+ ) {
  return false;
  }
 
- this.stepCounter.isRunning = !!data.isRunning && !data.isPaused;
- this.stepCounter.isPaused = !!data.isPaused && !data.isRunning;
- this.stepCounter.elapsedSecAtPause = Number(data.elapsedSecAtPause) || 0;
- this.stepCounter.startTime = data.startTime;
+ const savedAt = Number(data.savedAt) || Date.now();
+ const elapsedAtSave = Number(data.elapsedSecAtPause) > 0
+ ? Math.round(Number(data.elapsedSecAtPause))
+ : (data.startTime ? Math.max(0, Math.floor((savedAt - Number(data.startTime)) / 1000)) : 0);
+
+ // After phone lock, mobile browsers often kill the page. Restore as PAUSED so
+ // KM/time are kept and the user taps Resume (web GPS does not keep counting locked).
+ const isNative = !!(window.WowNative && window.WowNative.isNative);
+ const preferPaused = options.asPaused !== false && !isNative && !!data.isRunning && !data.isPaused;
+
+ this.stepCounter.isRunning = preferPaused ? false : (!!data.isRunning && !data.isPaused);
+ this.stepCounter.isPaused = preferPaused ? true : (!!data.isPaused && !data.isRunning);
+ this.stepCounter.elapsedSecAtPause = elapsedAtSave;
+ this.stepCounter.startTime = preferPaused || this.stepCounter.isPaused
+ ? (Date.now() - (elapsedAtSave * 1000))
+ : data.startTime;
  this.stepCounter.stepCount = data.stepCount || 0;
  this.stepCounter.distanceKm = Number(data.distanceKm) || 0;
  this.stepCounter.pendingSegmentKm = Number(data.pendingSegmentKm) || 0;
@@ -7788,14 +7848,24 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.stepCounter.path = Array.isArray(data.path) ? data.path : [];
  this.stepCounter.lastPosition = data.lastPosition || null;
  this.stepCounter.nativeStepBaseline = Number(data.nativeStepBaseline) || 0;
- this.stepCounter.useNativeStepsOnly = !!data.useNativeStepsOnly;
+ this.stepCounter.useNativeStepsOnly = false;
  this.stepCounter.timeToGoalSec = data.timeToGoalSec != null ? Number(data.timeToGoalSec) : null;
- this.stepCounter.frozenForSave = data.frozenForSave || null;
+ this.stepCounter.frozenForSave = preferPaused
+ ? {
+ distanceKm: Number(data.trackedDistanceKm != null ? data.trackedDistanceKm : this.getTrackedDistanceKm()) || 0,
+ durationSec: elapsedAtSave,
+ steps: this.stepCounter.stepCount || 0,
+ path: (this.stepCounter.path || []).map((p) => ({ lat: p.lat, lng: p.lng, t: p.t })),
+ timeToGoalSec: this.stepCounter.timeToGoalSec,
+ trackingMode: this.stepCounter.trackingMode,
+ treadmillSpeedKmh: this.stepCounter.treadmillSpeedKmh || null,
+ startTime: this.stepCounter.startTime
+ }
+ : (data.frozenForSave || null);
  this.stepCounter.stepHistory = [];
  this.stepCounter.accelerationHistory = [];
  this.stepCounter.lastAcceleration = { x: 0, y: 0, z: 0 };
  this.stepCounter.gpsReady = (this.stepCounter.path || []).length > 0;
- this.stepCounter.useNativeStepsOnly = false;
 
  if (this.stepCounter.trackingMode === 'treadmill') {
  this.stepCounter.threshold = 0.85;
@@ -7829,14 +7899,19 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (this.stepCounter.isPaused) {
  this.applyPausedActivityUi();
  this.updateStepCounterDisplay();
- const distance = this.getTrackedDistanceKm();
+ const distance = Number(
+ (this.stepCounter.frozenForSave && this.stepCounter.frozenForSave.distanceKm) != null
+ ? this.stepCounter.frozenForSave.distanceKm
+ : this.getTrackedDistanceKm()
+ );
  const elapsed = this.stepCounter.elapsedSecAtPause || 0;
  const minutes = Math.floor(elapsed / 60);
  const seconds = elapsed % 60;
  const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
- this.updateCounterStatus(`Paused. Covered ${distance.toFixed(2)} KM in ${timeStr}.`);
- this.updateCounterHint('Tap Resume to continue, or Save Activity to update the leaderboard.');
- this.showCounterNotification('Paused activity restored. Resume or Save when ready.');
+ this.updateCounterStatus(`Saved after lock/reload. Covered ${distance.toFixed(2)} KM in ${timeStr}.`);
+ this.updateCounterHint('Your activity was kept. Tap Resume to continue, or Save Activity to submit.');
+ this.showCounterNotification('Activity restored after lock — tap Resume or Save. Progress was not lost.');
+ this.persistActivitySession(true);
  return true;
  }
 
@@ -8388,8 +8463,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  window.addEventListener('pageshow', (event) => {
  this.onActivityVisibilityChange();
  // bfcache / reload after lock: restore persisted session if needed
- if (!this.stepCounter.isRunning) {
- this.tryRestoreActivitySession();
+ if (!this.stepCounter.isRunning && !this.stepCounter.isPaused) {
+ this.tryRestoreActivitySession({ asPaused: true });
  }
  if (event && event.persisted && this.stepCounter.isRunning) {
  this.ensureActivityRuntimeAlive('Activity resumed from browser cache.');
@@ -8398,13 +8473,16 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  window.addEventListener('pagehide', () => this.persistActivitySession(true));
  window.addEventListener('beforeunload', () => this.persistActivitySession(true));
  window.addEventListener('blur', () => this.persistActivitySession(true));
+ // iOS/Android often freeze JS on lock — freeze a snapshot so reload can restore
+ document.addEventListener('freeze', () => this.persistActivitySession(true));
+ window.addEventListener('unload', () => this.persistActivitySession(true));
  }
 
  async onActivityVisibilityChange() {
- if (!this.stepCounter.isRunning) {
+ if (!this.stepCounter.isRunning && !this.stepCounter.isPaused) {
  // Page may have been killed while locked — try restore when user returns
  if (document.visibilityState === 'visible') {
- this.tryRestoreActivitySession();
+ this.tryRestoreActivitySession({ asPaused: true });
  }
  return;
  }
@@ -8426,12 +8504,20 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
  const hint = document.getElementById('mapHint');
  if (hint && this.stepCounter.trackingMode === 'outdoor') {
- hint.textContent = 'Lock-screen tracking ON. Keep the site open in background — do not force-close the app.';
+ hint.textContent = 'Phone locked: progress is auto-saved. If the browser reloads, tap Resume — do not Start again.';
  }
+ // Re-persist a few times while hidden (browsers throttle timers; first writes matter most)
+ setTimeout(() => this.persistActivitySession(true), 500);
+ setTimeout(() => this.persistActivitySession(true), 2000);
  return;
  }
 
  // Visible again after unlock — reinstate timers/GPS + catch up missed distance
+ if (this.stepCounter.isPaused) {
+ // Restored-as-paused after reload — leave UI alone; user chooses Resume/Save
+ this.persistActivitySession(true);
+ return;
+ }
  this.stopBackgroundGpsPoll();
  this.ensureActivityRuntimeAlive('Tracking active again after unlock.');
  if (window.WowNative && window.WowNative.isNative) {
