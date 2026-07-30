@@ -289,7 +289,7 @@
                     <button class="btn btn-secondary btn-small" id="loginHelpBtn" title="Get Help">&#10067; Help</button>
                 </div>
                 <div class="email-warning" id="storageNotice" style="display: none;">
-                    <p>Accounts are stored in this browser only. Configure Firebase to enable cross-browser login.</p>
+                    <p>Connecting to Firebase… If this stays visible, hard-refresh or try another network.</p>
                 </div>
 
                 <!-- User Registration Form -->
@@ -696,7 +696,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-30-v95 | Android APK v1.0.25</p>
+            <p class="footer-subtext">Site version: 2026-07-30-v96 | Android APK v1.0.25</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#androidAppCard" class="help-link">Download Android App</a>
@@ -831,7 +831,7 @@
       if (!isIos) {
         scripts.push('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js');
       }
-      scripts.push('firebase-config.js', 'security-config.js?v=2', 'native-bridge.js?v=55', isIos ? 'script.min.js?v=95' : 'script.js?v=95');
+      scripts.push('firebase-config.js', 'security-config.js?v=2', 'native-bridge.js?v=55', isIos ? 'script.min.js?v=96' : 'script.js?v=96');
       function loadCss(href) {
         var l = document.createElement('link');
         l.rel = 'stylesheet';
@@ -852,7 +852,23 @@
           if (gap) setTimeout(function () { loadSeq(i + 1); }, gap);
           else loadSeq(i + 1);
         };
-        s.onerror = function () { loadSeq(i + 1); };
+        s.onerror = function () {
+          // Critical Firebase CDN scripts: one retry before continuing
+          var isFirebaseCdn = scripts[i].indexOf('gstatic.com/firebasejs') >= 0;
+          if (isFirebaseCdn && !s.dataset.retried) {
+            s.dataset.retried = '1';
+            setTimeout(function () {
+              var retry = document.createElement('script');
+              retry.src = scripts[i] + (scripts[i].indexOf('?') >= 0 ? '&' : '?') + 'retry=1';
+              retry.async = false;
+              retry.onload = s.onload;
+              retry.onerror = function () { loadSeq(i + 1); };
+              document.body.appendChild(retry);
+            }, 600);
+            return;
+          }
+          loadSeq(i + 1);
+        };
         document.body.appendChild(s);
       }
       function start() {

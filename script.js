@@ -388,71 +388,141 @@ class StepathonApp {
     }
 
     initFirebase() {
-        try {
-            if (typeof firebase === 'undefined') {
-                return;
-            }
+        // Non-blocking first attempt; login/save call ensureFirebaseReady() with retries
+        this.ensureFirebaseReady({ quiet: true }).catch((err) => {
+            console.warn('Firebase init deferred:', err);
+        });
+    }
 
-            if (!window.firebaseConfig || !window.firebaseConfig.apiKey) {
-                return;
-            }
+    /**
+     * Ensure Firebase App + Auth are available (loads SDKs if the page boot raced/failed).
+     * Login and Save must call this — never trust a one-shot constructor init on mobile.
+     */
+    async ensureFirebaseReady(options = {}) {
+        const quiet = !!(options && options.quiet);
+        const maxWaitMs = Number(options && options.timeoutMs) > 0 ? Number(options.timeoutMs) : 12000;
+        const started = Date.now();
 
-            if (!firebase.apps.length) {
-                firebase.initializeApp(window.firebaseConfig);
-            }
-
-            this.auth = firebase.auth();
-            // iOS: defer Firestore SDK + queries until rankings/login need them
-            if (window.__WOWCSG_DEFER_FIRESTORE__ || typeof firebase.firestore !== 'function') {
-                this.db = null;
-                this.firebaseEnabled = true;
-                this._firestoreReady = false;
-            } else {
-                this.db = firebase.firestore();
-                this._firestoreReady = true;
-                this.firebaseEnabled = true;
-            }
-            // Storage SDK loaded on demand when sharing a photo
-            this.storage = null;
-            if (!this.firebaseEnabled) return;
-
-            // Keep session in sync
- this.auth.onAuthStateChanged(async (user) => {
-                if (this.isMigratingUsers) {
-                    return;
-                }
- if (!user) {
- if (this.isAdmin) {
- this.isAdmin = false;
- }
- return;
- }
- await this.ensureFirestore();
- if (window.location.pathname.includes('admin.html')) {
- const ok = await this.verifyAdminAccess(user);
- if (ok) {
- this.isAdmin = true;
- this.showAdminDashboard();
- }
- return;
- }
- if (!this.isCorporateEmail(user.email)) {
- console.warn('Non-corporate account signed in; signing out.');
- await this.auth.signOut();
- return;
- }
- this.loadCurrentUserFromFirebase(user.uid);
-            });
-        } catch (error) {
-            console.warn('Firebase initialization failed:', error);
-            this.firebaseEnabled = false;
-            this.auth = null;
-            this.db = null;
+        if (this.auth && this.firebaseEnabled && typeof firebase !== 'undefined') {
+            this.updateStorageNotice();
+            return true;
         }
+
+        if (this._firebaseReadyPromise) {
+            return this._firebaseReadyPromise;
+        }
+
+        this._firebaseReadyPromise = (async () => {
+            try {
+                const needApp = typeof firebase === 'undefined' || !firebase.apps;
+                const needAuth = typeof firebase === 'undefined' || typeof firebase.auth !== 'function';
+                if (needApp || needAuth) {
+                    await this.loadScriptOnce('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
+                    await this.loadScriptOnce('https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js');
+                }
+                if (!window.firebaseConfig || !window.firebaseConfig.apiKey) {
+                    await this.loadScriptOnce('firebase-config.js');
+                }
+                if (typeof firebase === 'undefined') {
+                    throw new Error('Firebase SDK failed to load');
+                }
+                if (!window.firebaseConfig || !window.firebaseConfig.apiKey) {
+                    throw new Error('Firebase config missing');
+                }
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(window.firebaseConfig);
+                }
+                this.auth = firebase.auth();
+                try {
+                    await this.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+                } catch (persistErr) {
+                    console.warn('Auth persistence LOCAL unavailable:', persistErr);
+                }
+
+                // Firestore can stay deferred on iOS until needed
+                if (!(window.__WOWCSG_DEFER_FIRESTORE__ || typeof firebase.firestore !== 'function')) {
+                    this.db = firebase.firestore();
+                    this._firestoreReady = true;
+                } else {
+                    this.db = null;
+                    this._firestoreReady = false;
+                }
+                this.firebaseEnabled = true;
+                this.storage = null;
+
+                if (!this._authStateBound) {
+                    this._authStateBound = true;
+                    this.auth.onAuthStateChanged(async (user) => {
+                        if (this.isMigratingUsers) return;
+                        if (!user) {
+                            if (this.isAdmin) this.isAdmin = false;
+                            return;
+                        }
+                        await this.ensureFirestore();
+                        if (window.location.pathname.includes('admin.html')) {
+                            const ok = await this.verifyAdminAccess(user);
+                            if (ok) {
+                                this.isAdmin = true;
+                                this.showAdminDashboard();
+                            }
+                            return;
+                        }
+                        if (!this.isCorporateEmail(user.email)) {
+                            console.warn('Non-corporate account signed in; signing out.');
+                            await this.auth.signOut();
+                            return;
+                        }
+                        // Only auto-load profile if we don't already have this user on screen
+                        if (!this.currentUser || String(this.currentUser.uid) !== String(user.uid)) {
+                            this.loadCurrentUserFromFirebase(user.uid);
+                        }
+                    });
+                }
+
+                this.updateStorageNotice();
+                return true;
+            } catch (error) {
+                console.warn('Firebase initialization failed:', error);
+                this.firebaseEnabled = false;
+                this.auth = null;
+                this.db = null;
+                this._firebaseInitError = (error && error.message) ? String(error.message) : 'init failed';
+                this.updateStorageNotice();
+                if (!quiet) throw error;
+                return false;
+            } finally {
+                this._firebaseReadyPromise = null;
+            }
+        })();
+
+        const ok = await this._firebaseReadyPromise;
+        // Brief settle for Auth to hydrate from IndexedDB after init
+        if (ok && this.auth && !this.auth.currentUser && (Date.now() - started) < maxWaitMs) {
+            await this.waitForFirebaseAuthUser(Math.min(3500, maxWaitMs - (Date.now() - started)));
+        }
+        return ok;
+    }
+
+    waitForFirebaseAuthUser(timeoutMs = 3500) {
+        if (!this.auth) return Promise.resolve(null);
+        if (this.auth.currentUser) return Promise.resolve(this.auth.currentUser);
+        return new Promise((resolve) => {
+            let done = false;
+            const finish = (user) => {
+                if (done) return;
+                done = true;
+                try { unsub(); } catch (e) { /* ignore */ }
+                clearTimeout(timer);
+                resolve(user || null);
+            };
+            const unsub = this.auth.onAuthStateChanged((user) => finish(user));
+            const timer = setTimeout(() => finish(this.auth && this.auth.currentUser), timeoutMs);
+        });
     }
 
     async ensureFirestore() {
         if (this.db && this._firestoreReady) return true;
+        if (!(await this.ensureFirebaseReady({ quiet: true }))) return false;
         if (typeof firebase === 'undefined') return false;
         try {
             if (typeof firebase.firestore !== 'function') {
@@ -462,6 +532,7 @@ class StepathonApp {
             this.db = firebase.firestore();
             this._firestoreReady = true;
             this.firebaseEnabled = true;
+            this.updateStorageNotice();
             return true;
         } catch (e) {
             console.warn('Firestore load failed', e);
@@ -701,11 +772,17 @@ class StepathonApp {
         if (!notice) {
             return;
         }
-        if (this.firebaseEnabled) {
+        if (this.firebaseEnabled && this.auth) {
             notice.style.display = 'none';
             return;
         }
         notice.style.display = 'block';
+        const p = notice.querySelector('p');
+        if (p) {
+            p.textContent = this._firebaseInitError
+                ? ('Cannot reach Firebase (' + this._firebaseInitError + '). Check network / VPN, then refresh and try again.')
+                : 'Connecting to Firebase… If this stays visible, hard-refresh or try another network.';
+        }
     }
 
     getLegacyParticipantsForMigration() {
@@ -2195,25 +2272,35 @@ class StepathonApp {
         return `${month} ${day}, ${year}`;
     }
 
-    checkCurrentUser() {
+    async checkCurrentUser() {
  localStorage.removeItem('isAdmin');
-        const savedUser = localStorage.getItem('currentUser');
-        
- if (this.firebaseEnabled && this.auth && this.auth.currentUser) {
-            this.loadCurrentUserFromFirebase(this.auth.currentUser.uid).then((participant) => {
-                if (participant) {
-                    this.showDashboard();
+        // Wait for Firebase Auth — never trust a ghost localStorage profile alone
+        const ready = await this.ensureFirebaseReady({ quiet: true, timeoutMs: 10000 });
+        if (ready && this.auth) {
+            const authUser = await this.waitForFirebaseAuthUser(4500);
+            if (authUser) {
+                try {
+                    const participant = await this.loadCurrentUserFromFirebase(authUser.uid);
+                    if (participant) {
+                        this.showDashboard();
+                        return;
+                    }
+                } catch (e) {
+                    console.warn('Auth profile load failed:', e);
                 }
-            });
-        } else if (savedUser) {
- try {
- this.currentUser = this.stripSecretsFromParticipant(JSON.parse(savedUser));
- localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
-            this.showDashboard();
- } catch (e) {
- localStorage.removeItem('currentUser');
- }
+            }
+            // Signed out in Auth — clear stale browser profile so Save doesn't look "logged in"
+            this.currentUser = null;
+            localStorage.removeItem('currentUser');
+            this.setLoggedInShell(false);
+            this.updateStorageNotice();
+            return;
         }
+
+        // Firebase unreachable: keep any local profile only for display recovery, but force login UI
+        this.currentUser = null;
+        this.setLoggedInShell(false);
+        this.updateStorageNotice();
     }
 
     switchLoginTab(tabType) {
@@ -2468,7 +2555,8 @@ class StepathonApp {
             return;
         }
 
-        if (this.firebaseEnabled) {
+        const firebaseReady = await this.ensureFirebaseReady({ quiet: true, timeoutMs: 15000 });
+        if (firebaseReady && this.firebaseEnabled && this.auth) {
             await this.ensureFirestore();
             const usernameLower = username.toLowerCase();
             const employeeIdLower = id.toLowerCase();
@@ -2579,9 +2667,9 @@ class StepathonApp {
 
  // CSG compliance: local-only accounts disabled (insecure password storage).
  alert(
- 'Firebase is required to register. Corporate accounts must use Firebase Auth.\n\n' +
- 'If you see this message, Firebase is not configured. Contact ' +
- this.securityCfg().supportEmail
+ 'Cannot reach Firebase for registration right now.\n\n' +
+ 'Hard-refresh, check network/VPN, then try again.\n\n' +
+ 'Contact ' + this.securityCfg().supportEmail + ' if this keeps happening.'
  );
     }
 
@@ -2597,16 +2685,30 @@ class StepathonApp {
             return;
         }
 
-        if (this.firebaseEnabled) {
-            await this.handleFirebaseLogin(identifier, password);
-            return;
+        const loginBtn = document.querySelector('#loginForm button[type="submit"], #loginForm .btn-primary');
+        const prevLabel = loginBtn ? loginBtn.textContent : '';
+        if (loginBtn) {
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Connecting…';
         }
-
- alert(
- 'Firebase is required for CSG-compliant login.\n\n' +
- 'Contact ' + this.securityCfg().supportEmail + ' if the app cannot reach Firebase.'
- );
- }
+        try {
+            const ready = await this.ensureFirebaseReady({ quiet: true, timeoutMs: 15000 });
+            if (!ready || !this.firebaseEnabled || !this.auth) {
+                alert(
+                    'Cannot reach Firebase right now.\n\n' +
+                    'Please check your network/VPN, hard-refresh the page, and try Login again.\n\n' +
+                    'Contact ' + this.securityCfg().supportEmail + ' if this keeps happening.'
+                );
+                return;
+            }
+            await this.handleFirebaseLogin(identifier, password);
+        } finally {
+            if (loginBtn) {
+                loginBtn.disabled = false;
+                loginBtn.textContent = prevLabel || 'Login';
+            }
+        }
+    }
 
  /** Strip credential fields before any localStorage / in-memory cache write. */
  stripSecretsFromParticipant(participant) {
@@ -9354,9 +9456,28 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
         const entryId = `ENTRY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         // Must be live Firebase Auth — stale localStorage uid fails Firestore rules
-        const authUser = this.auth && this.auth.currentUser;
+        await this.ensureFirebaseReady({ quiet: true, timeoutMs: 12000 });
+        await this.ensureFirestore();
+        let authUser = this.auth && this.auth.currentUser;
         if (!authUser) {
-            alert('Your login session expired. Please log out and log in again, then save the activity.');
+            authUser = await this.waitForFirebaseAuthUser(4000);
+        }
+        if (!authUser) {
+            // Keep the paused activity session so re-login can Save without restarting
+            this.persistActivitySession(true);
+            alert(
+                'Your Firebase login session expired or is still connecting.\n\n' +
+                '1) Tap OK\n' +
+                '2) Log in again (activity progress is kept)\n' +
+                '3) Open Save Activity and submit\n\n' +
+                'Do not tap Start again.'
+            );
+            try {
+                document.getElementById('loginCard').style.display = 'block';
+                document.getElementById('dashboardCard').style.display = 'none';
+                this.setLoggedInShell(false);
+                this.switchLoginTab('user-login');
+            } catch (eUi) { /* ignore */ }
             return;
         }
         const authUid = authUser.uid;
