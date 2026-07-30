@@ -2274,7 +2274,18 @@ class StepathonApp {
 
     async checkCurrentUser() {
  localStorage.removeItem('isAdmin');
-        // Wait for Firebase Auth — never trust a ghost localStorage profile alone
+        // If a locked walk was saved, restore UI ASAP (don't wait on Firebase)
+        const pendingActivity = this.loadActivitySession();
+        const savedUserRaw = localStorage.getItem('currentUser');
+        if (pendingActivity && savedUserRaw && !this.stepCounter.isRunning && !this.stepCounter.isPaused) {
+            try {
+                this.currentUser = this.stripSecretsFromParticipant(JSON.parse(savedUserRaw));
+                await this.showDashboard();
+            } catch (eEarly) {
+                console.warn('Early activity restore skipped:', eEarly);
+            }
+        }
+
         const ready = await this.ensureFirebaseReady({ quiet: true, timeoutMs: 10000 });
         if (ready && this.auth) {
             const authUser = await this.waitForFirebaseAuthUser(4500);
@@ -2282,24 +2293,33 @@ class StepathonApp {
                 try {
                     const participant = await this.loadCurrentUserFromFirebase(authUser.uid);
                     if (participant) {
-                        this.showDashboard();
+                        if (!document.getElementById('dashboardCard') ||
+                            document.getElementById('dashboardCard').style.display === 'none') {
+                            await this.showDashboard();
+                        } else {
+                            // Already showing from early restore — still re-apply paused UI
+                            await this.tryRestoreActivitySessionAsync({ asPaused: true });
+                        }
                         return;
                     }
                 } catch (e) {
                     console.warn('Auth profile load failed:', e);
                 }
             }
-            // Signed out in Auth — clear stale browser profile so Save doesn't look "logged in"
-            this.currentUser = null;
-            localStorage.removeItem('currentUser');
-            this.setLoggedInShell(false);
+            // Auth signed out — keep activity session so re-login can Resume/Save
+            if (!pendingActivity) {
+                this.currentUser = null;
+                localStorage.removeItem('currentUser');
+                this.setLoggedInShell(false);
+            }
             this.updateStorageNotice();
             return;
         }
 
-        // Firebase unreachable: keep any local profile only for display recovery, but force login UI
-        this.currentUser = null;
-        this.setLoggedInShell(false);
+        if (!pendingActivity) {
+            this.currentUser = null;
+            this.setLoggedInShell(false);
+        }
         this.updateStorageNotice();
     }
 
@@ -3272,6 +3292,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         // Check challenge status and disable features if challenge is over
         this.updateDates(); // This will call checkChallengeStatus
 
+        // Restore locked activity FIRST (before any Firebase sync can delay UI)
+        this.switchInputMethod('counter');
+        this.setupActivityKeepAlive();
+        await this.tryRestoreActivitySessionAsync({ asPaused: true });
+        this.initActivityMap();
+
         // Pull latest entries + recover any local saves that never reached Firebase
         if (this.firebaseEnabled) {
             try {
@@ -3291,16 +3317,18 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         this.updateDashboard();
         this.updateActivities();
         this.loadActivityFeed();
- this.switchInputMethod('counter');
- setTimeout(() => {
- this.initActivityMap();
- // Restore in-progress activity if the phone killed/reloaded the page while locked
- this.tryRestoreActivitySession({ asPaused: true });
- const startBtn = document.getElementById('startCounterBtn');
- if (startBtn && typeof startBtn.scrollIntoView === 'function' && !this.stepCounter.isRunning && !this.stepCounter.isPaused) {
- startBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
- }
- }, 250);
+        // Re-apply paused UI after dashboard paint (updateDashboard must not hide Resume/Save)
+        if (this.stepCounter.isPaused || this.stepCounter.isRunning) {
+            if (this.stepCounter.isPaused) this.applyPausedActivityUi();
+            else this.applyRunningActivityUi();
+            this.updateStepCounterDisplay();
+        } else {
+            setTimeout(() => this.tryRestoreActivitySessionAsync({ asPaused: true }), 400);
+        }
+        const startBtn = document.getElementById('startCounterBtn');
+        if (startBtn && typeof startBtn.scrollIntoView === 'function' && !this.stepCounter.isRunning && !this.stepCounter.isPaused) {
+            startBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
     }
 
     setLoggedInShell(isLoggedIn) {
@@ -7798,11 +7826,13 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  try {
  if (!this.stepCounter.isRunning && !this.stepCounter.isPaused) return;
  const now = Date.now();
- if (!force && now - (this._lastActivityPersistAt || 0) < 1500) return;
+ // Persist aggressively while locked — browsers may kill the tab with no warning
+ const minGap = (typeof document !== 'undefined' && document.visibilityState === 'hidden') ? 400 : 1000;
+ if (!force && now - (this._lastActivityPersistAt || 0) < minGap) return;
  this._lastActivityPersistAt = now;
 
  const userKey = this.getActivitySessionUserKey();
- const path = (this.stepCounter.path || []).slice(-250).map((p) => ({
+ const path = (this.stepCounter.path || []).slice(-120).map((p) => ({
  lat: p.lat,
  lng: p.lng,
  t: p.t
@@ -7813,7 +7843,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  ? Math.max(0, Math.floor((now - this.stepCounter.startTime) / 1000))
  : 0);
  const payload = {
- version: 2,
+ version: 3,
  isRunning: !!this.stepCounter.isRunning,
  isPaused: !!this.stepCounter.isPaused,
  elapsedSecAtPause: this.stepCounter.isPaused
@@ -7838,14 +7868,19 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  savedAt: now
  };
  const raw = JSON.stringify(payload);
- localStorage.setItem(this.activitySessionKey, raw);
+ try { localStorage.setItem(this.activitySessionKey, raw); } catch (eLs) { console.warn('localStorage activity persist failed', eLs); }
  try { sessionStorage.setItem(this.activitySessionKey, raw); } catch (e2) { /* ignore */ }
+ this.persistActivitySessionCookie(payload);
+ this.persistActivitySessionIdb(raw);
+ // Ask browser not to evict site data while tracking
+ try {
+ if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+ } catch (eP) { /* ignore */ }
  } catch (error) {
  console.warn('Could not persist activity session:', error);
- // localStorage full / blocked — try smaller sessionStorage payload
  try {
  const slim = {
- version: 2,
+ version: 3,
  isRunning: !!this.stepCounter.isRunning,
  isPaused: !!this.stepCounter.isPaused,
  elapsedSecAtPause: this.stepCounter.elapsedSecAtPause || 0,
@@ -7861,26 +7896,127 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  savedAt: Date.now()
  };
  sessionStorage.setItem(this.activitySessionKey, JSON.stringify(slim));
+ this.persistActivitySessionCookie(slim);
  } catch (e3) {
  console.warn('SessionStorage activity persist also failed:', e3);
  }
  }
  }
 
+ persistActivitySessionCookie(payload) {
+ try {
+ const slim = {
+ v: 3,
+ r: payload.isRunning ? 1 : 0,
+ p: payload.isPaused ? 1 : 0,
+ e: Math.round(Number(payload.elapsedSecAtPause) || 0),
+ st: payload.startTime || null,
+ sc: Number(payload.stepCount) || 0,
+ d: Number(payload.distanceKm) || 0,
+ ps: Number(payload.pendingSegmentKm) || 0,
+ td: Number(payload.trackedDistanceKm) || 0,
+ m: payload.trackingMode || 'outdoor',
+ tg: payload.timeToGoalSec == null ? null : Number(payload.timeToGoalSec),
+ uk: payload.userKey || 'local',
+ at: payload.savedAt || Date.now()
+ };
+ const enc = btoa(unescape(encodeURIComponent(JSON.stringify(slim))));
+ // 12h cookie backup — survives some Safari localStorage purges after lock
+ document.cookie = `${this.activitySessionKey}=${enc}; max-age=${12 * 3600}; path=/; SameSite=Lax`;
+ } catch (e) { /* ignore */ }
+ }
+
+ loadActivitySessionCookie() {
+ try {
+ const match = document.cookie.split(';').map((c) => c.trim()).find((c) => c.startsWith(this.activitySessionKey + '='));
+ if (!match) return null;
+ const enc = match.slice(this.activitySessionKey.length + 1);
+ const slim = JSON.parse(decodeURIComponent(escape(atob(enc))));
+ if (!slim || !slim.st) return null;
+ return {
+ version: 3,
+ isRunning: !!slim.r,
+ isPaused: !!slim.p,
+ elapsedSecAtPause: Number(slim.e) || 0,
+ startTime: slim.st,
+ stepCount: Number(slim.sc) || 0,
+ distanceKm: Number(slim.d) || 0,
+ pendingSegmentKm: Number(slim.ps) || 0,
+ trackedDistanceKm: Number(slim.td) || 0,
+ trackingMode: slim.m === 'treadmill' ? 'treadmill' : 'outdoor',
+ timeToGoalSec: slim.tg,
+ userKey: slim.uk || 'local',
+ path: [],
+ savedAt: Number(slim.at) || Date.now()
+ };
+ } catch (e) {
+ return null;
+ }
+ }
+
+ persistActivitySessionIdb(raw) {
+ try {
+ if (!window.indexedDB) return;
+ const req = indexedDB.open('wowcsg_activity_db', 1);
+ req.onupgradeneeded = () => {
+ const db = req.result;
+ if (!db.objectStoreNames.contains('sessions')) db.createObjectStore('sessions');
+ };
+ req.onsuccess = () => {
+ try {
+ const db = req.result;
+ const tx = db.transaction('sessions', 'readwrite');
+ tx.objectStore('sessions').put(raw, this.activitySessionKey);
+ } catch (e) { /* ignore */ }
+ };
+ } catch (e) { /* ignore */ }
+ }
+
+ loadActivitySessionIdb() {
+ return new Promise((resolve) => {
+ try {
+ if (!window.indexedDB) { resolve(null); return; }
+ const req = indexedDB.open('wowcsg_activity_db', 1);
+ req.onerror = () => resolve(null);
+ req.onupgradeneeded = () => {
+ const db = req.result;
+ if (!db.objectStoreNames.contains('sessions')) db.createObjectStore('sessions');
+ };
+ req.onsuccess = () => {
+ try {
+ const db = req.result;
+ const tx = db.transaction('sessions', 'readonly');
+ const getReq = tx.objectStore('sessions').get(this.activitySessionKey);
+ getReq.onsuccess = () => {
+ try {
+ const raw = getReq.result;
+ resolve(raw ? JSON.parse(raw) : null);
+ } catch (e) { resolve(null); }
+ };
+ getReq.onerror = () => resolve(null);
+ } catch (e) { resolve(null); }
+ };
+ // Don't hang restore forever
+ setTimeout(() => resolve(null), 800);
+ } catch (e) { resolve(null); }
+ });
+ }
+
  loadActivitySession() {
  try {
- let raw = localStorage.getItem(this.activitySessionKey);
+ let raw = null;
+ try { raw = localStorage.getItem(this.activitySessionKey); } catch (e0) { /* ignore */ }
  if (!raw) {
  try { raw = sessionStorage.getItem(this.activitySessionKey); } catch (e) { /* ignore */ }
  }
- if (!raw) return null;
+ if (raw) {
  const data = JSON.parse(raw);
- if (!data || !data.startTime) return null;
- if (!data.isRunning && !data.isPaused) return null;
- return data;
+ if (data && data.startTime && (data.isRunning || data.isPaused)) return data;
+ }
+ return this.loadActivitySessionCookie();
  } catch (error) {
  console.warn('Could not load activity session:', error);
- return null;
+ return this.loadActivitySessionCookie();
  }
  }
 
@@ -7891,6 +8027,34 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  console.warn('Could not clear activity session:', error);
  }
  try { sessionStorage.removeItem(this.activitySessionKey); } catch (e2) { /* ignore */ }
+ try {
+ document.cookie = `${this.activitySessionKey}=; max-age=0; path=/; SameSite=Lax`;
+ } catch (e3) { /* ignore */ }
+ try {
+ if (window.indexedDB) {
+ const req = indexedDB.open('wowcsg_activity_db', 1);
+ req.onsuccess = () => {
+ try {
+ const db = req.result;
+ if (!db.objectStoreNames.contains('sessions')) return;
+ db.transaction('sessions', 'readwrite').objectStore('sessions').delete(this.activitySessionKey);
+ } catch (e) { /* ignore */ }
+ };
+ }
+ } catch (e4) { /* ignore */ }
+ }
+
+ async tryRestoreActivitySessionAsync(options = {}) {
+ // Prefer sync sources first; fill from IndexedDB if needed
+ if (this.tryRestoreActivitySession(options)) return true;
+ const idb = await this.loadActivitySessionIdb();
+ if (idb && idb.startTime) {
+ try {
+ localStorage.setItem(this.activitySessionKey, JSON.stringify(idb));
+ } catch (e) { /* ignore */ }
+ return this.tryRestoreActivitySession(options);
+ }
+ return false;
  }
 
  tryRestoreActivitySession(options = {}) {
@@ -8566,7 +8730,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.onActivityVisibilityChange();
  // bfcache / reload after lock: restore persisted session if needed
  if (!this.stepCounter.isRunning && !this.stepCounter.isPaused) {
- this.tryRestoreActivitySession({ asPaused: true });
+ this.tryRestoreActivitySessionAsync({ asPaused: true });
  }
  if (event && event.persisted && this.stepCounter.isRunning) {
  this.ensureActivityRuntimeAlive('Activity resumed from browser cache.');
@@ -8584,7 +8748,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (!this.stepCounter.isRunning && !this.stepCounter.isPaused) {
  // Page may have been killed while locked — try restore when user returns
  if (document.visibilityState === 'visible') {
- this.tryRestoreActivitySession({ asPaused: true });
+ await this.tryRestoreActivitySessionAsync({ asPaused: true });
  }
  return;
  }
@@ -8609,8 +8773,21 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  hint.textContent = 'Phone locked: progress is auto-saved. If the browser reloads, tap Resume — do not Start again.';
  }
  // Re-persist a few times while hidden (browsers throttle timers; first writes matter most)
- setTimeout(() => this.persistActivitySession(true), 500);
+ setTimeout(() => this.persistActivitySession(true), 200);
+ setTimeout(() => this.persistActivitySession(true), 800);
  setTimeout(() => this.persistActivitySession(true), 2000);
+ // Keep writing every 2s while locked until the OS suspends JS
+ if (this._hiddenPersistId) clearInterval(this._hiddenPersistId);
+ this._hiddenPersistId = setInterval(() => {
+ if (document.visibilityState === 'visible') {
+ clearInterval(this._hiddenPersistId);
+ this._hiddenPersistId = null;
+ return;
+ }
+ if (this.stepCounter.isRunning || this.stepCounter.isPaused) {
+ this.persistActivitySession(true);
+ }
+ }, 2000);
  return;
  }
 

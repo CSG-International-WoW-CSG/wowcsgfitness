@@ -57,12 +57,13 @@
         log('Clearing…');
         try {
           [
-            'stepEntries', 'stepEntries_cache', 'participants_cache', 'wowcsg_active_activity_v1',
-            'wowcsg_boot_fails_v69', 'wowcsg_boot_fails_v80', 'wowcsg_boot_fails_v81', 'wowcsg_boot_fails_v82'
+            'stepEntries', 'stepEntries_cache', 'participants_cache',
+            'wowcsg_boot_fails_v69', 'wowcsg_boot_fails_v80', 'wowcsg_boot_fails_v81', 'wowcsg_boot_fails_v82', 'wowcsg_boot_fails_v99'
           ].forEach(function (k) {
             try { localStorage.removeItem(k); } catch (e0) {}
             try { sessionStorage.removeItem(k); } catch (e1) {}
           });
+          // NEVER clear wowcsg_active_activity_v1 here — that deletes an in-progress walk
           try { sessionStorage.clear(); } catch (e2) {}
           log('Cleared local data');
         } catch (e) { log('localStorage: ' + e); }

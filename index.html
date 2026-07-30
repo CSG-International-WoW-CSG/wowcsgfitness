@@ -15,7 +15,8 @@
     <!-- iOS: stop heavy CSS/GPU path before stylesheets are requested -->
     <script>
     (function () {
-      var KEY = 'wowcsg_boot_fails_v82';
+      var KEY = 'wowcsg_boot_fails_v99';
+      var ACT = 'wowcsg_active_activity_v1';
       var ua = navigator.userAgent || '';
       var isIos = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
       window.__WOWCSG_IOS__ = isIos;
@@ -23,29 +24,18 @@
       window.__WOWCSG_DEFER_FIRESTORE__ = isIos;
       try {
         if (isIos) document.documentElement.classList.add('ios-lite');
-        var n = Number(sessionStorage.getItem(KEY) || '0');
-        sessionStorage.setItem(KEY, String(n + 1));
-        window.__WOWCSG_SAFE_BOOT__ = n >= 1 || isIos;
-        function dropAllLocalCaches() {
-          // Crash-loop recovery only. Never clear wowcsg_active_activity_v1 on
-          // normal iPhone loads — Safari reloads after lock and that wiped runs.
-          try {
-            localStorage.removeItem('stepEntries');
-            localStorage.removeItem('stepEntries_cache');
-            localStorage.removeItem('participants_cache');
-          } catch (e1b) {}
-        }
-        function wipeIdb() {
-          try {
-            if (!window.indexedDB) return;
-            if (typeof indexedDB.databases === 'function') {
-              indexedDB.databases().then(function (dbs) {
-                (dbs || []).forEach(function (db) {
-                  if (db && db.name) try { indexedDB.deleteDatabase(db.name); } catch (e2) {}
-                });
-              }).catch(function () {});
-            }
-          } catch (e3) {}
+        // If an activity is in progress, lock/reload is NORMAL — never treat as crash
+        // and never wipe that session (old boot logic sent users to recover.html).
+        var hasActiveActivity = false;
+        try { hasActiveActivity = !!localStorage.getItem(ACT) || !!sessionStorage.getItem(ACT); } catch (eAct) {}
+        if (hasActiveActivity) {
+          try { sessionStorage.setItem(KEY, '0'); } catch (e0) {}
+          window.__WOWCSG_SAFE_BOOT__ = !!isIos;
+        } else {
+          var n = Number(sessionStorage.getItem(KEY) || '0');
+          sessionStorage.setItem(KEY, String(n + 1));
+          window.__WOWCSG_SAFE_BOOT__ = n >= 1 || isIos;
+          // Manual repair only — auto-recover wiped in-progress walks after lock
         }
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.getRegistrations().then(function (regs) {
@@ -57,24 +47,16 @@
             return Promise.all(keys.map(function (k) { return caches.delete(k); }));
           }).catch(function () {});
         }
-        // Only full-wipe on repeated crash loops (lock/reload is normal — do NOT
-        // treat 2 reloads as a crash or wipe the in-progress activity session).
-        if (n >= 5) { dropAllLocalCaches(); wipeIdb(); }
-        if (isIos && n >= 5 && location.search.indexOf('recovered=1') < 0) {
-          try { window.stop(); } catch (e0b) {}
-          location.replace('./recover.html?auto=1');
-          return;
-        }
       } catch (e) {
         window.__WOWCSG_SAFE_BOOT__ = true;
         try { document.documentElement.classList.add('ios-lite'); } catch (e4) {}
       }
       // Stylesheets: iPhone gets tiny ios.css only (no GPU mesh / backdrop CSS)
       if (isIos) {
-        document.write('<link rel="stylesheet" href="ios.css?v=82">');
+        document.write('<link rel="stylesheet" href="ios.css?v=99">');
       } else {
-        document.write('<link rel="stylesheet" href="styles.css?v=82">');
-        document.write('<link rel="stylesheet" href="ui-refresh.css?v=82">');
+        document.write('<link rel="stylesheet" href="styles.css?v=99">');
+        document.write('<link rel="stylesheet" href="ui-refresh.css?v=99">');
       }
     })();
     </script>
@@ -723,7 +705,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-30-v98 | Android APK v1.0.25 · iPhone: free Home Screen app</p>
+            <p class="footer-subtext">Site version: 2026-07-30-v99 | Android APK v1.0.25 · iPhone: free Home Screen app</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#androidAppCard" class="help-link">Download Android App</a>
@@ -858,7 +840,7 @@
       if (!isIos) {
         scripts.push('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js');
       }
-      scripts.push('firebase-config.js', 'security-config.js?v=2', 'native-bridge.js?v=56', isIos ? 'script.min.js?v=98' : 'script.js?v=98');
+      scripts.push('firebase-config.js', 'security-config.js?v=2', 'native-bridge.js?v=57', isIos ? 'script.min.js?v=99' : 'script.js?v=99');
       function loadCss(href) {
         var l = document.createElement('link');
         l.rel = 'stylesheet';
