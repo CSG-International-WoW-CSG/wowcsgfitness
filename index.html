@@ -113,6 +113,7 @@
                     <a class="btn btn-primary" href="#loginCard">Join Challenge</a>
                     <a class="btn btn-ghost" href="#leaderboardCard">View Leaderboard</a>
                     <a class="btn btn-ghost" href="#androidAppCard">Get Android App</a>
+                    <a class="btn btn-ghost" href="#iosAppCard">iOS App</a>
                     <a class="btn btn-ghost" href="#dayPlanCard">7-Day Plan</a>
                     <a class="btn btn-ghost" href="./recover.html">Site won&rsquo;t open? Repair</a>
                 </div>
@@ -170,11 +171,33 @@
             </ol>
             <p class="android-app-note">
                 Internal CSG challenge build only (not on Play Store).
-                iPhone users should continue using this website (Add to Home Screen).
             </p>
             <p class="android-app-note">
                 Phone shows &ldquo;Can&rsquo;t open this page&rdquo;?
                 Open <a href="./recover.html"><strong>Repair site access</strong></a>, tap Clear cache &amp; reopen, then try again.
+            </p>
+        </div>
+
+        <!-- iOS app -->
+        <div class="card android-app-card guest-only" id="iosAppCard">
+            <div class="challenge-header">
+                <div class="card-header-icon-wrapper">
+                    <div class="card-header-icon">&#128241;</div>
+                    <div class="icon-glow"></div>
+                </div>
+                <h2>iPhone / iOS App</h2>
+            </div>
+            <p class="android-app-lead">
+                A native iOS app project is ready (Capacitor). Build it on a Mac with Xcode and share via TestFlight for better tracking than Safari alone.
+            </p>
+            <ol class="android-install-steps">
+                <li><strong>Until TestFlight is published:</strong> use this website in Safari → Share → <strong>Add to Home Screen</strong>.</li>
+                <li>Hard-refresh so the footer shows the latest site version before you Start Activity.</li>
+                <li>Allow Location when prompted. Keep Safari open if you lock the phone — progress auto-saves for Resume.</li>
+                <li>CSG builders: see <code>IOS.md</code> in the repo for Xcode / CocoaPods / TestFlight steps.</li>
+            </ol>
+            <p class="android-app-note">
+                Bundle ID: <code>com.csgi.wowcsgfitness</code> · Same Firebase login as Android / web (<code>@csgi.com</code>).
             </p>
         </div>
 
@@ -696,7 +719,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-30-v96 | Android APK v1.0.25</p>
+            <p class="footer-subtext">Site version: 2026-07-30-v97 | Android APK v1.0.25 · iOS via Xcode/TestFlight</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#androidAppCard" class="help-link">Download Android App</a>
@@ -831,7 +854,7 @@
       if (!isIos) {
         scripts.push('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js');
       }
-      scripts.push('firebase-config.js', 'security-config.js?v=2', 'native-bridge.js?v=55', isIos ? 'script.min.js?v=96' : 'script.js?v=96');
+      scripts.push('firebase-config.js', 'security-config.js?v=2', 'native-bridge.js?v=56', isIos ? 'script.min.js?v=97' : 'script.js?v=97');
       function loadCss(href) {
         var l = document.createElement('link');
         l.rel = 'stylesheet';

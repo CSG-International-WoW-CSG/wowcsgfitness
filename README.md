@@ -55,6 +55,19 @@ npm install
 npm run android
 ```
 
+### Option 4: iOS App (Xcode / TestFlight)
+
+See **[IOS.md](./IOS.md)** — Capacitor iOS project (`ios/`).  
+Requires a **Mac + Xcode + Apple Developer** account to build and distribute via TestFlight.
+
+```bash
+npm install
+npm run ios:sync
+# then on a Mac: pod install && npm run ios
+```
+
+Until TestFlight is live, iPhone users can use the website (Add to Home Screen).
+
 ## Customization
 
 Edit `challengeConfig` at the top of `script.js` to change dates, KM goals, or steps-per-KM conversion.

@@ -7,6 +7,10 @@ android/captures/
 android/local.properties
 android/*.iml
 android/.idea/
+ios/App/Pods/
+ios/App/build/
+ios/DerivedData/
+ios/App/App/public/
 .idea/
 *.log
 _wipe-firebase-data.js

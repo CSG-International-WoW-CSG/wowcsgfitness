@@ -7,10 +7,13 @@ const www = join(root, 'www');
 const files = [
   'index.html',
   'admin.html',
+  'recover.html',
   'script.js',
+  'script.min.js',
   'native-bridge.js',
   'styles.css',
   'ui-refresh.css',
+  'ios.css',
   'firebase-config.js',
   'security-config.js',
   'service-worker.js',

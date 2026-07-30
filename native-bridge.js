@@ -1,8 +1,8 @@
 /**
- * Native bridge for Capacitor Android.
+ * Native bridge for Capacitor (Android + iOS).
  * On web browsers this is a no-op and the existing web tracking code runs.
- * On Android it uses hardware STEP_COUNTER + Capacitor Geolocation +
- * a foreground TrackingKeepAlive service for lock-screen continuity.
+ * On Android: hardware STEP_COUNTER + Geolocation + TrackingKeepAlive FGS.
+ * On iOS: Core Motion pedometer (plugin) + Capacitor Geolocation.
  */
 (function initNativeBridge(global) {
   const bridge = {
