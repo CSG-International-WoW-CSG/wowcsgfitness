@@ -10,7 +10,6 @@ on:
     paths:
       - 'ios/**'
       - 'package.json'
-      - 'package-lock.json'
       - 'capacitor.config.json'
       - 'scripts/copy-www.mjs'
       - '.github/workflows/ios-build.yml'
@@ -32,11 +31,23 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: npm
+          node-version: '22'
 
-      - name: Install JS deps
-        run: npm ci
+      - name: Install Capacitor deps only
+        # Skip firebase-tools/admin — they bloat CI and break npm ci lock sync.
+        # Capacitor sync only needs the packages below.
+        run: |
+          set -euo pipefail
+          npm install --no-audit --no-fund --no-package-lock \
+            @capacitor/cli@6.2.0 \
+            @capacitor/core@6.2.0 \
+            @capacitor/ios@6.2.0 \
+            @capacitor/android@6.2.0 \
+            @capacitor/app@6.0.3 \
+            @capacitor/geolocation@6.1.1 \
+            @capacitor/splash-screen@6.0.4 \
+            @capacitor/status-bar@6.0.3 \
+            @tubbly/tubbly-capacitor-pedometer@0.0.9
 
       - name: Copy web assets + sync Capacitor iOS
         run: |
@@ -45,17 +56,22 @@ jobs:
 
       - name: Install CocoaPods
         working-directory: ios/App
-        run: |
-          pod install --repo-update
+        run: pod install
 
-      - name: Select Xcode
+      - name: Show Xcode
         run: |
-          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
           xcodebuild -version
+          ls /Applications | grep -i Xcode || true
 
       - name: Build for iOS Simulator (no signing)
         working-directory: ios/App
         run: |
+          set -euo pipefail
+          if [ ! -d App.xcworkspace ]; then
+            echo "App.xcworkspace missing after pod install"
+            ls -la
+            exit 1
+          fi
           xcodebuild \
             -workspace App.xcworkspace \
             -scheme App \
@@ -64,9 +80,10 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath DerivedData \
             CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
             build
 
-      - name: Upload build logs / products
+      - name: Upload simulator product
         if: always()
         uses: actions/upload-artifact@v4
         with:
