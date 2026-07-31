@@ -3434,13 +3434,30 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             };
             const existing = byId.get(String(entry.id));
             if (existing) {
+                let patched = false;
+                // Apply admin date moves even when Firestore sync is quota-blocked and
+                // localStorage still has the old calendar day (keeps Day N boards correct).
+                if (entry.date && String(existing.date) !== String(entry.date)) {
+                    existing.date = entry.date;
+                    patched = true;
+                }
+                if (
+                    entry.challengeDay != null &&
+                    Number(existing.challengeDay) !== Number(entry.challengeDay)
+                ) {
+                    existing.challengeDay = Number(entry.challengeDay);
+                    patched = true;
+                }
                 // Prefer newer/longer cloud rows; fill gaps from snapshot
                 if (!(Number(existing.distanceKm) > 0) && Number(entry.distanceKm) > 0) {
                     existing.distanceKm = Number(entry.distanceKm);
+                    patched = true;
                 }
                 if (!(Number(existing.durationSec) > 0) && Number(entry.durationSec) > 0) {
                     existing.durationSec = Number(entry.durationSec);
+                    patched = true;
                 }
+                if (patched) added += 1;
                 return;
             }
             // Also skip if a real cloud entry for same person/day/distance already exists
