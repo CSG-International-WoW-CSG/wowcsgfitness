@@ -146,28 +146,8 @@ class StepathonApp {
                 // Delay paint on iOS so cold start / reload doesn't fight Firebase + JSON parse
                 const iosBanner = document.getElementById('iosBootBanner');
                 const iosLoadBtn = document.getElementById('iosLoadRankingsBtn');
-                if (this.isLowMemoryClient()) {
-                    if (iosBanner) iosBanner.style.display = 'block';
-                    if (iosLoadBtn) {
-                        iosLoadBtn.style.display = 'block';
-                        iosLoadBtn.addEventListener('click', () => {
-                            iosLoadBtn.disabled = true;
-                            iosLoadBtn.textContent = 'Loading…';
-                            this.ensureFirestore()
-                                .then(() => this.syncParticipantsFromFirebase({
-                                    skipEntries: false,
-                                    force: true
-                                }))
-                                .then(() => {
-                                    this.ensurePublicLeaderboardReady();
-                                    iosLoadBtn.textContent = 'Rankings loaded';
-                                })
-                                .catch(() => {
-                                    iosLoadBtn.disabled = false;
-                                    iosLoadBtn.textContent = 'Load rankings';
-                                });
-                        });
-                    }
+                if (this.isLowMemoryClient() && iosBanner) {
+                    iosBanner.style.display = 'block';
                 }
                 setTimeout(() => {
                     if (!this.isLowMemoryClient()) {
@@ -175,7 +155,7 @@ class StepathonApp {
                     } else {
                         const list = document.getElementById('leaderboardList');
                         if (list) {
-                            list.innerHTML = '<div class="leaderboard-item"><div class="name">Tap “Load rankings” to refresh the board.</div></div>';
+                            list.innerHTML = '<div class="leaderboard-item"><div class="name">Tap “Refresh rankings” to load the board.</div></div>';
                         }
                     }
                     // Successful paint — reset crash-loop counter so lock/reload is not treated as a crash
@@ -184,16 +164,50 @@ class StepathonApp {
                         if (bootKey) sessionStorage.setItem(bootKey, '0');
                     } catch (eBoot) { /* ignore */ }
                 }, this.isLowMemoryClient() ? 500 : 100);
+                // Always-visible refresh — forces recent-by-date pull (fixes stale Day boards)
+                if (iosLoadBtn && !iosLoadBtn.dataset.boundRefresh) {
+                    iosLoadBtn.dataset.boundRefresh = '1';
+                    iosLoadBtn.style.display = 'block';
+                    iosLoadBtn.textContent = 'Refresh rankings';
+                    iosLoadBtn.addEventListener('click', () => {
+                        iosLoadBtn.disabled = true;
+                        iosLoadBtn.textContent = 'Loading…';
+                        this._lastRecentEntriesSyncAt = 0;
+                        this._lastStepEntriesSyncAt = 0;
+                        if (this._feedHydrateCache) this._feedHydrateCache = {};
+                        this.ensureFirestore()
+                            .then(() => this.syncRecentStepEntriesByDate(250, { force: true }))
+                            .then(() => this.ensurePublicLeaderboardReady())
+                            .then(() => {
+                                iosLoadBtn.textContent = 'Rankings updated';
+                                iosLoadBtn.disabled = false;
+                                setTimeout(() => { iosLoadBtn.textContent = 'Refresh rankings'; }, 2500);
+                            })
+                            .catch(() => {
+                                iosLoadBtn.disabled = false;
+                                iosLoadBtn.textContent = 'Refresh rankings';
+                                alert('Could not refresh rankings. Check your network and try again.');
+                            });
+                    });
+                }
                 const iosTip = document.getElementById('iosTrackingTip');
                 if (iosTip && /iPhone|iPad|iPod/i.test(navigator.userAgent || '')) {
                     iosTip.style.display = 'block';
                 }
             });
- // Desktop/Android: sync for public leaderboard. iOS waits for explicit Load rankings / login.
+ // Desktop/Android: sync for public leaderboard. iOS waits for explicit Refresh rankings / login.
  if (!this.isLowMemoryClient()) {
-   const syncDelayMs = window.__WOWCSG_SAFE_BOOT__ ? 4500 : 2500;
+   const syncDelayMs = window.__WOWCSG_SAFE_BOOT__ ? 4500 : 2000;
    setTimeout(() => {
-     this.syncParticipantsFromFirebase({ skipEntries: false });
+     this.ensureFirestore()
+       .then(() => this.syncRecentStepEntriesByDate(250, { force: true }))
+       .then(() => this.syncParticipantsFromFirebase({ skipEntries: false }))
+       .then(() => {
+         this._lastRecentEntriesSyncAt = 0;
+         if (this._feedHydrateCache) this._feedHydrateCache = {};
+         return this.ensurePublicLeaderboardReady();
+       })
+       .catch((e) => console.warn('Deferred public board sync failed:', e));
    }, syncDelayMs);
  }
  } else {
@@ -3364,15 +3378,24 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
     /**
      * Show today's (or latest) day board for everyone — including signed-out visitors.
+     * Waits for Firebase, pulls newest stepEntries by date, then paints.
      */
-    ensurePublicLeaderboardReady() {
+    async ensurePublicLeaderboardReady() {
         const dayNum = this.getChallengeDayNumber();
         const filter = dayNum >= 1 && dayNum <= 7 ? `day-${dayNum}` : 'total';
         document.querySelectorAll('.filter-btn, .day-filter-btn').forEach((b) => b.classList.remove('active'));
         const btn = document.querySelector(`.day-filter-btn[data-filter="${filter}"], .filter-btn[data-filter="${filter}"]`);
         if (btn) btn.classList.add('active');
-        // Still skip FULL collection sync (Spark), but day boards pull recent rows by date.
-        this.updateLeaderboard(filter, { skipRemoteSync: true });
+        try {
+            await this.ensureFirestore();
+            this._lastRecentEntriesSyncAt = 0;
+            if (this._feedHydrateCache) this._feedHydrateCache = {};
+            await this.syncRecentStepEntriesByDate(250, { force: true });
+        } catch (e) {
+            console.warn('Public board pre-sync skipped:', e);
+        }
+        // Still skip FULL collection sync (Spark), day path uses recent-by-date above.
+        await this.updateLeaderboard(filter, { skipRemoteSync: true });
     }
 
     /**
@@ -3380,12 +3403,15 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
      * Public boards were stuck on stale localStorage because full .get() is skipped
      * and many finishers never posted to Team Feed.
      */
-    async syncRecentStepEntriesByDate(limit = 200) {
+    async syncRecentStepEntriesByDate(limit = 200, options = {}) {
+        await this.ensureFirestore();
         if (!this.firebaseEnabled || !this.db) return 0;
+        const force = !!(options && options.force);
         const now = Date.now();
         if (
+            !force &&
             this._lastRecentEntriesSyncAt &&
-            (now - this._lastRecentEntriesSyncAt) < 60 * 1000 &&
+            (now - this._lastRecentEntriesSyncAt) < 45 * 1000 &&
             Array.isArray(this.stepEntries) &&
             this.stepEntries.length > 20
         ) {
@@ -3398,6 +3424,13 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 snap.docs.map((doc) => {
                     const data = doc.data() || {};
                     if (!data.id) data.id = doc.id;
+                    // Normalize Timestamp → ISO so day bucketing is stable after cache reload
+                    if (data.date != null) {
+                        data.date = this.parseEntryDate(data.date).toISOString();
+                    }
+                    if (data.durationSec != null) data.durationSec = Number(data.durationSec);
+                    if (data.distanceKm != null) data.distanceKm = Number(data.distanceKm);
+                    if (data.timeToGoalSec != null) data.timeToGoalSec = Number(data.timeToGoalSec);
                     return lean ? this.leanStepEntry(data) : data;
                 })
             );
@@ -3410,6 +3443,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             );
             this._lastRecentEntriesSyncAt = now;
             this.saveStepEntries();
+            console.log('syncRecentStepEntriesByDate merged', remote.length, 'recent cloud entries');
             return remote.length;
         } catch (err) {
             console.warn('syncRecentStepEntriesByDate failed:', err);
@@ -6991,22 +7025,20 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  if (dayMatch) {
  const dayNum = parseInt(dayMatch[1], 10);
+ const renderToken = (this._leaderboardRenderToken = (this._leaderboardRenderToken || 0) + 1);
  // Always refill recent cloud entries + feed (even when full sync is skipped).
- // Without this, public boards stay frozen on an old localStorage snapshot.
  try {
- await this.syncRecentStepEntriesByDate(220);
+ await this.syncRecentStepEntriesByDate(250, { force: true });
  } catch (recentErr) {
  console.warn('Recent stepEntries sync skipped:', recentErr);
  }
- // Bust stale empty hydrate cache from earlier quota failures
- if (this._feedHydrateCache && this._feedHydrateCache[dayNum] && !this._feedHydrateCache[dayNum].ok) {
- delete this._feedHydrateCache[dayNum];
- }
+ if (this._feedHydrateCache) delete this._feedHydrateCache[dayNum];
  try {
  await this.hydrateDayBoardEntriesFromFeed(dayNum);
  } catch (hydrateErr) {
  console.warn('Day board feed hydrate skipped:', hydrateErr);
  }
+ if (renderToken !== this._leaderboardRenderToken) return;
  this.stepEntries = this.filterCurrentSeasonEntries(this.stepEntries || []);
  sorted = this.getDayLeaderboardRows(dayNum);
  // Heal pending legal finishers so totals/feed stay in sync with the day board
@@ -7536,8 +7568,10 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 }
             } catch (error) {
                 console.warn('Failed to sync step entries from Firebase:', error);
-                // Spark quota / full-collection read failed — still restore personal + feed history
+                // Spark quota / full-collection read failed — pull newest-by-date (has Utkarsh etc.)
+                // Feed-only fallback misses finishers who never posted to Team Feed.
                 try {
+                    await this.syncRecentStepEntriesByDate(250, { force: true });
                     await this.syncCurrentUserStepEntriesFromFirebase();
                     await this.hydrateRecentFeedIntoStepEntries(220);
                 } catch (fallbackErr) {
