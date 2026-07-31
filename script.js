@@ -176,7 +176,8 @@ class StepathonApp {
                         this._lastStepEntriesSyncAt = 0;
                         if (this._feedHydrateCache) this._feedHydrateCache = {};
                         this.ensureFirestore()
-                            .then(() => this.syncRecentStepEntriesByDate(250, { force: true }))
+                            .then(() => this.hydrateFromDayBoardsSnapshot())
+                            .then(() => this.syncRecentStepEntriesByDate(80, { force: true }))
                             .then(() => this.ensurePublicLeaderboardReady())
                             .then(() => {
                                 iosLoadBtn.textContent = 'Rankings updated';
@@ -195,13 +196,14 @@ class StepathonApp {
                     iosTip.style.display = 'block';
                 }
             });
- // Desktop/Android: sync for public leaderboard. iOS waits for explicit Refresh rankings / login.
+ // Desktop/Android: light sync only — NEVER full stepEntries dump (Spark 50k/day).
  if (!this.isLowMemoryClient()) {
    const syncDelayMs = window.__WOWCSG_SAFE_BOOT__ ? 4500 : 2000;
    setTimeout(() => {
      this.ensureFirestore()
-       .then(() => this.syncRecentStepEntriesByDate(250, { force: true }))
-       .then(() => this.syncParticipantsFromFirebase({ skipEntries: false }))
+       .then(() => this.hydrateFromDayBoardsSnapshot())
+       .then(() => this.syncRecentStepEntriesByDate(60, { force: true }))
+       .then(() => this.syncParticipantsFromFirebase({ skipEntries: true }))
        .then(() => {
          this._lastRecentEntriesSyncAt = 0;
          if (this._feedHydrateCache) this._feedHydrateCache = {};
@@ -3386,16 +3388,79 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         document.querySelectorAll('.filter-btn, .day-filter-btn').forEach((b) => b.classList.remove('active'));
         const btn = document.querySelector(`.day-filter-btn[data-filter="${filter}"], .filter-btn[data-filter="${filter}"]`);
         if (btn) btn.classList.add('active');
+        // Snapshot first — works even when Firestore Spark quota is exhausted (429)
+        try {
+            await this.hydrateFromDayBoardsSnapshot();
+        } catch (e) {
+            console.warn('Day boards snapshot hydrate skipped:', e);
+        }
         try {
             await this.ensureFirestore();
             this._lastRecentEntriesSyncAt = 0;
             if (this._feedHydrateCache) this._feedHydrateCache = {};
-            await this.syncRecentStepEntriesByDate(250, { force: true });
+            await this.syncRecentStepEntriesByDate(80, { force: true });
         } catch (e) {
             console.warn('Public board pre-sync skipped:', e);
         }
-        // Still skip FULL collection sync (Spark), day path uses recent-by-date above.
+        // Never full-collection sync for anonymous public viewers (burns Spark quota)
         await this.updateLeaderboard(filter, { skipRemoteSync: true });
+    }
+
+    /**
+     * Load GitHub Pages static snapshot of day-board finishers.
+     * Used when Firestore reads are quota-blocked so web/app stay in sync.
+     */
+    async hydrateFromDayBoardsSnapshot() {
+        const url = `day-boards-snapshot.json?v=${Date.now()}`;
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error('snapshot HTTP ' + res.status);
+        const data = await res.json();
+        if (!data || data.season !== this.dataSeason || !Array.isArray(data.entries)) return 0;
+        if (!Array.isArray(this.stepEntries)) this.stepEntries = this.loadStepEntriesSafely();
+        const byId = new Map(
+            (this.stepEntries || []).filter((e) => e && e.id).map((e) => [String(e.id), e])
+        );
+        let added = 0;
+        data.entries.forEach((raw) => {
+            if (!raw || !raw.id) return;
+            const entry = {
+                ...raw,
+                status: raw.status || 'approved',
+                season: this.dataSeason,
+                validatedBy: raw.validatedBy || 'Static day-board snapshot',
+                validatedAt: raw.validatedAt || data.updatedAt || new Date().toISOString(),
+                notes: raw.notes || 'Loaded from day-boards-snapshot.json (Firestore quota fallback)',
+                _fromSnapshot: true
+            };
+            const existing = byId.get(String(entry.id));
+            if (existing) {
+                // Prefer newer/longer cloud rows; fill gaps from snapshot
+                if (!(Number(existing.distanceKm) > 0) && Number(entry.distanceKm) > 0) {
+                    existing.distanceKm = Number(entry.distanceKm);
+                }
+                if (!(Number(existing.durationSec) > 0) && Number(entry.durationSec) > 0) {
+                    existing.durationSec = Number(entry.durationSec);
+                }
+                return;
+            }
+            // Also skip if a real cloud entry for same person/day/distance already exists
+            const dup = (this.stepEntries || []).find((e) =>
+                e && !String(e.id).startsWith('SNAP_') &&
+                this.getChallengeDayNumber(this.parseEntryDate(e.date)) === Number(entry.challengeDay) &&
+                Math.abs((Number(e.distanceKm) || 0) - (Number(entry.distanceKm) || 0)) < 0.08 &&
+                (
+                    (entry.userUid && e.userUid && String(e.userUid) === String(entry.userUid)) ||
+                    this.namesStronglyMatch(e.userName || '', entry.userName || '')
+                )
+            );
+            if (dup) return;
+            this.stepEntries.unshift(entry);
+            byId.set(String(entry.id), entry);
+            added += 1;
+        });
+        if (added) this.saveStepEntries();
+        console.log('hydrateFromDayBoardsSnapshot added', added, 'from', data.updatedAt);
+        return added;
     }
 
     /**
@@ -3403,7 +3468,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
      * Public boards were stuck on stale localStorage because full .get() is skipped
      * and many finishers never posted to Team Feed.
      */
-    async syncRecentStepEntriesByDate(limit = 200, options = {}) {
+    async syncRecentStepEntriesByDate(limit = 80, options = {}) {
         await this.ensureFirestore();
         if (!this.firebaseEnabled || !this.db) return 0;
         const force = !!(options && options.force);
@@ -3417,14 +3482,29 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         ) {
             return 0;
         }
+        const tryQuery = async (build) => {
+            const snap = await build().get();
+            return snap;
+        };
         try {
             const lean = this.isLowMemoryClient();
-            const snap = await this.stepEntriesCol().orderBy('date', 'desc').limit(limit).get();
+            let snap = null;
+            try {
+                snap = await tryQuery(() =>
+                    this.stepEntriesCol()
+                        .where('season', '==', this.dataSeason)
+                        .orderBy('date', 'desc')
+                        .limit(limit)
+                );
+            } catch (idxErr) {
+                snap = await tryQuery(() =>
+                    this.stepEntriesCol().orderBy('date', 'desc').limit(Math.min(limit, 60))
+                );
+            }
             const remote = this.filterCurrentSeasonEntries(
                 snap.docs.map((doc) => {
                     const data = doc.data() || {};
                     if (!data.id) data.id = doc.id;
-                    // Normalize Timestamp → ISO so day bucketing is stable after cache reload
                     if (data.date != null) {
                         data.date = this.parseEntryDate(data.date).toISOString();
                     }
@@ -3447,6 +3527,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             return remote.length;
         } catch (err) {
             console.warn('syncRecentStepEntriesByDate failed:', err);
+            this._lastStepEntriesSyncError = String((err && err.message) || err);
             return 0;
         }
     }
@@ -7028,7 +7109,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const renderToken = (this._leaderboardRenderToken = (this._leaderboardRenderToken || 0) + 1);
  // Always refill recent cloud entries + feed (even when full sync is skipped).
  try {
- await this.syncRecentStepEntriesByDate(250, { force: true });
+ await this.hydrateFromDayBoardsSnapshot();
+ } catch (snapErr) {
+ console.warn('Day boards snapshot skipped:', snapErr);
+ }
+ try {
+ await this.syncRecentStepEntriesByDate(80, { force: true });
  } catch (recentErr) {
  console.warn('Recent stepEntries sync skipped:', recentErr);
  }

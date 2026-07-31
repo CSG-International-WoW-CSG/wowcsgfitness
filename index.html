@@ -53,10 +53,10 @@
       }
       // Stylesheets: iPhone gets tiny ios.css only (no GPU mesh / backdrop CSS)
       if (isIos) {
-        document.write('<link rel="stylesheet" href="ios.css?v=105">');
+        document.write('<link rel="stylesheet" href="ios.css?v=106">');
       } else {
-        document.write('<link rel="stylesheet" href="styles.css?v=105">');
-        document.write('<link rel="stylesheet" href="ui-refresh.css?v=105">');
+        document.write('<link rel="stylesheet" href="styles.css?v=106">');
+        document.write('<link rel="stylesheet" href="ui-refresh.css?v=106">');
       }
     })();
     </script>
@@ -705,7 +705,7 @@
                 <span class="htag htag-pink">#WellnessAtCSG</span>
                 <span class="htag htag-blue">#EveryStepCounts</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-31-v105 | Android APK v1.0.25 · iPhone: free Home Screen app</p>
+            <p class="footer-subtext">Site version: 2026-07-31-v106 | Android: use web/Home Screen until APK 1.0.26 rebuild</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#androidAppCard" class="help-link">Download Android App</a>
@@ -840,7 +840,7 @@
       if (!isIos) {
         scripts.push('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js');
       }
-      scripts.push('firebase-config.js', 'security-config.js?v=2', 'native-bridge.js?v=57', isIos ? 'script.min.js?v=105' : 'script.js?v=105');
+      scripts.push('firebase-config.js', 'security-config.js?v=2', 'native-bridge.js?v=57', isIos ? 'script.min.js?v=106' : 'script.js?v=106');
       function loadCss(href) {
         var l = document.createElement('link');
         l.rel = 'stylesheet';

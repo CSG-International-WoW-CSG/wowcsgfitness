@@ -21,7 +21,8 @@ const files = [
   'favicon.svg',
   'brand-mark.svg',
   'CSG_Logo_K_outline.jpg',
-  'challenge-flyer.png'
+  'challenge-flyer.png',
+  'day-boards-snapshot.json'
 ];
 
 const iconFiles = ['icons/apple-touch-icon.png', 'icons/icon-512.png'];
@@ -60,10 +61,11 @@ if (!html.includes('src="security-config.js"')) {
   );
 }
 
-if (!html.includes('src="native-bridge.js"')) {
+// Keep whatever cache-bust query the root index.html already uses (do not pin v=35)
+if (!html.includes('src="native-bridge.js"') && !html.includes("native-bridge.js")) {
   html = html.replace(
-    /<script src="script\.js[^"]*"><\/script>/,
-    '<script src="native-bridge.js"></script>\n    <script src="script.js?v=35"></script>'
+    /scripts\.push\(([^)]*firebase-config\.js[^)]*)\)/,
+    (m) => m
   );
 }
 
