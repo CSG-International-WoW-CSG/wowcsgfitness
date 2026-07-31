@@ -241,11 +241,22 @@ class StepathonApp {
                     if (Array.isArray(parsed)) {
                         const lean = parsed
                             .map((e) => this.leanStepEntry(e))
-                            .filter((e) => e && e.id)
-                            .sort((a, b) => this.entryTimestampMs(b) - this.entryTimestampMs(a))
-                            .slice(0, 250);
-                        localStorage.setItem(storageKey, JSON.stringify(lean));
-                        return lean;
+                            .filter((e) => e && e.id);
+                        const mine = [];
+                        const others = [];
+                        const me = this.currentUser;
+                        lean.forEach((e) => {
+                            if (me && this.entryBelongsToParticipant(e, me)) mine.push(e);
+                            else others.push(e);
+                        });
+                        others.sort((a, b) => this.entryTimestampMs(b) - this.entryTimestampMs(a));
+                        // Always keep the signed-in user's history, then newest others
+                        const keepMine = mine.slice(0, 120);
+                        const keepOthers = others.slice(0, Math.max(50, 250 - keepMine.length));
+                        const trimmed = keepMine.concat(keepOthers)
+                            .sort((a, b) => this.entryTimestampMs(b) - this.entryTimestampMs(a));
+                        localStorage.setItem(storageKey, JSON.stringify(trimmed));
+                        return trimmed;
                     }
                 } catch (trimErr) {
                     console.warn('Trim failed, keeping empty until Firebase sync:', trimErr);
@@ -3302,7 +3313,16 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         if (this.firebaseEnabled) {
             try {
                 await this.recoverUnsyncedActivitiesForCurrentUser({ silent: true });
+                // Personal uid query first (cheap, works under Spark when full sync is blocked)
+                await this.syncCurrentUserStepEntriesFromFirebase();
                 await this.syncStepEntriesFromFirebase();
+                // If still thin history, pull newest Team Feed posts into local cache
+                const mine = (this.stepEntries || []).filter(
+                    (e) => e && this.currentUser && this.entryBelongsToParticipant(e, this.currentUser)
+                );
+                if (mine.length < 3) {
+                    await this.hydrateRecentFeedIntoStepEntries(220);
+                }
             } catch (e) {
                 console.warn('Dashboard entry sync skipped:', e);
             }
@@ -6291,33 +6311,44 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  /**
  * Pull Team Feed posts into stepEntries for a challenge day so feed finishers
  * are never missing from that day's leaderboard.
- * Cached per day for 10 minutes to avoid re-reading 80 feed docs on every tab click.
+ * Cached per day for 10 minutes ONLY after a successful read (never cache quota errors).
  */
  async hydrateDayBoardEntriesFromFeed(dayNum) {
  if (!this.firebaseEnabled || !this.db) return 0;
  if (!this._feedHydrateCache) this._feedHydrateCache = {};
  const cacheTtlMs = 10 * 60 * 1000;
  const cached = this._feedHydrateCache[dayNum];
- if (cached && (Date.now() - cached.at) < cacheTtlMs) {
+ if (cached && cached.ok && (Date.now() - cached.at) < cacheTtlMs) {
  return cached.addedOrPatched || 0;
  }
 
  const goalKm = this.challengeConfig.dayGoalsKm[dayNum - 1] || dayNum;
  let addedOrPatched = 0;
  try {
- let snap;
+ let snap = null;
+ // Prefer newest-first so Day N is present even when season+date index is missing:
+ // 1) season+visible+date (composite)
+ // 2) date-only newest (single-field index) then filter season/day client-side
+ // 3) season-only (last resort — unordered, use a large limit)
  try {
  snap = await this.activityFeedCol()
  .where('season', '==', this.dataSeason)
  .where('visible', '==', true)
  .orderBy('date', 'desc')
- .limit(120)
+ .limit(200)
  .get();
  } catch (idxErr) {
+ try {
+ snap = await this.activityFeedCol()
+ .orderBy('date', 'desc')
+ .limit(250)
+ .get();
+ } catch (dateErr) {
  snap = await this.activityFeedCol()
  .where('season', '==', this.dataSeason)
- .limit(150)
+ .limit(400)
  .get();
+ }
  }
  if (!Array.isArray(this.stepEntries)) this.stepEntries = [];
  const byId = new Map(
@@ -6327,6 +6358,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  snap.docs.forEach((doc) => {
  const p = doc.data();
  if (!p || p.visible === false) return;
+ if (p.season && p.season !== this.dataSeason) return;
  const entryId = p.entryId || p.id;
  if (!entryId) return;
  const dateVal = p.date;
@@ -6340,7 +6372,6 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const existing = byId.get(String(entryId));
  if (existing) {
  let patched = false;
- // Fill gaps so day-board pace/finish can be computed like the feed UI
  if (!(Number(existing.durationSec) > 0) && Number(p.durationSec) > 0) {
  existing.durationSec = Number(p.durationSec);
  patched = true;
@@ -6357,7 +6388,10 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  existing.userName = p.userName;
  patched = true;
  }
- // Feed-visible posts should not stay stuck as pending for day boards
+ if (!existing.userEmail && p.userEmail) {
+ existing.userEmail = p.userEmail;
+ patched = true;
+ }
  if (String(existing.status || '').toLowerCase() === 'pending') {
  existing.status = 'approved';
  existing.validatedBy = existing.validatedBy || 'Feed hydrate';
@@ -6393,11 +6427,110 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  byId.set(String(entryId), synthesized);
  addedOrPatched += 1;
  });
+ if (addedOrPatched) this.saveStepEntries();
+ this._feedHydrateCache[dayNum] = { at: Date.now(), addedOrPatched, ok: true };
+ return addedOrPatched;
  } catch (err) {
  console.warn('hydrateDayBoardEntriesFromFeed failed:', err);
+ // Do NOT cache failures — quota/index errors must retry on next tab click
+ return 0;
  }
- this._feedHydrateCache[dayNum] = { at: Date.now(), addedOrPatched };
- return addedOrPatched;
+ }
+
+ /**
+ * Merge newest Team Feed posts into local stepEntries (all challenge days).
+ * Used when full stepEntries sync fails under Spark quota.
+ */
+ async hydrateRecentFeedIntoStepEntries(limit = 200) {
+ if (!this.firebaseEnabled || !this.db) return 0;
+ let snap;
+ try {
+ snap = await this.activityFeedCol().orderBy('date', 'desc').limit(limit).get();
+ } catch (e1) {
+ try {
+ snap = await this.activityFeedCol()
+ .where('season', '==', this.dataSeason)
+ .limit(limit)
+ .get();
+ } catch (e2) {
+ console.warn('hydrateRecentFeedIntoStepEntries failed:', e2);
+ return 0;
+ }
+ }
+ if (!Array.isArray(this.stepEntries)) this.stepEntries = this.loadStepEntriesSafely();
+ const byId = new Map(
+ (this.stepEntries || []).filter((e) => e && e.id).map((e) => [String(e.id), e])
+ );
+ let added = 0;
+ snap.docs.forEach((doc) => {
+ const p = doc.data();
+ if (!p || p.visible === false) return;
+ if (p.season && p.season !== this.dataSeason) return;
+ const entryId = String(p.entryId || p.id || '');
+ if (!entryId || byId.has(entryId)) return;
+ const dist = Number(p.distanceKm) || 0;
+ const steps = Number(p.steps) || 0;
+ if (dist <= 0.005 && steps <= 0) return;
+ const dateVal = p.date || new Date().toISOString();
+ const synthesized = {
+ id: entryId,
+ userUid: p.userUid || null,
+ userId: p.userId || null,
+ userName: p.userName || 'Teammate',
+ userEmail: p.userEmail || null,
+ steps,
+ distanceKm: dist,
+ caloriesBurned: Number(p.caloriesBurned) || 0,
+ durationSec: p.durationSec == null ? null : Number(p.durationSec),
+ date: dateVal,
+ challengeDay: this.getChallengeDayNumber(this.parseEntryDate(dateVal)),
+ status: 'approved',
+ validatedBy: 'Feed history hydrate',
+ validatedAt: new Date().toISOString(),
+ notes: 'Restored from Team Feed while full stepEntries sync was unavailable.',
+ source: p.source || 'gps-counter',
+ trackingMode: p.trackingMode || null,
+ season: this.dataSeason,
+ _fromFeed: true
+ };
+ this.stepEntries.unshift(synthesized);
+ byId.set(entryId, synthesized);
+ added += 1;
+ });
+ if (added) this.saveStepEntries();
+ return added;
+ }
+
+ /**
+ * Cheap personal history refill — works when full-collection sync hits Spark quota.
+ * Utkarsh and others still have all days under userUid in Firestore.
+ */
+ async syncCurrentUserStepEntriesFromFirebase() {
+ if (!this.firebaseEnabled || !this.db || !this.auth || !this.auth.currentUser) return 0;
+ const uid = this.auth.currentUser.uid;
+ const lean = this.isLowMemoryClient();
+ let remote = [];
+ try {
+ const snap = await this.stepEntriesCol().where('userUid', '==', uid).limit(80).get();
+ remote = snap.docs.map((doc) => {
+ const data = doc.data() || {};
+ if (!data.id) data.id = doc.id;
+ return lean ? this.leanStepEntry(data) : data;
+ });
+ } catch (err) {
+ console.warn('Personal stepEntries sync failed:', err);
+ return 0;
+ }
+ if (!remote.length) return 0;
+ const localBefore = Array.isArray(this.stepEntries)
+ ? this.stepEntries.slice()
+ : this.loadStepEntriesSafely();
+ this.stepEntries = this.filterCurrentSeasonEntries(
+ this.mergeStepEntries(localBefore, this.filterCurrentSeasonEntries(remote))
+ );
+ this.saveStepEntries();
+ if (this.currentUser) this.refreshCurrentUserTotalsFromEntries();
+ return remote.length;
  }
 
  /**
@@ -6783,7 +6916,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         list.innerHTML = '';
  this.updateLeaderboardSubtitle(filter);
 
- const skipRemoteSync = !!(options && options.skipRemoteSync);
+ const skipRemoteSync = !!(options && options.skipRemoteSync) ||
+ (this._skipLeaderboardRemoteUntil && Date.now() < this._skipLeaderboardRemoteUntil);
  const forceSync = !!(options && options.forceSync);
  // Was 45s — too aggressive. Full collection dumps × many visitors = Spark 50k/day burn.
  const syncStaleMs = 10 * 60 * 1000; // 10 minutes
@@ -7345,6 +7479,13 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 }
             } catch (error) {
                 console.warn('Failed to sync step entries from Firebase:', error);
+                // Spark quota / full-collection read failed — still restore personal + feed history
+                try {
+                    await this.syncCurrentUserStepEntriesFromFirebase();
+                    await this.hydrateRecentFeedIntoStepEntries(220);
+                } catch (fallbackErr) {
+                    console.warn('Quota fallback hydrate failed:', fallbackErr);
+                }
             } finally {
                 this._leaderboardSyncInFlight = null;
             }
@@ -10260,8 +10401,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         
         this.saveStepEntries();
         const cloudOk = await this.upsertStepEntryInFirebase(stepEntry);
-        // Prevent an immediate leaderboard sync from racing and wiping this save
-        this._lastStepEntriesSyncAt = Date.now();
+        // Short race guard only — do NOT stamp a 10-min "full sync done" or past days never refill
+        this._skipLeaderboardRemoteUntil = Date.now() + 8000;
 
         // Align personal dashboard with public leaderboard (approved entries only)
         this.recalculateParticipantTotalsFromApproved(this.currentUser);
@@ -10304,11 +10445,20 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         
         if (verify.length === 0) {
             console.error('ERROR: Entry was not saved to localStorage! Attempting manual save...');
-            // Try manual save
+            // Try manual save — MERGE into existing cache (never wipe history to one row)
             try {
                 const storageKey = this.firebaseEnabled ? 'stepEntries_cache' : 'stepEntries';
-                localStorage.setItem(storageKey, JSON.stringify([stepEntry]));
-                console.log('Manual save attempted');
+                let existing = [];
+                try {
+                    existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
+                } catch (e) {
+                    existing = [];
+                }
+                if (!Array.isArray(existing)) existing = [];
+                const merged = this.mergeStepEntries(existing, [stepEntry]);
+                localStorage.setItem(storageKey, JSON.stringify(merged.slice(0, 400)));
+                this.stepEntries = merged;
+                console.log('Manual merge save attempted, entries:', merged.length);
             } catch (e) {
                 console.error('Manual save also failed:', e);
                 alert('CRITICAL: Entry could not be saved to localStorage! Please check browser settings.');
