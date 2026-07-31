@@ -146,6 +146,7 @@
  <button class="btn btn-secondary" id="refreshUsersBtn"> Refresh Users</button>
  <button class="btn btn-secondary" id="migrateUsersBtn" title="Move local users into Firebase"> Migrate Local Users</button>
  <button class="btn btn-secondary" id="restoreFromFeedBtn" title="Rebuild missing step entries from Team Feed posts teammates can still see"> Restore Activities from Feed</button>
+ <button class="btn btn-secondary" id="restoreKnownBtn" title="Restore Hari Day 5 and other screenshot-backed missing activities"> Restore Known Missing</button>
  <button class="btn btn-danger" id="clearAllUsersBtn" title="Clear all challenge user data for this season"> Clear All User Data</button>
  </div>
  </div>
@@ -423,6 +424,17 @@
  });
  }
 
+ const restoreKnownBtn = document.getElementById('restoreKnownBtn');
+ if (restoreKnownBtn) {
+ restoreKnownBtn.addEventListener('click', () => {
+ if (!confirm('Restore screenshot-backed missing activities (including Harischandra Achari Day 5: 5.15 KM / 26:30)?')) {
+ return;
+ }
+ Promise.resolve(window.app.restoreKnownMissingActivities())
+ .catch((err) => alert('Known restore failed: ' + (err && err.message ? err.message : err)));
+ });
+ }
+
  const clearAllUsersBtn = document.getElementById('clearAllUsersBtn');
  if (clearAllUsersBtn) {
  clearAllUsersBtn.addEventListener('click', () => {
@@ -475,7 +487,7 @@
  }
 
  // Load script and initialize (cache-bust so Pages/SW cannot keep old admin/admin123 builds)
- loadScript('script.js?v=101')
+ loadScript('script.js?v=102')
  .then(() => {
  console.log('Script loaded, initializing admin page...');
  initAdminPage();

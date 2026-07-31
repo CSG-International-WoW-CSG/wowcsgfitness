@@ -4280,18 +4280,25 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             `;
         } else {
             const safeRecoverId = this.escapeHtml(String(actualUserId || ''));
+            const known = this.getKnownRecoveryPresets(user);
+            const knownBtn = known
+                ? `<button type="button" class="btn btn-small" style="margin-top: 10px; background:#003366;color:#fff;"
+                        onclick="app.adminRecoverUserActivity('${safeRecoverId}', true)">
+                        Restore known activity: ${Number(known.distanceKm).toFixed(2)} KM · ${this.formatDurationClock(known.durationSec)} · Day ${known.day}
+                   </button>`
+                : '';
             activitiesHtml = `
                 <div class="user-activities-section">
                     <h3>Activity Details</h3>
                     <div style="padding: 24px; text-align: center; background: #fff8e1; border-radius: 8px; margin-top: 15px; border: 1px solid #ffe082;">
-                        <p style="font-size: 1.05rem; color: #6d4c41; margin: 0;">No step entries found in the cloud for this user.</p>
+                        <p style="font-size: 1.05rem; color: #6d4c41; margin: 0;">No step entries found for this user.</p>
                         <p style="font-size: 0.9rem; color: #8d6e63; margin-top: 8px;">
-                            This usually means the walk stayed on their phone (failed sync) or ownership was broken.
-                            Use Recover to recreate the approved activity from their screenshot / Recent Activity.
+                            Team Feed restore needs a Firestore read. If the project is over quota, use the known-activity restore below (from their screenshot / Recent Activity).
                         </p>
-                        <button type="button" class="btn btn-small" style="margin-top: 14px;"
+                        ${knownBtn}
+                        <button type="button" class="btn btn-small" style="margin-top: 10px;"
                             onclick="app.adminRecoverUserActivity('${safeRecoverId}')">
-                            Recover missing activity
+                            Recover missing activity (manual)
                         </button>
                     </div>
                 </div>
@@ -4891,10 +4898,39 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
     }
 
     /**
+     * Known lost activities reconstructed from support screenshots when Team Feed
+     * cannot be read (Firestore Sparks quota) or stepEntries were wiped.
+     */
+    getKnownRecoveryPresets(user) {
+        if (!user) return null;
+        const email = String(user.email || user.emailId || user.emailLower || '').toLowerCase().trim();
+        const name = this.normalizePersonName(user.name || user.username || '');
+        // Harischandra Achari — Day 5 outdoor, seen on his phone + previously on Team Feed
+        if (
+            email === 'harischandra.achari@csgi.com' ||
+            name === 'harischandra achari' ||
+            (name.includes('harischandra') && name.includes('achari'))
+        ) {
+            return {
+                distanceKm: 5.15,
+                steps: 6695,
+                durationSec: 1590, // 26:30
+                calories: 326,
+                day: 5,
+                // ~18:42 IST on 30 Jul 2026
+                dateIso: '2026-07-30T13:12:00.000Z',
+                label: 'Hari Day 5 (5.15 KM / 26:30)'
+            };
+        }
+        return null;
+    }
+
+    /**
      * Admin: recreate a missing approved activity when Last Activity is set but
      * stepEntries/feed rows never made it to the cloud (device-only save).
+     * Pass useKnown=true to skip prompts and use getKnownRecoveryPresets(user).
      */
-    async adminRecoverUserActivity(userId) {
+    async adminRecoverUserActivity(userId, useKnown = false) {
         if (!this.requireAdmin()) return;
         this.participants = this.loadParticipants();
         const searchId = String(userId || '');
@@ -4910,38 +4946,67 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             return;
         }
 
-        const distStr = prompt('Distance KM from their Recent Activity (e.g. 5.15):', '5.15');
-        if (distStr == null) return;
-        const distanceKm = Number(distStr);
-        if (!(distanceKm > 0)) {
-            alert('Enter a valid distance in KM.');
-            return;
+        let distanceKm;
+        let steps;
+        let durationSec;
+        let day;
+        let calories;
+        let dateIso;
+
+        const known = useKnown ? this.getKnownRecoveryPresets(user) : null;
+        if (known) {
+            const ok = confirm(
+                `Restore known activity for ${user.name || user.email}?\n\n` +
+                `${known.label || ''}\n` +
+                `${known.distanceKm} KM · ${known.steps} steps · ${this.formatDurationClock(known.durationSec)}\n` +
+                `Challenge Day ${known.day}\n\n` +
+                `This recreates the approved cloud entry so Day board + profile show it again.`
+            );
+            if (!ok) return;
+            distanceKm = known.distanceKm;
+            steps = known.steps;
+            durationSec = known.durationSec;
+            day = known.day;
+            calories = known.calories;
+            dateIso = known.dateIso;
+        } else {
+            const distStr = prompt('Distance KM from their Recent Activity (e.g. 5.15):', '5.15');
+            if (distStr == null) return;
+            distanceKm = Number(distStr);
+            if (!(distanceKm > 0)) {
+                alert('Enter a valid distance in KM.');
+                return;
+            }
+
+            const stepsStr = prompt('Steps (optional — leave blank to estimate):', String(Math.round(distanceKm * (this.challengeConfig.stepsPerKm || 1300))));
+            if (stepsStr == null) return;
+            steps = Math.max(0, Math.round(Number(stepsStr) || (distanceKm * (this.challengeConfig.stepsPerKm || 1300))));
+
+            const durStr = prompt('Duration as M:SS or total seconds (e.g. 26:30 or 1590):', '26:30');
+            if (durStr == null) return;
+            durationSec = 0;
+            const clock = String(durStr).trim().match(/^(\d+)\s*:\s*(\d{1,2})$/);
+            if (clock) durationSec = (Number(clock[1]) * 60) + Number(clock[2]);
+            else durationSec = Math.round(Number(durStr) || 0);
+            if (!(durationSec > 0)) {
+                alert('Enter a valid duration.');
+                return;
+            }
+
+            const dayHint = this.getChallengeDayNumber(new Date()) || 5;
+            const dayStr = prompt('Challenge day number (1–7):', String(dayHint));
+            if (dayStr == null) return;
+            day = Math.max(1, Math.min(7, Math.round(Number(dayStr) || dayHint)));
+            calories = this.estimateCaloriesBurned(distanceKm, durationSec, 70);
+            const dayOffset = day - 1;
+            dateIso = new Date(Date.parse('2026-07-26T18:30:00+05:30') + dayOffset * 86400000).toISOString();
         }
 
-        const stepsStr = prompt('Steps (optional — leave blank to estimate):', String(Math.round(distanceKm * (this.challengeConfig.stepsPerKm || 1300))));
-        if (stepsStr == null) return;
-        const steps = Math.max(0, Math.round(Number(stepsStr) || (distanceKm * (this.challengeConfig.stepsPerKm || 1300))));
-
-        const durStr = prompt('Duration as M:SS or total seconds (e.g. 26:30 or 1590):', '26:30');
-        if (durStr == null) return;
-        let durationSec = 0;
-        const clock = String(durStr).trim().match(/^(\d+)\s*:\s*(\d{1,2})$/);
-        if (clock) durationSec = (Number(clock[1]) * 60) + Number(clock[2]);
-        else durationSec = Math.round(Number(durStr) || 0);
-        if (!(durationSec > 0)) {
-            alert('Enter a valid duration.');
-            return;
-        }
-
-        const dayHint = this.getChallengeDayNumber(new Date()) || 5;
-        const dayStr = prompt('Challenge day number (1–7):', String(dayHint));
-        if (dayStr == null) return;
-        const day = Math.max(1, Math.min(7, Math.round(Number(dayStr) || dayHint)));
-        const dayOffset = day - 1;
-        const dateIso = new Date(Date.parse('2026-07-26T18:30:00+05:30') + dayOffset * 86400000).toISOString();
-        const calories = this.estimateCaloriesBurned(distanceKm, durationSec, 70);
         const goalKm = this.challengeConfig.dayGoalsKm[day - 1] || day;
         const finishSec = Math.max(1, Math.round(durationSec * (goalKm / Math.max(distanceKm, goalKm))));
+        if (calories == null) {
+            calories = this.estimateCaloriesBurned(distanceKm, durationSec, 70);
+        }
 
         const entryId = `ENTRY_RECOVER_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         const entry = {
@@ -4951,7 +5016,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             userName: user.name || user.username || 'Participant',
             userEmail: user.email || user.emailId || user.emailLower || '',
             steps,
-            distanceKm: Number(distanceKm.toFixed(3)),
+            distanceKm: Number(Number(distanceKm).toFixed(3)),
             caloriesBurned: calories,
             durationSec,
             timeToGoalSec: finishSec,
@@ -4960,7 +5025,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             status: 'approved',
             validatedBy: 'Admin recovery (missing cloud entry)',
             validatedAt: new Date().toISOString(),
-            notes: `Recovered Outdoor GPS activity: ${distanceKm.toFixed(2)} KM / ${steps} steps / ${durationSec}s`,
+            notes: `Recovered Outdoor GPS activity: ${Number(distanceKm).toFixed(2)} KM / ${steps} steps / ${durationSec}s`,
             source: 'gps-counter',
             trackingMode: 'outdoor',
             season: this.dataSeason
@@ -4971,33 +5036,65 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 'This participant has no Firebase uid on file. The entry will still be linked by email/employee ID.\n\nContinue?'
             );
             if (!proceed) return;
-            // Do NOT stamp the admin Auth uid — that orphans the row from this user.
             entry.userUid = String(user.employeeId || user.id || entryId);
         }
 
         if (!Array.isArray(this.stepEntries)) this.stepEntries = this.loadStepEntries();
+        // Avoid duplicate recoveries of the same known walk
+        const dup = this.stepEntries.find((e) =>
+            e && this.entryBelongsToParticipant(e, user) &&
+            Number(e.challengeDay) === Number(day) &&
+            Math.abs(Number(e.distanceKm) - Number(distanceKm)) < 0.05 &&
+            Math.abs((Number(e.durationSec) || 0) - durationSec) < 30
+        );
+        if (dup) {
+            alert('A matching activity is already present locally. Refreshing details.');
+            await this.viewUserDetails(user.id || user.employeeId || user.uid || searchId);
+            return;
+        }
+
         this.stepEntries.unshift(entry);
         this.saveStepEntries();
 
-        const cloudOk = await this.upsertStepEntryInFirebase(entry);
+        let cloudOk = false;
+        let cloudErr = '';
+        try {
+            cloudOk = await this.upsertStepEntryInFirebase(entry);
+            if (!cloudOk) cloudErr = entry._cloudSyncError || 'write returned false';
+        } catch (e) {
+            cloudErr = String((e && e.message) || e);
+        }
 
+        let feedOk = false;
         try {
             await this.publishActivityFeedPost(entry, { shareToFeed: true, caption: null, photoFile: null });
+            feedOk = true;
         } catch (feedErr) {
             console.warn('Recover feed post failed:', feedErr);
+            cloudErr = (cloudErr ? cloudErr + ' | ' : '') + 'feed: ' + (feedErr.message || feedErr);
         }
 
         this.recalculateParticipantTotalsFromApproved(user);
         this.saveParticipantsCache();
-        if (user.uid) await this.syncParticipantToFirebase(user);
+        if (user.uid) {
+            try { await this.syncParticipantToFirebase(user); } catch (e) { /* quota */ }
+        }
+
+        const quotaHint = /quota|resource.exhausted|429/i.test(cloudErr)
+            ? '\n\nFirestore is over daily quota. The activity is saved in THIS admin browser now; re-open Recover after quota resets (or upgrade to Blaze) to push it for everyone.'
+            : '';
 
         alert(
-            (cloudOk ? 'Activity recovered in the cloud.\n\n' : 'Saved locally; cloud write may have failed (quota?). Retry when Firebase is healthy.\n\n') +
-            `${distanceKm.toFixed(2)} KM · ${steps} steps · ${this.formatDurationClock(durationSec)} · Day ${day}`
+            (cloudOk
+                ? 'Activity recovered in the cloud.\n\n'
+                : 'Saved on this admin session' + (cloudErr ? ` (cloud write failed: ${cloudErr})` : '') + '.\n\n') +
+            `${Number(distanceKm).toFixed(2)} KM · ${steps} steps · ${this.formatDurationClock(durationSec)} · Day ${day}` +
+            (feedOk ? '\nTeam Feed post created.' : '\nTeam Feed post not created yet.') +
+            quotaHint
         );
         await this.viewUserDetails(user.id || user.employeeId || user.uid || searchId);
         try {
-            await this.updateLeaderboard(null, { forceSync: true });
+            await this.updateLeaderboard(null, { skipRemoteSync: true });
         } catch (e) { /* non-fatal */ }
     }
 
@@ -5120,6 +5217,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
      */
     async hydrateAdminEntriesFromFeed(options = {}) {
         if (!this.firebaseEnabled || !this.db) return 0;
+        this._lastFeedHydrateError = null;
         const persist = options.persist !== false && !!this.isAdmin;
         let snap;
         try {
@@ -5130,10 +5228,16 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 .limit(250)
                 .get();
         } catch (idxErr) {
-            snap = await this.activityFeedCol()
-                .where('season', '==', this.dataSeason)
-                .limit(300)
-                .get();
+            try {
+                snap = await this.activityFeedCol()
+                    .where('season', '==', this.dataSeason)
+                    .limit(300)
+                    .get();
+            } catch (readErr) {
+                this._lastFeedHydrateError = readErr;
+                console.warn('Team Feed hydrate failed:', readErr);
+                throw readErr;
+            }
         }
         if (!Array.isArray(this.stepEntries)) this.stepEntries = [];
         const byId = new Map(
@@ -5275,18 +5379,58 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         }
         try {
             await this.syncStepEntriesFromFirebase({ force: true });
-            const n = await this.hydrateAdminEntriesFromFeed({ persist: true });
+            let n = 0;
+            try {
+                n = await this.hydrateAdminEntriesFromFeed({ persist: true });
+            } catch (feedErr) {
+                const msg = String((feedErr && feedErr.message) || feedErr || '');
+                const quota = /quota|resource.exhausted|429/i.test(msg);
+                alert(
+                    (quota
+                        ? 'Firestore daily quota is exceeded — Team Feed cannot be read right now.\n\n'
+                        : 'Team Feed could not be read:\n' + msg + '\n\n') +
+                    'Workaround:\n' +
+                    '1. Open the user (e.g. Harischandra Achari)\n' +
+                    '2. Click “Restore known activity” (or Recover missing activity)\n' +
+                    '3. Confirm — this rebuilds Day board + profile from their screenshot numbers.\n\n' +
+                    'For a permanent fix, upgrade Firebase to Blaze or wait until the free quota resets.'
+                );
+                return;
+            }
             await this.updateAdminDashboard({ skipRemoteSync: true });
             alert(
                 (n > 0
                     ? `Restored / relinked ${n} activities from Team Feed into stepEntries.\n\n`
-                    : 'No missing feed activities found to restore (or feed could not be read).\n\n') +
-                'Open the user again — activities that teammates could see on the feed should now appear under their profile.'
+                    : 'Feed was readable, but no missing posts were found to restore.\n\n' +
+                      'If a specific user is still empty, open their profile and use “Restore known activity” / Recover missing activity.\n\n') +
+                'Then open the user again to verify.'
             );
         } catch (err) {
             console.error(err);
             alert('Feed restore failed: ' + (err && err.message ? err.message : err));
         }
+    }
+
+    /** Admin: restore all hard-coded known missing activities (e.g. Hari Day 5). */
+    async restoreKnownMissingActivities() {
+        if (!this.requireAdmin()) return;
+        this.participants = this.loadParticipants();
+        const targets = (this.participants || []).filter((p) => this.getKnownRecoveryPresets(p));
+        if (!targets.length) {
+            alert('No known recovery profiles found in the current participants list.\n\nOpen Harischandra Achari → Restore known activity.');
+            return;
+        }
+        let done = 0;
+        for (const user of targets) {
+            const id = user.id || user.employeeId || user.uid || user.email;
+            try {
+                await this.adminRecoverUserActivity(id, true);
+                done += 1;
+            } catch (e) {
+                console.warn('Known recover failed for', id, e);
+            }
+        }
+        alert(`Known recovery finished for ${done} user(s).`);
     }
 
     createEntryHTML(entry) {
