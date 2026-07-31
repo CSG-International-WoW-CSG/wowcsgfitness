@@ -1,24 +1,25 @@
 {
   "season": "jul2026-v2",
-  "updatedAt": "2026-08-01T21:05:00.000Z",
-  "note": "Static fallback while Spark Firestore quota is exhausted. Regenerated from cloud when reads work. Includes admin date move for Suyash ENTRY_1785522687888_ca0div369 (Day 7 → Day 6).",
+  "updatedAt": "2026-08-01T22:20:00.000Z",
+  "note": "Static fallback while Spark Firestore quota is exhausted. Suyash ENTRY_1785522687888_ca0div369 locked to Day 6 with admin timing 24:54 / 6.444 KM.",
   "entries": [
     {
       "id": "ENTRY_1785522687888_ca0div369",
       "userName": "Suyash",
       "userUid": "No8ivWuFuiW7n4ehdeizO1tIVBF3",
       "userId": "79186",
-      "distanceKm": 8.444,
-      "durationSec": 3537,
+      "distanceKm": 6.444,
+      "durationSec": 1494,
+      "timeToGoalSec": 1494,
       "steps": 10977,
       "caloriesBurned": 674,
-      "date": "2026-07-31T14:30:00.000Z",
+      "date": "2026-07-31T17:31:27.000Z",
       "challengeDay": 6,
       "status": "approved",
       "source": "gps-counter",
       "trackingMode": "outdoor",
       "season": "jul2026-v2",
-      "validatedBy": "Admin date move to Day 6"
+      "validatedBy": "Admin date move to Day 6 (24:54 finish)"
     },
     {
       "id": "SNAP_D6_UTKARSH",

@@ -3448,13 +3448,24 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                     existing.challengeDay = Number(entry.challengeDay);
                     patched = true;
                 }
-                // Prefer newer/longer cloud rows; fill gaps from snapshot
-                if (!(Number(existing.distanceKm) > 0) && Number(entry.distanceKm) > 0) {
+                // Snapshot is quota fallback source of truth for admin-corrected rows
+                if (Number(entry.distanceKm) > 0 && Number(existing.distanceKm) !== Number(entry.distanceKm)) {
                     existing.distanceKm = Number(entry.distanceKm);
                     patched = true;
                 }
-                if (!(Number(existing.durationSec) > 0) && Number(entry.durationSec) > 0) {
+                if (Number(entry.durationSec) > 0 && Number(existing.durationSec) !== Number(entry.durationSec)) {
                     existing.durationSec = Number(entry.durationSec);
+                    patched = true;
+                }
+                if (
+                    entry.timeToGoalSec != null &&
+                    Number(existing.timeToGoalSec) !== Number(entry.timeToGoalSec)
+                ) {
+                    existing.timeToGoalSec = Number(entry.timeToGoalSec);
+                    patched = true;
+                }
+                if (Number(entry.steps) > 0 && Number(existing.steps) !== Number(entry.steps)) {
+                    existing.steps = Number(entry.steps);
                     patched = true;
                 }
                 if (patched) added += 1;
