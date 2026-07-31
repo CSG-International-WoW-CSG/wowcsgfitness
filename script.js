@@ -1314,8 +1314,12 @@ class StepathonApp {
  const filter = button.dataset.filter;
  document.querySelectorAll('.filter-btn, .day-filter-btn').forEach(b => b.classList.remove('active'));
  button.classList.add('active');
- // Do NOT forceSync on every day-tab click — that re-downloaded ALL
- // participants + stepEntries (hundreds of reads) and blew Spark quota.
+ // Day tabs: allow a fresh recent-by-date pull (not full collection dump)
+ if (this._feedHydrateCache && String(filter).startsWith('day-')) {
+ const dayNum = parseInt(String(filter).split('-')[1], 10);
+ delete this._feedHydrateCache[dayNum];
+ }
+ this._lastRecentEntriesSyncAt = 0;
  this.updateLeaderboard(filter, { forceSync: false });
             });
         });
@@ -3367,7 +3371,50 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         document.querySelectorAll('.filter-btn, .day-filter-btn').forEach((b) => b.classList.remove('active'));
         const btn = document.querySelector(`.day-filter-btn[data-filter="${filter}"], .filter-btn[data-filter="${filter}"]`);
         if (btn) btn.classList.add('active');
+        // Still skip FULL collection sync (Spark), but day boards pull recent rows by date.
         this.updateLeaderboard(filter, { skipRemoteSync: true });
+    }
+
+    /**
+     * Cheap day-board refill: newest stepEntries by date (single-field index).
+     * Public boards were stuck on stale localStorage because full .get() is skipped
+     * and many finishers never posted to Team Feed.
+     */
+    async syncRecentStepEntriesByDate(limit = 200) {
+        if (!this.firebaseEnabled || !this.db) return 0;
+        const now = Date.now();
+        if (
+            this._lastRecentEntriesSyncAt &&
+            (now - this._lastRecentEntriesSyncAt) < 60 * 1000 &&
+            Array.isArray(this.stepEntries) &&
+            this.stepEntries.length > 20
+        ) {
+            return 0;
+        }
+        try {
+            const lean = this.isLowMemoryClient();
+            const snap = await this.stepEntriesCol().orderBy('date', 'desc').limit(limit).get();
+            const remote = this.filterCurrentSeasonEntries(
+                snap.docs.map((doc) => {
+                    const data = doc.data() || {};
+                    if (!data.id) data.id = doc.id;
+                    return lean ? this.leanStepEntry(data) : data;
+                })
+            );
+            if (!remote.length) return 0;
+            const localBefore = Array.isArray(this.stepEntries)
+                ? this.stepEntries.slice()
+                : this.loadStepEntriesSafely();
+            this.stepEntries = this.filterCurrentSeasonEntries(
+                this.mergeStepEntries(localBefore, remote)
+            );
+            this._lastRecentEntriesSyncAt = now;
+            this.saveStepEntries();
+            return remote.length;
+        } catch (err) {
+            console.warn('syncRecentStepEntriesByDate failed:', err);
+            return 0;
+        }
     }
 
     /**
@@ -6944,7 +6991,17 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  if (dayMatch) {
  const dayNum = parseInt(dayMatch[1], 10);
- // Hydrate from feed at most once per day-tab per 10 minutes (was every click)
+ // Always refill recent cloud entries + feed (even when full sync is skipped).
+ // Without this, public boards stay frozen on an old localStorage snapshot.
+ try {
+ await this.syncRecentStepEntriesByDate(220);
+ } catch (recentErr) {
+ console.warn('Recent stepEntries sync skipped:', recentErr);
+ }
+ // Bust stale empty hydrate cache from earlier quota failures
+ if (this._feedHydrateCache && this._feedHydrateCache[dayNum] && !this._feedHydrateCache[dayNum].ok) {
+ delete this._feedHydrateCache[dayNum];
+ }
  try {
  await this.hydrateDayBoardEntriesFromFeed(dayNum);
  } catch (hydrateErr) {
