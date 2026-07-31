@@ -3464,6 +3464,17 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                     existing.timeToGoalSec = Number(entry.timeToGoalSec);
                     patched = true;
                 }
+                if (
+                    entry.forceDayBoardFinishSec != null &&
+                    Number(existing.forceDayBoardFinishSec) !== Number(entry.forceDayBoardFinishSec)
+                ) {
+                    existing.forceDayBoardFinishSec = Number(entry.forceDayBoardFinishSec);
+                    patched = true;
+                }
+                if (entry.adminPaceExempt === true && existing.adminPaceExempt !== true) {
+                    existing.adminPaceExempt = true;
+                    patched = true;
+                }
                 if (Number(entry.steps) > 0 && Number(existing.steps) !== Number(entry.steps)) {
                     existing.steps = Number(entry.steps);
                     patched = true;
@@ -6444,6 +6455,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  */
  getDayBoardFinishSec(entry, goalKm) {
  if (!entry || !(goalKm > 0)) return null;
+ // Admin-locked finish (e.g. corrected Day winner) — bypass pace DQ
+ const forced = Number(entry.forceDayBoardFinishSec);
+ if (Number.isFinite(forced) && forced > 0) return Math.round(forced);
  const maxKmh = Number(this.challengeConfig.maxHumanSpeedKmh) || 15;
  const isLegal = (sec) => {
  if (!(sec > 0)) return false;
@@ -6455,6 +6469,11 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  // Strip glitch snapshot and retry from duration / path only
  const retry = this.estimateTimeToGoalSec({ ...entry, timeToGoalSec: null }, goalKm);
  if (isLegal(retry)) return retry;
+ // Explicit admin pace exempt (notes or flag)
+ if (entry.adminPaceExempt === true || /adminPaceExempt/i.test(String(entry.notes || ''))) {
+ if (finish > 0) return Math.round(finish);
+ if (retry > 0) return Math.round(retry);
+ }
  return null;
  }
 
