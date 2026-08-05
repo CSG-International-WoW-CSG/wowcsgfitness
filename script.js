@@ -4243,6 +4243,17 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             return;
         }
 
+        // Always pull this user's cloud rows by uid/email (full dump often 429s on Spark).
+        if (this.firebaseEnabled) {
+            try {
+                const n = await this.syncParticipantStepEntriesFromFirebase(user);
+                console.log('Admin details: loaded', n, 'cloud entries for', user.name || searchId);
+            } catch (pullErr) {
+                console.warn('Admin per-user entry pull skipped:', pullErr);
+            }
+            this.stepEntries = this.filterCurrentSeasonEntries(this.stepEntries || []);
+        }
+
         const actualUserId = user.id || user.employeeId || searchId;
         // Relink orphaned feed/admin-rewritten rows back onto this participant
         try {
@@ -6716,21 +6727,59 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  */
  async syncCurrentUserStepEntriesFromFirebase() {
  if (!this.firebaseEnabled || !this.db || !this.auth || !this.auth.currentUser) return 0;
- const uid = this.auth.currentUser.uid;
+ return this.syncParticipantStepEntriesFromFirebase({
+ uid: this.auth.currentUser.uid,
+ email: this.auth.currentUser.email || (this.currentUser && (this.currentUser.email || this.currentUser.emailId))
+ });
+ }
+
+ /**
+ * Admin / profile: pull one participant's stepEntries by uid (and email fallback).
+ * Needed when full-collection .get() is quota-blocked and recent-by-date misses older days.
+ */
+ async syncParticipantStepEntriesFromFirebase(participantOrIds) {
+ if (!this.firebaseEnabled || !this.db) return 0;
+ const uid = participantOrIds && (participantOrIds.uid || participantOrIds.userUid)
+ ? String(participantOrIds.uid || participantOrIds.userUid)
+ : '';
+ const email = String(
+ (participantOrIds && (participantOrIds.email || participantOrIds.emailId || participantOrIds.userEmail)) || ''
+ ).toLowerCase().trim();
+ if (!uid && !email) return 0;
+
  const lean = this.isLowMemoryClient();
- let remote = [];
- try {
- const snap = await this.stepEntriesCol().where('userUid', '==', uid).limit(80).get();
- remote = snap.docs.map((doc) => {
+ const remote = [];
+ const seen = new Set();
+ const pushDocs = (snap) => {
+ (snap.docs || []).forEach((doc) => {
  const data = doc.data() || {};
  if (!data.id) data.id = doc.id;
- return lean ? this.leanStepEntry(data) : data;
+ const id = String(data.id);
+ if (seen.has(id)) return;
+ seen.add(id);
+ remote.push(lean ? this.leanStepEntry(data) : data);
  });
+ };
+
+ try {
+ if (uid) {
+ const snap = await this.stepEntriesCol().where('userUid', '==', uid).limit(100).get();
+ pushDocs(snap);
+ }
  } catch (err) {
- console.warn('Personal stepEntries sync failed:', err);
- return 0;
+ console.warn('Participant stepEntries by uid failed:', err);
+ }
+ // Older rows may only match on email after season reclaim / USER_* id churn
+ if (email && remote.length < 5) {
+ try {
+ const snap = await this.stepEntriesCol().where('userEmail', '==', email).limit(80).get();
+ pushDocs(snap);
+ } catch (emailErr) {
+ console.warn('Participant stepEntries by email failed:', emailErr);
+ }
  }
  if (!remote.length) return 0;
+
  const localBefore = Array.isArray(this.stepEntries)
  ? this.stepEntries.slice()
  : this.loadStepEntriesSafely();
@@ -6738,7 +6787,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  this.mergeStepEntries(localBefore, this.filterCurrentSeasonEntries(remote))
  );
  this.saveStepEntries();
- if (this.currentUser) this.refreshCurrentUserTotalsFromEntries();
+ if (this.currentUser && uid && this.currentUser.uid && String(this.currentUser.uid) === uid) {
+ this.refreshCurrentUserTotalsFromEntries();
+ }
  return remote.length;
  }
 
