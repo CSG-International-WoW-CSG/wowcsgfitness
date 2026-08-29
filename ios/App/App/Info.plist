@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>WOW-CSG Fitness</string>
+	<string>WOW-CSG Health</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -23,11 +23,11 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>WOW-CSG Fitness needs your location while you walk or run outdoors so we can measure distance for the challenge leaderboard.</string>
+	<string>WOW-CSG Health needs your location while you walk or run outdoors so we can measure distance for activity tracking.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>WOW-CSG Fitness can use location during your activity to keep outdoor KM tracking accurate when the screen locks briefly.</string>
+	<string>WOW-CSG Health can use location during your activity to keep outdoor KM tracking accurate when the screen locks briefly.</string>
 	<key>NSMotionUsageDescription</key>
-	<string>WOW-CSG Fitness uses motion and fitness data to count steps for treadmill and outdoor challenge tracking.</string>
+	<string>WOW-CSG Health uses motion and fitness data to count steps for treadmill and outdoor activity tracking.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

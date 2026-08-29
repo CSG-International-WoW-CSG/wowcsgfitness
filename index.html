@@ -8,9 +8,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="WOW-CSG Fitness">
-    <meta name="description" content="WOW-CSG 7 Days Fitness Challenge - Step Together. Thrive Together. 26 July - 1 August.">
+    <meta name="description" content="WOW-CSG Fitness — Your CSG wellness companion. Track activities, set goals, follow workouts, and move with colleagues.">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com data:; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://unpkg.com https://cdn.jsdelivr.net https://statics.teams.cdn.office.net; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebase.com https://*.cloudfunctions.net wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://www.google-analytics.com https://unpkg.com https://cdn.jsdelivr.net; worker-src 'self' blob:;">
-    <title>WOW-CSG 7 Days Fitness Challenge</title>
+    <title>WOW-CSG Fitness</title>
     <meta name="theme-color" content="#003366">
     <!-- iOS: stop heavy CSS/GPU path before stylesheets are requested -->
     <script>
@@ -53,10 +53,12 @@
       }
       // Stylesheets: iPhone gets tiny ios.css only (no GPU mesh / backdrop CSS)
       if (isIos) {
-        document.write('<link rel="stylesheet" href="ios.css?v=106">');
+        document.write('<link rel="stylesheet" href="ios.css?v=120">');
+        document.write('<link rel="stylesheet" href="fitness-app.css?v=120">');
       } else {
-        document.write('<link rel="stylesheet" href="styles.css?v=106">');
-        document.write('<link rel="stylesheet" href="ui-refresh.css?v=106">');
+        document.write('<link rel="stylesheet" href="styles.css?v=120">');
+        document.write('<link rel="stylesheet" href="ui-refresh.css?v=120">');
+        document.write('<link rel="stylesheet" href="fitness-app.css?v=120">');
       }
     })();
     </script>
@@ -77,50 +79,60 @@
         <div class="email-warning guest-only" id="firebaseIssueBanner">
             <p>Note: Firebase issue resolved: please create your account again and reupload your step entries.</p>
         </div>
+        <div class="app-brand-strip" id="appBrandStrip" aria-label="WOW-CSG branding">
+            <img src="brand-mark.svg?v=55" alt="" class="app-brand-mark" width="36" height="36">
+            <div class="app-brand-copy">
+                <span class="celebrate-pill">Fitness</span>
+                <span class="brand-wow-compact"><span class="brand-wow-part">WOW</span><span class="brand-wow-sep">-</span><span class="brand-wow-part brand-wow-csg">CSG</span></span>
+            </div>
+            <span class="app-brand-tagline">Move daily. Feel better.</span>
+        </div>
         <header class="hero-shell guest-only">
             <div class="logo-section">
-                <div class="brand-lockup" aria-label="WOW-CSG Fitness Challenge">
+                <p class="challenge-eyebrow">CSG employee fitness companion</p>
+                <div class="brand-lockup" aria-label="WOW-CSG Fitness">
                     <div class="brand-mark-wrap" aria-hidden="true">
                         <span class="brand-mark-orbit"></span>
                         <img src="brand-mark.svg?v=55" alt="" class="brand-mark-img" width="60" height="60">
                     </div>
                     <div class="brand-wordmark">
-                        <span class="brand-wow">WOW-CSG</span>
-                        <span class="brand-tag">7 Days Fitness</span>
+                        <span class="brand-wow"><span class="brand-wow-part">WOW</span><span class="brand-wow-sep">-</span><span class="brand-wow-part brand-wow-csg">CSG</span></span>
+                        <span class="brand-tag">Fitness</span>
                     </div>
                     <div class="csg-logo">
                         <span class="csg-logo-shine" aria-hidden="true"></span>
                         <img src="CSG_Logo_K_outline.jpg" alt="CSG" class="csg-logo-img">
                     </div>
                 </div>
-                <h1 class="animated-title">WOW-CSG 7 Days Fitness Challenge</h1>
+                <h1 class="animated-title"><span class="title-highlight-wow">WOW-CSG</span> Fitness</h1>
+                <p class="challenge-tagline">Track workouts &middot; Hit your goals &middot; Stay consistent</p>
                 <div class="hero-cta-row">
-                    <a class="btn btn-primary" href="#loginCard">Join Challenge</a>
-                    <a class="btn btn-ghost" href="#leaderboardCard">View Leaderboard</a>
-                    <a class="btn btn-ghost" href="#androidAppCard">Get Android App</a>
-                    <a class="btn btn-ghost" href="#iosAppCard">iOS App</a>
-                    <a class="btn btn-ghost" href="#dayPlanCard">7-Day Plan</a>
-                    <a class="btn btn-ghost" href="./recover.html">Site won&rsquo;t open? Repair</a>
+                    <a class="btn btn-primary" href="#loginCard">Start tracking</a>
+                    <a class="btn btn-ghost" href="#workoutsGuestCard">Workouts</a>
+                    <a class="btn btn-ghost" href="#leaderboardCard">Community</a>
+                    <a class="btn btn-ghost" href="#androidAppCard">Android</a>
+                    <a class="btn btn-ghost" href="#iosAppCard">iPhone</a>
+                    <a class="btn btn-ghost" href="./recover.html">Repair</a>
                 </div>
             </div>
         </header>
 
-        <section class="challenge-band guest-only" aria-label="Challenge overview">
+        <section class="challenge-band guest-only" aria-label="Fitness overview">
             <div class="challenge-band-copy">
-                <h2>Step Together. Thrive Together.</h2>
+                <p class="challenge-band-eyebrow"><strong>WOW-CSG Fitness</strong></p>
+                <h2>Your daily fitness hub</h2>
                 <p>
-                    A progressive walk/run challenge for all CSG employees &mdash; start at 1 KM and build to 7 KM.
-                    One winner every day: shortest time to that day&rsquo;s target KM (best attempt) wins.
-                    Move more, connect more, finish stronger.
+                    GPS walks &amp; runs, treadmill sessions, personal goals, workout plans, weekly progress,
+                    and a team feed &mdash; built for CSG employees who want a real fitness habit, not a one-week event.
                 </p>
-                <span class="band-dates">26 July &ndash; 1 August 2026 &middot; 7 Days &middot; Fastest Finisher Wins</span>
+                <span class="band-dates">Open year-round &middot; Personal daily goal &middot; Outdoor + treadmill</span>
             </div>
             <div class="challenge-band-meta">
                 <div class="meta-row">
-                    <div class="meta-cell"><span>Duration</span><strong id="challengeDurationTop">7 Days</strong></div>
-                    <div class="meta-cell"><span>Start</span><strong id="startDateTop">Jul 26, 2026</strong></div>
-                    <div class="meta-cell"><span>End</span><strong id="endDateTop">Aug 1, 2026</strong></div>
-                    <div class="meta-cell"><span>Daily Goal</span><strong id="infoDailyGoalTop">1&ndash;7 KM</strong></div>
+                    <div class="meta-cell"><span>App</span><strong id="challengeDurationTop">Fitness</strong></div>
+                    <div class="meta-cell"><span>Access</span><strong id="startDateTop">All CSG</strong></div>
+                    <div class="meta-cell"><span>Tracking</span><strong id="endDateTop">GPS + steps</strong></div>
+                    <div class="meta-cell"><span>Daily Goal</span><strong id="infoDailyGoalTop">5 KM</strong></div>
                 </div>
             </div>
         </section>
@@ -155,7 +167,7 @@
                 <li>Open the app and sign in with your <code>@csgi.com</code> email.</li>
             </ol>
             <p class="android-app-note">
-                Internal CSG challenge build only (not on Play Store).
+                Internal CSG wellness build only (not on Play Store).
             </p>
             <p class="android-app-note">
                 Phone shows &ldquo;Can&rsquo;t open this page&rdquo;?
@@ -191,85 +203,110 @@
         <div id="mainPageChallengeOverMessage" class="main-challenge-over-message" style="display: none;"></div>
 
         <div class="main-content">
-            <!-- Challenge Info Card -->
+            <!-- Fitness features (guest) -->
             <div class="card info-card animated-card guest-only" tabindex="-1">
                 <div class="challenge-header">
                     <div class="card-header-icon-wrapper">
-                        <div class="card-header-icon">&#128203;</div>
+                        <div class="card-header-icon">&#128170;</div>
                         <div class="icon-glow"></div>
                     </div>
-                    <h2>Challenge Details</h2>
+                    <h2>Built like a fitness app</h2>
                 </div>
                 <p class="challenge-intro">
-                    Join colleagues across CSG as we step towards <strong class="accent-pink">better health</strong>,
-                    <strong class="accent-blue">stronger connections</strong>, and a more
-                    <strong class="accent-green">active lifestyle</strong>!
+                    Track real sessions, set a personal daily goal, follow workout plans, and see weekly progress —
+                    then share with colleagues when you want company.
                 </p>
                 <div class="info-grid">
                     <div class="info-item pulse-animation info-item-1" tabindex="-1">
                         <div class="info-item-background"></div>
                         <div class="info-icon-wrapper">
-                            <div class="info-icon">&#9201;</div>
+                            <div class="info-icon">&#128506;</div>
                             <div class="icon-ripple"></div>
                         </div>
-                        <span class="label">Duration:</span>
-                        <span class="value" id="challengeDuration">7 Days</span>
+                        <span class="label">Tracking:</span>
+                        <span class="value" id="challengeDuration">GPS + steps</span>
                         <div class="info-item-shine"></div>
                     </div>
                     <div class="info-item pulse-animation info-item-2" style="animation-delay: 0.1s;" tabindex="-1">
                         <div class="info-item-background"></div>
                         <div class="info-icon-wrapper">
-                            <div class="info-icon">&#128640;</div>
+                            <div class="info-icon">&#127919;</div>
                             <div class="icon-ripple"></div>
                         </div>
-                        <span class="label">Start Date:</span>
-                        <span class="value" id="startDate">Jul 26, 2026</span>
+                        <span class="label">Goals:</span>
+                        <span class="value" id="startDate">Personal KM</span>
                         <div class="info-item-shine"></div>
                     </div>
                     <div class="info-item pulse-animation info-item-3" style="animation-delay: 0.2s;" tabindex="-1">
                         <div class="info-item-background"></div>
                         <div class="info-icon-wrapper">
-                            <div class="info-icon">&#127919;</div>
+                            <div class="info-icon">&#128170;</div>
                             <div class="icon-ripple"></div>
                         </div>
-                        <span class="label">End Date:</span>
-                        <span class="value" id="endDate">Aug 1, 2026</span>
+                        <span class="label">Workouts:</span>
+                        <span class="value" id="endDate">Guided plans</span>
                         <div class="info-item-shine"></div>
                     </div>
                     <div class="info-item pulse-animation info-item-4" style="animation-delay: 0.3s;" tabindex="-1">
                         <div class="info-item-background"></div>
                         <div class="info-icon-wrapper">
-                            <div class="info-icon">&#127937;</div>
+                            <div class="info-icon">&#128202;</div>
                             <div class="icon-ripple"></div>
                         </div>
-                        <span class="label">Daily Goal:</span>
-                        <span class="value" id="infoDailyGoal">1-7 KM (progressive)</span>
+                        <span class="label">Default goal:</span>
+                        <span class="value" id="infoDailyGoal">5 KM / day</span>
                         <div class="info-item-shine"></div>
                     </div>
                 </div>
                 <div class="challenge-rules-strip">
-                    <span>Start with 1 KM on Day 1</span>
+                    <span>Outdoor GPS or treadmill</span>
                     <span>|</span>
-                    <span>Increase by 1 KM daily</span>
+                    <span>Calories + pace</span>
                     <span>|</span>
-                    <span>Complete 7 KM on Day 7</span>
+                    <span>Weekly summary</span>
                     <span>|</span>
-                    <span>Open to All CSG Employees</span>
+                    <span>Team feed</span>
                     <span>|</span>
-                    <span>Daily winner = shortest completion time</span>
+                    <span>Open to all CSG employees</span>
                 </div>
             </div>
 
-            <!-- 7-Day Progressive Plan -->
+            <!-- Workout library (guest preview) -->
+            <div class="card day-plan-card animated-card guest-only" id="workoutsGuestCard" tabindex="-1">
+                <div class="challenge-header">
+                    <div class="card-header-icon-wrapper">
+                        <div class="card-header-icon">&#127939;</div>
+                        <div class="icon-glow"></div>
+                    </div>
+                    <h2>Workout library</h2>
+                </div>
+                <p class="day-plan-subtitle">Sign in, pick a workout, and tap Start — distance goal is applied automatically.</p>
+                <div class="workout-grid workout-grid-guest">
+                    <div class="workout-card"><span class="wo-icon">&#128694;</span><strong>Easy Walk</strong><span>3 KM · recovery</span></div>
+                    <div class="workout-card"><span class="wo-icon">&#127939;</span><strong>Steady Run</strong><span>5 KM · daily</span></div>
+                    <div class="workout-card"><span class="wo-icon">&#128293;</span><strong>Tempo</strong><span>6 KM · push</span></div>
+                    <div class="workout-card"><span class="wo-icon">&#127757;</span><strong>Long Session</strong><span>8 KM · endurance</span></div>
+                    <div class="workout-card"><span class="wo-icon">&#9889;</span><strong>Intervals</strong><span>4 KM · speed</span></div>
+                    <div class="workout-card"><span class="wo-icon">&#127919;</span><strong>Free Activity</strong><span>No target</span></div>
+                </div>
+                <div class="value-props">
+                    <div class="value-prop"><span class="vp-icon">&#128095;</span><strong>Move more</strong><span>Build a daily habit</span></div>
+                    <div class="value-prop"><span class="vp-icon">&#10084;&#65039;</span><strong>Stay healthy</strong><span>Track KM, steps &amp; kcal</span></div>
+                    <div class="value-prop"><span class="vp-icon">&#129309;</span><strong>Stay social</strong><span>Cheer teammates</span></div>
+                    <div class="value-prop"><span class="vp-icon">&#128202;</span><strong>See progress</strong><span>Today + weekly stats</span></div>
+                </div>
+            </div>
+
+            <!-- Progressive plan archive -->
             <div class="card day-plan-card animated-card guest-only" id="dayPlanCard" tabindex="-1">
                 <div class="challenge-header">
                     <div class="card-header-icon-wrapper">
                         <div class="card-header-icon">&#128197;</div>
                         <div class="icon-glow"></div>
                     </div>
-                    <h2>7-Day Progressive Plan</h2>
+                    <h2>Beginner ramp plan</h2>
                 </div>
-                <p class="day-plan-subtitle">From 1 KM to 7 KM - Every Day Stronger Than Yesterday!</p>
+                <p class="day-plan-subtitle">Optional 7-day ramp from 1 KM to 7 KM — use anytime as a personal progression.</p>
                 <div class="day-plan-grid">
                     <div class="day-plan-item" data-day="1"><span class="day-num">Day 1</span><span class="day-dist">1 KM</span><span class="day-type">Walk/Run</span></div>
                     <div class="day-plan-item" data-day="2"><span class="day-num">Day 2</span><span class="day-dist">2 KM</span><span class="day-type">Walk/Run</span></div>
@@ -279,13 +316,7 @@
                     <div class="day-plan-item" data-day="6"><span class="day-num">Day 6</span><span class="day-dist">6 KM</span><span class="day-type">Walk/Run</span></div>
                     <div class="day-plan-item" data-day="7"><span class="day-num">Day 7</span><span class="day-dist">7 KM</span><span class="day-type">Walk/Run</span></div>
                 </div>
-                <div class="value-props">
-                    <div class="value-prop"><span class="vp-icon">&#128095;</span><strong>Walk More</strong><span>Move more, feel more!</span></div>
-                    <div class="value-prop"><span class="vp-icon">&#10084;&#65039;</span><strong>Stay Healthy</strong><span>Better health, better you!</span></div>
-                    <div class="value-prop"><span class="vp-icon">&#129309;</span><strong>Build Connections</strong><span>Stronger together, every step!</span></div>
-                    <div class="value-prop"><span class="vp-icon">&#127942;</span><strong>Win Together</strong><span>Shortest time wins each day!</span></div>
-                </div>
-                <p class="challenge-quote">EVERY STEP COUNTS! Reach your daily KM goal as fast as you can &mdash; we time you to the target KM (not the full session if you go farther). Your best attempt counts. Move more, have fun, and support one another.</p>
+                <p class="challenge-quote">EVERY STEP COUNTS — build consistency first, then stretch distance.</p>
             </div>
 
             <!-- Login Section -->
@@ -303,7 +334,7 @@
 
                 <!-- User Registration Form -->
                 <div id="userLoginForm" class="login-form active">
-                    <h2>Join the Challenge</h2>
+                    <h2>Join WOW-CSG Fitness</h2>
                     <form id="registrationForm">
                         <!-- Honeypot field (hidden from users, bots might fill it) -->
                         <input type="text" id="website" name="website" style="display: none;" tabindex="-1" autocomplete="off">
@@ -345,13 +376,13 @@
                             </div>
                             <small class="form-hint">Please solve the math problem to verify you're human.</small>
                         </div>
-                        <button type="submit" class="btn btn-primary">Create Account & Join Challenge</button>
+                        <button type="submit" class="btn btn-primary">Create Account</button>
                     </form>
                 </div>
 
                 <!-- User Login Form (for existing users) -->
                 <div id="userLoginFormExisting" class="login-form" style="display: none;">
-                    <h2>Login to Challenge</h2>
+                    <h2>Login to Fitness</h2>
                     <form id="loginForm">
                         <div class="form-group">
                             <label for="loginUsername">Username / Email / Employee ID <span class="required">*</span></label>
@@ -374,23 +405,108 @@
 
             </div>
 
-            <!-- Dashboard Section -->
+            <!-- Dashboard Section (logged-in fitness shell) -->
             <div class="card dashboard" id="dashboardCard" style="display: none;">
                 <div class="dashboard-header">
-                    <h2>Welcome, <span id="userName"></span>! &#128075;</h2>
+                    <h2>Hi, <span id="userName"></span></h2>
                     <div class="dashboard-header-actions">
                         <button class="btn btn-secondary" id="helpBtn" title="Get Help">&#10067; Help</button>
                         <button class="btn btn-secondary" id="logoutBtn">Logout</button>
                     </div>
                 </div>
 
+                <!-- HOME pane -->
+                <div class="fitness-pane is-active" data-pane="home" id="fitnessPaneHome">
+                    <section class="today-hero" aria-label="Today overview">
+                        <div class="today-ring-wrap">
+                            <div class="today-ring" id="todayGoalRing" style="--goal-pct: 0;">
+                                <div class="today-ring-inner">
+                                    <strong id="todayKmHome">0.00</strong>
+                                    <span>KM today</span>
+                                </div>
+                            </div>
+                            <p class="today-goal-caption">Goal <span id="personalGoalLabel">5</span> KM · <span id="homeGoalPct">0%</span></p>
+                        </div>
+                        <div class="today-week-stats">
+                            <div class="week-stat"><span>This week</span><strong id="weekKmHome">0.0 KM</strong></div>
+                            <div class="week-stat"><span>Calories today</span><strong id="todayKcalHome">0 kcal</strong></div>
+                            <div class="week-stat"><span>Streak</span><strong id="streakHome">0 days</strong></div>
+                            <div class="week-stat"><span>Sessions (7d)</span><strong id="weekSessionsHome">0</strong></div>
+                        </div>
+                    </section>
+
+                    <div class="goal-editor-row">
+                        <label for="personalGoalKmInput">Daily goal (KM)</label>
+                        <div class="goal-editor-controls">
+                            <input type="number" id="personalGoalKmInput" min="1" max="42" step="0.5" value="5" inputmode="decimal">
+                            <button type="button" class="btn btn-primary btn-small" id="savePersonalGoalBtn">Save goal</button>
+                        </div>
+                    </div>
+
+                    <div class="home-quick-actions">
+                        <button type="button" class="btn btn-primary" data-goto-pane="activity">Start activity</button>
+                        <button type="button" class="btn btn-secondary" data-goto-pane="workouts">Choose workout</button>
+                    </div>
+
+                    <div class="stats-grid stats-grid-compact">
+                        <div class="stat-card" data-stat="today">
+                            <div class="stat-icon">&#128099;</div>
+                            <div class="stat-value" id="todaySteps">0</div>
+                            <div class="stat-label">Today</div>
+                        </div>
+                        <div class="stat-card" data-stat="total">
+                            <div class="stat-icon">&#128202;</div>
+                            <div class="stat-value" id="totalSteps">0</div>
+                            <div class="stat-label">Total</div>
+                        </div>
+                        <div class="stat-card" data-stat="streak">
+                            <div class="stat-icon">&#128293;</div>
+                            <div class="stat-value" id="streak">0</div>
+                            <div class="stat-label">Streak</div>
+                        </div>
+                        <div class="stat-card" data-stat="rank">
+                            <div class="stat-icon">&#127942;</div>
+                            <div class="stat-value" id="rank">-</div>
+                            <div class="stat-label">Rank</div>
+                        </div>
+                    </div>
+
+                    <div class="progress-section progress-section-compact">
+                        <div class="progress-header">
+                            <h3 id="dailyGoalTitle">Daily goal</h3>
+                            <span class="progress-badge" id="progressBadge">0%</span>
+                        </div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" id="progressBar">
+                                <div class="progress-fill" id="progressFill"></div>
+                                <span class="progress-text" id="progressText">0%</span>
+                            </div>
+                        </div>
+                        <div class="progress-details progress-details-compact">
+                            <span id="dailyGoalLabel">5 KM (~6,500 steps)</span>
+                            <span id="remainingSteps">6,500 left</span>
+                            <span id="todayCaloriesLabel">0 kcal today</span>
+                            <span id="totalCaloriesLabel" style="display:none">0</span>
+                        </div>
+                        <div class="motivation-messages" id="motivationMessages">
+                            <div class="motivation-badge" id="motivationBadge" style="display: none;">
+                                <span class="badge-icon">&#127919;</span>
+                                <span class="badge-text" id="badgeText"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ACTIVITY pane -->
+                <div class="fitness-pane" data-pane="activity" id="fitnessPaneActivity" hidden>
                 <!-- Start Activity first (primary action — no scrolling past marketing) -->
                 <div class="add-steps-section" id="startActivitySection">
                     <div id="stepCounterForm" class="steps-form active" style="display: block;">
                         <div class="step-counter-container step-counter-compact">
                             <div class="step-counter-header-section">
-                                <h3>Start your activity</h3>
-                                <p class="step-counter-subtitle">Outdoor GPS or treadmill &mdash; tap Start when ready</p>
+                                <h3>Track activity</h3>
+                                <p class="step-counter-subtitle">Outdoor GPS or treadmill — tap Start when ready</p>
+                                <p class="active-workout-chip" id="activeWorkoutChip" style="display:none;"></p>
                             </div>
 
                             <div class="activity-mode-row" id="activityModeRow">
@@ -518,77 +634,65 @@
                     </div>
                 </div>
 
-                <!-- Compact stats below Start -->
-                <div class="stats-grid stats-grid-compact">
-                    <div class="stat-card" data-stat="today">
-                        <div class="stat-icon">&#128099;</div>
-                        <div class="stat-value" id="todaySteps">0</div>
-                        <div class="stat-label">Today</div>
-                    </div>
-                    <div class="stat-card" data-stat="total">
-                        <div class="stat-icon">&#128202;</div>
-                        <div class="stat-value" id="totalSteps">0</div>
-                        <div class="stat-label">Total</div>
-                    </div>
-                    <div class="stat-card" data-stat="streak">
-                        <div class="stat-icon">&#128293;</div>
-                        <div class="stat-value" id="streak">0</div>
-                        <div class="stat-label">Streak</div>
-                    </div>
-                    <div class="stat-card" data-stat="rank">
-                        <div class="stat-icon">&#127942;</div>
-                        <div class="stat-value" id="rank">-</div>
-                        <div class="stat-label">Rank</div>
-                    </div>
                 </div>
+                </div><!-- /fitnessPaneActivity -->
 
-                <div class="progress-section progress-section-compact">
-                    <div class="progress-header">
-                        <h3 id="dailyGoalTitle">Daily goal</h3>
-                        <span class="progress-badge" id="progressBadge">0%</span>
+                <!-- WORKOUTS pane -->
+                <div class="fitness-pane" data-pane="workouts" id="fitnessPaneWorkouts" hidden>
+                    <div class="workouts-pane-header">
+                        <h3>Workouts</h3>
+                        <p>Pick a plan — we set the distance target, then take you to Track.</p>
                     </div>
-                    <div class="progress-bar-container">
-                        <div class="progress-bar" id="progressBar">
-                            <div class="progress-fill" id="progressFill"></div>
-                            <span class="progress-text" id="progressText">0%</span>
-                        </div>
+                    <div class="workout-grid" id="workoutLibraryGrid">
+                        <button type="button" class="workout-card workout-card-btn" data-workout="easy" data-km="3">
+                            <span class="wo-icon">&#128694;</span><strong>Easy Walk</strong><span>3 KM · recovery pace</span>
+                        </button>
+                        <button type="button" class="workout-card workout-card-btn" data-workout="daily" data-km="goal">
+                            <span class="wo-icon">&#127919;</span><strong>Daily Goal</strong><span>Your personal KM target</span>
+                        </button>
+                        <button type="button" class="workout-card workout-card-btn" data-workout="steady" data-km="5">
+                            <span class="wo-icon">&#127939;</span><strong>Steady Run</strong><span>5 KM · conversational</span>
+                        </button>
+                        <button type="button" class="workout-card workout-card-btn" data-workout="tempo" data-km="6">
+                            <span class="wo-icon">&#128293;</span><strong>Tempo</strong><span>6 KM · strong effort</span>
+                        </button>
+                        <button type="button" class="workout-card workout-card-btn" data-workout="long" data-km="8">
+                            <span class="wo-icon">&#127757;</span><strong>Long Session</strong><span>8 KM · endurance</span>
+                        </button>
+                        <button type="button" class="workout-card workout-card-btn" data-workout="intervals" data-km="4">
+                            <span class="wo-icon">&#9889;</span><strong>Intervals</strong><span>4 KM · pickups</span>
+                        </button>
+                        <button type="button" class="workout-card workout-card-btn" data-workout="free" data-km="0">
+                            <span class="wo-icon">&#127926;</span><strong>Free Activity</strong><span>No distance target</span>
+                        </button>
                     </div>
-                    <div class="progress-details progress-details-compact">
-                        <span id="dailyGoalLabel">1 KM (~1,300 steps)</span>
-                        <span id="remainingSteps">1,300 left</span>
-                        <span id="todayCaloriesLabel">0 kcal today</span>
-                        <span id="totalCaloriesLabel" style="display:none">0</span>
-                    </div>
-                    <div class="motivation-messages" id="motivationMessages">
-                        <div class="motivation-badge" id="motivationBadge" style="display: none;">
-                            <span class="badge-icon">&#127919;</span>
-                            <span class="badge-text" id="badgeText"></span>
-                        </div>
-                    </div>
+                    <p class="workouts-hint">Tip: use Outdoor GPS outdoors; switch to Treadmill indoors.</p>
                 </div>
             </div>
 
             <!-- Leaderboard (public — visible without signing in) -->
-            <div class="card leaderboard-card" id="leaderboardCard">
-                <h2>&#127941; Leaderboard</h2>
-                <p class="leaderboard-public-note">No login needed to view rankings. Sign in only to log your activity.</p>
+            <div class="card leaderboard-card fitness-community-block" id="leaderboardCard" data-community="1">
+                <h2>&#127941; Community rankings</h2>
+                <p class="leaderboard-public-note">Browse anytime. Sign in to log activities and climb the board.</p>
                 <button type="button" class="btn btn-secondary" id="iosLoadRankingsBtn" style="display:none;margin-bottom:10px;">Load rankings</button>
                 <div class="leaderboard-filters">
                     <button type="button" class="filter-btn active" data-filter="total">Total Steps</button>
                     <button type="button" class="filter-btn" data-filter="today">Today</button>
                     <button type="button" class="filter-btn" data-filter="avg">Average</button>
                 </div>
-                <p class="leaderboard-day-heading">Daily challenge boards</p>
-                <p class="leaderboard-day-note">One winner per day &mdash; ranked by shortest time to reach that day&rsquo;s KM goal (best attempt; not full session time if you ran farther).</p>
-                <div class="leaderboard-day-filters" id="dayLeaderboardFilters">
-                    <button type="button" class="day-filter-btn" data-filter="day-1">Day 1<br><span>1 KM</span></button>
-                    <button type="button" class="day-filter-btn" data-filter="day-2">Day 2<br><span>2 KM</span></button>
-                    <button type="button" class="day-filter-btn" data-filter="day-3">Day 3<br><span>3 KM</span></button>
-                    <button type="button" class="day-filter-btn" data-filter="day-4">Day 4<br><span>4 KM</span></button>
-                    <button type="button" class="day-filter-btn" data-filter="day-5">Day 5<br><span>5 KM</span></button>
-                    <button type="button" class="day-filter-btn" data-filter="day-6">Day 6<br><span>6 KM</span></button>
-                    <button type="button" class="day-filter-btn" data-filter="day-7">Day 7<br><span>7 KM</span></button>
-                </div>
+                <details class="archive-details">
+                    <summary>July 2026 challenge day boards (archive)</summary>
+                    <p class="leaderboard-day-note">Historical Day 1&ndash;7 boards — shortest time to that day&rsquo;s KM goal.</p>
+                    <div class="leaderboard-day-filters" id="dayLeaderboardFilters">
+                        <button type="button" class="day-filter-btn" data-filter="day-1">Day 1<br><span>1 KM</span></button>
+                        <button type="button" class="day-filter-btn" data-filter="day-2">Day 2<br><span>2 KM</span></button>
+                        <button type="button" class="day-filter-btn" data-filter="day-3">Day 3<br><span>3 KM</span></button>
+                        <button type="button" class="day-filter-btn" data-filter="day-4">Day 4<br><span>4 KM</span></button>
+                        <button type="button" class="day-filter-btn" data-filter="day-5">Day 5<br><span>5 KM</span></button>
+                        <button type="button" class="day-filter-btn" data-filter="day-6">Day 6<br><span>6 KM</span></button>
+                        <button type="button" class="day-filter-btn" data-filter="day-7">Day 7<br><span>7 KM</span></button>
+                    </div>
+                </details>
                 <p class="leaderboard-subtitle" id="leaderboardSubtitle">Overall ranking by total steps</p>
                 <div class="leaderboard-list" id="leaderboardList">
                     <div class="leaderboard-item">
@@ -621,15 +725,15 @@
             </div>
 
             <!-- Team Activity Feed -->
-            <div class="card feed-card" id="teamFeedCard">
+            <div class="card feed-card fitness-community-block" id="teamFeedCard" data-community="1">
                 <div class="challenge-header">
                     <div class="card-header-icon-wrapper">
                         <div class="card-header-icon">&#128247;</div>
                         <div class="icon-glow"></div>
                     </div>
-                    <h2>Team Activity Feed</h2>
+                    <h2>Team feed</h2>
                 </div>
-                <p class="feed-lead">See what teammates are up to — share a photo when you save your activity.</p>
+                <p class="feed-lead">See what teammates are up to — share a photo when you save an activity.</p>
                 <div class="feed-toolbar">
                     <button type="button" class="btn btn-secondary btn-small" id="refreshFeedBtn">Refresh feed</button>
                 </div>
@@ -639,8 +743,8 @@
             </div>
 
             <!-- Recent Activity -->
-            <div class="card activity-card">
-                <h2>&#128221; Recent Activity</h2>
+            <div class="card activity-card fitness-history-block" id="historyCard" data-history="1">
+                <h2>&#128221; Activity history</h2>
                 <div class="feed-toolbar" style="margin-bottom:10px;">
                     <button type="button" class="btn btn-secondary btn-small" id="recoverUnsyncedBtn">Recover unsaved activities</button>
                 </div>
@@ -696,16 +800,40 @@
             </div>
         </div>
 
+        <nav class="fitness-bottom-nav" id="fitnessBottomNav" aria-label="Fitness navigation" hidden>
+            <button type="button" class="fitness-nav-btn is-active" data-pane="home">
+                <span class="fnav-ico" aria-hidden="true">&#127968;</span>
+                <span>Home</span>
+            </button>
+            <button type="button" class="fitness-nav-btn" data-pane="activity">
+                <span class="fnav-ico" aria-hidden="true">&#127939;</span>
+                <span>Track</span>
+            </button>
+            <button type="button" class="fitness-nav-btn" data-pane="workouts">
+                <span class="fnav-ico" aria-hidden="true">&#128170;</span>
+                <span>Workouts</span>
+            </button>
+            <button type="button" class="fitness-nav-btn" data-pane="community">
+                <span class="fnav-ico" aria-hidden="true">&#128101;</span>
+                <span>Community</span>
+            </button>
+            <button type="button" class="fitness-nav-btn" data-pane="history">
+                <span class="fnav-ico" aria-hidden="true">&#128200;</span>
+                <span>History</span>
+            </button>
+        </nav>
+
         <footer>
-            <p>(c) 2026 CSG International | WOW-CSG 7 Days Fitness Challenge | Step Together. Thrive Together.</p>
-            <p class="footer-subtext">From 1 KM to 7 KM, Every Day Stronger Than Yesterday!</p>
+            <p>(c) 2026 CSG International | WOW-CSG Fitness | Move daily. Feel better.</p>
+            <p class="footer-subtext">Year-round fitness tracking for CSG employees — goals, workouts, GPS &amp; treadmill.</p>
             <p class="footer-hashtags">
-                <span class="htag htag-red">#WOWCSGFitnessChallenge</span>
-                <span class="htag htag-green">#StepTogetherThriveTogether</span>
-                <span class="htag htag-pink">#WellnessAtCSG</span>
-                <span class="htag htag-blue">#EveryStepCounts</span>
+                <span class="htag htag-gold">#WOWCSGFitness</span>
+                <span class="htag htag-red">#StepTogetherThriveTogether</span>
+                <span class="htag htag-green">#WellnessAtCSG</span>
+                <span class="htag htag-pink">#EveryStepCounts</span>
+                <span class="htag htag-blue">#CelebrateWOWCSG</span>
             </p>
-            <p class="footer-subtext">Site version: 2026-07-31-v106 | Android: use web/Home Screen until APK 1.0.26 rebuild</p>
+            <p class="footer-subtext">Site version: 2026-08-29-v120 | Fitness app shell</p>
             <p class="footer-subtext">Powered by CSG - Connecting People, Enabling Possibilities</p>
             <p class="footer-help">
                 <a href="#androidAppCard" class="help-link">Download Android App</a>
@@ -760,11 +888,11 @@
                 <div class="modal-body">
                     <div class="help-section">
                         <h3>&#128231; Contact Support</h3>
-                        <p>If you need assistance with the WOW-CSG 7 Days Fitness Challenge, please reach out to us:</p>
+                        <p>If you need assistance with WOW-CSG Fitness, please reach out to us:</p>
                         <div class="contact-info">
                             <div class="contact-item">
                                 <strong>Email:</strong>
-                                <a href="mailto:wow-csg@csgi.com?subject=WOW-CSG Fitness Challenge Support&body=Hello,%0D%0A%0D%0AI need help with:" class="contact-link">
+                                <a href="mailto:wow-csg@csgi.com?subject=WOW-CSG Fitness Support&body=Hello,%0D%0A%0D%0AI need help with:" class="contact-link">
                                     wow-csg@csgi.com
                                 </a>
                                 <button class="btn btn-primary btn-small" onclick="app.openEmailClient()" style="margin-top: 10px;">&#128231; Open Email Client
@@ -789,15 +917,15 @@
                         </div>
                         <div class="faq-item">
                             <strong>Q: How is my daily goal calculated?</strong>
-                            <p>A: This is a progressive 7-day challenge. Day 1 = 1 KM, Day 2 = 2 KM, ... up to Day 7 = 7 KM. For step tracking we use ~1,300 steps per KM (e.g. Day 3 goal ~ 3,900 steps). Complete your day's KM distance using the in-app Live KM / Step Counter, then Save.</p>
+                            <p>A: Set your daily KM on Home, or pick a workout. Outside events, the default is <strong>5 KM</strong> (~6,500 steps). Track with Outdoor GPS or Treadmill, then Save.</p>
                         </div>
                         <div class="faq-item">
-                            <strong>Q: Who can join and how are winners chosen?</strong>
-                            <p>A: Open to all CSG employees. There are 7 winners &mdash; one every day (26 July &ndash; 1 August). Ranking uses the shortest time to reach that day&rsquo;s target KM on a single attempt (e.g. Day 1 = time to 1 KM, even if you ran 3 KM). Your best attempt updates the leaderboard.</p>
+                            <strong>Q: Who can join? What about the July day boards?</strong>
+                            <p>A: Open to all CSG employees year-round. The Day 1&ndash;7 boards are an archive of the July 2026 challenge (under Community rankings).</p>
                         </div>
                         <div class="faq-item">
                             <strong>Q: How do I install the Android app?</strong>
-                            <p>A: First uninstall any older WOW-CSG Fitness app. Then open <a href="#androidAppCard">Android App</a>, tap Download Android APK, allow install from unknown sources if asked, then Install. Sign in with your CSG email. Best for lock-screen step tracking.</p>
+                            <p>A: First uninstall any older WOW-CSG Fitness / Health app. Then open <a href="#androidAppCard">Android App</a>, tap Download Android APK, allow install from unknown sources if asked, then Install. Sign in with your CSG email. Best for lock-screen step tracking.</p>
                         </div>
                         <div class="faq-item">
                             <strong>Q: What if I forgot my password?</strong>
@@ -812,16 +940,16 @@
                     <div class="help-section">
                         <h3>&#128161; Tips</h3>
                         <ul class="help-tips">
-                            <li>Use the Step Counter feature for real-time step tracking</li>
-                            <li>Reach your daily KM goal as quickly as you can &mdash; time to target KM wins; best attempt counts</li>
+                            <li>Use the Step Counter for real-time activity tracking</li>
+                            <li>Aim for your daily KM goal and share wins on Team Feed</li>
                             <li>Check the leaderboard regularly to see your progress</li>
-                            <li>Maintain your daily streak by logging steps every day</li>
+                            <li>Maintain a streak by logging activity often</li>
                             <li>Contact support if you encounter any technical issues</li>
                         </ul>
                     </div>
 
                     <div class="help-actions">
-                        <a href="mailto:wow-csg@csgi.com?subject=WOW-CSG Fitness Challenge Support&body=Hello,%0D%0A%0D%0AI need help with:" class="btn btn-primary">&#128231; Contact Support</a>
+                        <a href="mailto:wow-csg@csgi.com?subject=WOW-CSG Health Support&body=Hello,%0D%0A%0D%0AI need help with:" class="btn btn-primary">&#128231; Contact Support</a>
                         <button class="btn btn-secondary" onclick="app.closeHelpModal()">Close</button>
                     </div>
                 </div>
@@ -840,7 +968,7 @@
       if (!isIos) {
         scripts.push('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js');
       }
-      scripts.push('firebase-config.js', 'security-config.js?v=2', 'native-bridge.js?v=57', isIos ? 'script.min.js?v=110' : 'script.js?v=110');
+      scripts.push('firebase-config.js', 'security-config.js?v=2', 'native-bridge.js?v=58', 'script.js?v=120');
       function loadCss(href) {
         var l = document.createElement('link');
         l.rel = 'stylesheet';

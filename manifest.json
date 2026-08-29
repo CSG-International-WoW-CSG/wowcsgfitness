@@ -1,7 +1,7 @@
 {
-  "name": "WOW-CSG 7 Days Fitness Challenge",
+  "name": "WOW-CSG Fitness",
   "short_name": "WOW-CSG Fitness",
-  "description": "Step Together. Thrive Together. Progressive 1 KM to 7 KM challenge — 26 July to 1 August.",
+  "description": "WOW-CSG Fitness — Track workouts, set goals, and move with CSG colleagues.",
   "start_url": "./index.html",
   "scope": "./",
   "id": "./",
@@ -34,9 +34,16 @@
   "categories": ["health", "fitness", "lifestyle"],
   "shortcuts": [
     {
-      "name": "Leaderboard",
-      "short_name": "Leaderboard",
-      "description": "View the leaderboard",
+      "name": "Start Activity",
+      "short_name": "Track",
+      "description": "Start outdoor or treadmill tracking",
+      "url": "./index.html#dashboardCard",
+      "icons": [{ "src": "icons/apple-touch-icon.png", "sizes": "180x180" }]
+    },
+    {
+      "name": "Community",
+      "short_name": "Community",
+      "description": "View rankings and team feed",
       "url": "./index.html#leaderboardCard",
       "icons": [{ "src": "icons/apple-touch-icon.png", "sizes": "180x180" }]
     }

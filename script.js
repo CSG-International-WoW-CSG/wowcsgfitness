@@ -1,11 +1,17 @@
-// WOW-CSG 7 Days Fitness Challenge Application
+// WOW-CSG Fitness — year-round employee fitness companion (July 2026 challenge archive retained)
 class StepathonApp {
     constructor() {
- // Challenge config: 26 July - 1 August 2026 | Day N = N KM Walk/Run
+ // App branding + optional archived challenge window (26 Jul – 1 Aug 2026 day boards)
  this.challengeConfig = {
- name: 'WOW-CSG 7 Days Fitness Challenge',
- slogan: 'Step Together. Thrive Together.',
- tagline: '7 Days * 7 Challenges * 7 Winners',
+ name: 'WOW-CSG Fitness',
+ shortName: 'WOW-CSG Fitness',
+ brandTag: 'Fitness',
+ slogan: 'Move daily. Feel better.',
+ tagline: 'Track. Train. Thrive.',
+ celebrateLine: 'CSG employee fitness companion',
+ brandHighlight: 'WOW-CSG',
+ mode: 'fitness', // year-round fitness app (not a one-week challenge)
+ defaultGoalKm: 5, // personal daily goal
  startYear: 2026,
  startMonth: 6, // July (0-indexed)
  startDay: 26,
@@ -23,8 +29,18 @@ class StepathonApp {
  // Day board / auto-approve: faster than this is treated as GPS glitch or invalid
  // 15 km/h ≈ 4:00 min/km (strong recreational run; blocks elite/GPS-glitch day wins)
  maxHumanSpeedKmh: 15,
+ // Outdoor GPS tuned toward Strava / Apple Fitness (reject noise; don't inflate KM)
+ gpsMaxAccuracyM: 55,
+ gpsMaxAccuracyBgM: 75,
+ gpsMinSegmentM: 5,
+ gpsMaxJumpM: 55,
+ gpsMaxSpeedKmh: 14,
+ gpsGapCreditKmh: 7.0,
+ gpsSmoothAlpha: 0.35,
  dayGoalsKm: [1, 2, 3, 4, 5, 6, 7]
  };
+ this.activeWorkout = null;
+ this._fitnessNavBound = false;
 
  // Bump this to clear the visible roster (old season profiles are hidden)
  this.dataSeason = 'jul2026-v2';
@@ -942,7 +958,7 @@ class StepathonApp {
                     .finally(() => {
                         if (submitBtn) {
                             submitBtn.disabled = false;
-                            submitBtn.textContent = submitBtn.dataset.originalLabel || 'Create Account & Join Challenge';
+                            submitBtn.textContent = submitBtn.dataset.originalLabel || 'Create Account';
                         }
                     });
             });
@@ -2016,15 +2032,209 @@ class StepathonApp {
  }
 
  getDailyGoalKm(date = new Date()) {
+ // Fitness app: always use personal daily goal (archive day boards stay separate)
+ if ((this.challengeConfig.mode || '') === 'fitness') {
+ return this.getPersonalGoalKm();
+ }
  const day = this.getChallengeDayNumber(date);
  if (day < 1 || day > 7) {
- return this.challengeConfig.dayGoalsKm[0];
+ return this.getPersonalGoalKm();
  }
  return this.challengeConfig.dayGoalsKm[day - 1];
  }
 
+ getPersonalGoalKm() {
+ const key = this.getPersonalGoalStorageKey();
+ try {
+ const raw = localStorage.getItem(key);
+ if (raw != null && raw !== '') {
+ const n = Number(raw);
+ if (Number.isFinite(n) && n >= 1 && n <= 42) return n;
+ }
+ } catch (e) {}
+ if (this.currentUser && Number(this.currentUser.personalGoalKm) > 0) {
+ return Number(this.currentUser.personalGoalKm);
+ }
+ return Number(this.challengeConfig.defaultGoalKm) || 5;
+ }
+
+ getPersonalGoalStorageKey() {
+ const id = (this.currentUser && (this.currentUser.id || this.currentUser.employeeId || this.currentUser.email)) || 'guest';
+ return `wowcsg_personal_goal_km_${String(id).toLowerCase()}`;
+ }
+
+ setPersonalGoalKm(km) {
+ const n = Math.min(42, Math.max(1, Number(km) || 5));
+ try { localStorage.setItem(this.getPersonalGoalStorageKey(), String(n)); } catch (e) {}
+ if (this.currentUser) {
+ this.currentUser.personalGoalKm = n;
+ const idx = (this.participants || []).findIndex((p) => p && p.id === this.currentUser.id);
+ if (idx >= 0) {
+ this.participants[idx].personalGoalKm = n;
+ try { this.saveParticipants(); } catch (e2) {}
+ }
+ }
+ this.challengeConfig.defaultGoalKm = n;
+ return n;
+ }
+
  getDailyGoalSteps(date = new Date()) {
  return this.getDailyGoalKm(date) * this.challengeConfig.stepsPerKm;
+ }
+
+ getUserWeekFitnessSummary() {
+ const stepsPerKm = this.challengeConfig.stepsPerKm || 1300;
+ const now = new Date();
+ const start = new Date(now);
+ start.setHours(0, 0, 0, 0);
+ start.setDate(start.getDate() - 6);
+ let weekKm = 0;
+ let sessions = 0;
+ const mine = (this.stepEntries || []).filter(
+ (e) => e && this.currentUser && this.entryBelongsToParticipant(e, this.currentUser)
+ );
+ mine.forEach((e) => {
+ const d = this.parseEntryDate(e.date || e.createdAt);
+ if (!d || d < start) return;
+ const km = Number(e.distanceKm);
+ const steps = Number(e.steps) || 0;
+ const dist = (Number.isFinite(km) && km > 0) ? km : (steps / stepsPerKm);
+ if (dist > 0.01) {
+ weekKm += dist;
+ sessions += 1;
+ }
+ });
+ return { weekKm, sessions };
+ }
+
+ setupFitnessAppUi() {
+ if (this._fitnessNavBound) return;
+ this._fitnessNavBound = true;
+
+ document.querySelectorAll('[data-goto-pane]').forEach((btn) => {
+ btn.addEventListener('click', () => this.showFitnessPane(btn.getAttribute('data-goto-pane')));
+ });
+
+ document.querySelectorAll('.fitness-nav-btn').forEach((btn) => {
+ btn.addEventListener('click', () => this.showFitnessPane(btn.getAttribute('data-pane')));
+ });
+
+ const saveGoalBtn = document.getElementById('savePersonalGoalBtn');
+ if (saveGoalBtn) {
+ saveGoalBtn.addEventListener('click', () => {
+ const input = document.getElementById('personalGoalKmInput');
+ const n = this.setPersonalGoalKm(input ? input.value : 5);
+ if (input) input.value = String(n);
+ this.updateDashboard();
+ alert(`Daily goal saved: ${n} KM`);
+ });
+ }
+
+ document.querySelectorAll('.workout-card-btn').forEach((btn) => {
+ btn.addEventListener('click', () => {
+ const id = btn.getAttribute('data-workout') || 'free';
+ const kmAttr = btn.getAttribute('data-km');
+ const title = (btn.querySelector('strong') && btn.querySelector('strong').textContent) || id;
+ let targetKm = 0;
+ if (kmAttr === 'goal') targetKm = this.getPersonalGoalKm();
+ else targetKm = Number(kmAttr) || 0;
+ this.activeWorkout = { id, title, targetKm };
+ this.showFitnessPane('activity');
+ this.refreshActiveWorkoutChip();
+ if (targetKm > 0) {
+ this.updateCounterHint(`${title}: aim for ${targetKm} KM this session.`);
+ }
+ });
+ });
+ }
+
+ showFitnessPane(pane) {
+ const allowed = ['home', 'activity', 'workouts', 'community', 'history'];
+ const name = allowed.includes(pane) ? pane : 'home';
+ document.querySelectorAll('.fitness-pane').forEach((el) => {
+ const match = el.getAttribute('data-pane') === name;
+ el.classList.toggle('is-active', match);
+ if (match) el.removeAttribute('hidden');
+ else el.setAttribute('hidden', '');
+ });
+ document.querySelectorAll('.fitness-nav-btn').forEach((btn) => {
+ btn.classList.toggle('is-active', btn.getAttribute('data-pane') === name);
+ });
+ document.body.classList.remove(
+ 'fitness-pane-home', 'fitness-pane-activity', 'fitness-pane-workouts',
+ 'fitness-pane-community', 'fitness-pane-history'
+ );
+ document.body.classList.add(`fitness-pane-${name}`);
+
+ if (name === 'community') {
+ const el = document.getElementById('leaderboardCard');
+ if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+ } else if (name === 'history') {
+ const el = document.getElementById('historyCard');
+ if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+ } else {
+ const dash = document.getElementById('dashboardCard');
+ if (dash) dash.scrollIntoView({ behavior: 'smooth', block: 'start' });
+ }
+ }
+
+ refreshActiveWorkoutChip() {
+ const chip = document.getElementById('activeWorkoutChip');
+ if (!chip) return;
+ if (this.activeWorkout && this.activeWorkout.title) {
+ const t = this.activeWorkout.targetKm > 0
+ ? `${this.activeWorkout.title} · target ${this.activeWorkout.targetKm} KM`
+ : `${this.activeWorkout.title} · free session`;
+ chip.textContent = t;
+ chip.style.display = '';
+ } else {
+ chip.style.display = 'none';
+ }
+ }
+
+ setFitnessShell(isLoggedIn) {
+ document.body.classList.toggle('fitness-logged-in', !!isLoggedIn);
+ const nav = document.getElementById('fitnessBottomNav');
+ if (nav) {
+ if (isLoggedIn) nav.removeAttribute('hidden');
+ else nav.setAttribute('hidden', '');
+ }
+ if (isLoggedIn) {
+ this.setupFitnessAppUi();
+ this.showFitnessPane(
+ (this.stepCounter && (this.stepCounter.isRunning || this.stepCounter.isPaused))
+ ? 'activity'
+ : 'home'
+ );
+ const goalInput = document.getElementById('personalGoalKmInput');
+ if (goalInput) goalInput.value = String(this.getPersonalGoalKm());
+ this.refreshActiveWorkoutChip();
+ } else {
+ document.body.classList.remove(
+ 'fitness-pane-home', 'fitness-pane-activity', 'fitness-pane-workouts',
+ 'fitness-pane-community', 'fitness-pane-history'
+ );
+ this.activeWorkout = null;
+ }
+ }
+
+ updateFitnessHomeStats(todayKm, todayCalories, streak) {
+ const goalKm = this.getPersonalGoalKm();
+ const pct = goalKm > 0 ? Math.min(100, Math.round((todayKm / goalKm) * 100)) : 0;
+ const ring = document.getElementById('todayGoalRing');
+ if (ring) ring.style.setProperty('--goal-pct', String(pct));
+ const setText = (id, val) => {
+ const el = document.getElementById(id);
+ if (el) el.textContent = val;
+ };
+ setText('todayKmHome', (todayKm || 0).toFixed(2));
+ setText('homeGoalPct', `${pct}%`);
+ setText('personalGoalLabel', String(goalKm));
+ setText('todayKcalHome', `${Math.round(todayCalories || 0)} kcal`);
+ setText('streakHome', `${streak || 0} days`);
+ const week = this.getUserWeekFitnessSummary();
+ setText('weekKmHome', `${week.weekKm.toFixed(1)} KM`);
+ setText('weekSessionsHome', String(week.sessions));
  }
 
  getChallengeDayDate(dayNum) {
@@ -2036,36 +2246,54 @@ class StepathonApp {
 
  updateDates() {
  const { startDate, endDate } = this.getChallengeBounds();
+ const now = new Date();
+ const outsideWindow = now < startDate || now > endDate;
+ const personalGoal = this.getPersonalGoalKm();
+ const fitnessMode = (this.challengeConfig.mode || '') === 'fitness';
 
         const startDateElement = document.getElementById('startDate');
         const endDateElement = document.getElementById('endDate');
  const durationEl = document.getElementById('challengeDuration');
  const infoDailyGoal = document.getElementById('infoDailyGoal');
         
+        if (fitnessMode) {
+            if (startDateElement) startDateElement.textContent = 'Personal KM';
+            if (endDateElement) endDateElement.textContent = 'Guided plans';
+            if (durationEl) durationEl.textContent = 'GPS + steps';
+            if (infoDailyGoal) infoDailyGoal.textContent = `${personalGoal} KM / day`;
+        } else {
         if (startDateElement) {
-            startDateElement.textContent = this.formatDate(startDate);
+            startDateElement.textContent = outsideWindow ? 'Open now' : this.formatDate(startDate);
         }
         if (endDateElement) {
-            endDateElement.textContent = this.formatDate(endDate);
+            endDateElement.textContent = outsideWindow ? 'Ongoing' : this.formatDate(endDate);
         }
         if (durationEl) {
-            durationEl.textContent = '7 Days';
+            durationEl.textContent = outsideWindow ? 'Ongoing' : '7 Days';
         }
         if (infoDailyGoal) {
             const day = this.getChallengeDayNumber();
             if (day >= 1 && day <= 7) {
                 infoDailyGoal.textContent = `Day ${day}: ${day} KM`;
             } else {
-                infoDailyGoal.textContent = '1-7 KM (progressive)';
+                infoDailyGoal.textContent = `${personalGoal} KM daily goal`;
             }
+        }
         }
 
         // Mirror dates into compact top meta band
-        const map = [
-            ['startDateTop', startDateElement ? startDateElement.textContent : this.formatDate(startDate)],
-            ['endDateTop', endDateElement ? endDateElement.textContent : this.formatDate(endDate)],
-            ['challengeDurationTop', '7 Days'],
-            ['infoDailyGoalTop', infoDailyGoal ? infoDailyGoal.textContent.replace(' (progressive)', '') : '1-7 KM']
+        const map = fitnessMode
+            ? [
+                ['startDateTop', 'All CSG'],
+                ['endDateTop', 'GPS + steps'],
+                ['challengeDurationTop', 'Fitness'],
+                ['infoDailyGoalTop', `${personalGoal} KM`]
+            ]
+            : [
+            ['startDateTop', startDateElement ? startDateElement.textContent : (outsideWindow ? 'Open now' : this.formatDate(startDate))],
+            ['endDateTop', endDateElement ? endDateElement.textContent : (outsideWindow ? 'Ongoing' : this.formatDate(endDate))],
+            ['challengeDurationTop', outsideWindow ? 'Ongoing' : '7 Days'],
+            ['infoDailyGoalTop', infoDailyGoal ? infoDailyGoal.textContent.replace(' (progressive)', '') : `${personalGoal} KM`]
         ];
         map.forEach(([id, val]) => {
             const el = document.getElementById(id);
@@ -2091,10 +2319,9 @@ class StepathonApp {
         return now >= startDate && now <= endDate;
     }
 
- /** Allow logging from now until challenge end (includes pre-start practice) */
+ /** Allow activity logging anytime (challenge window or after). */
  canLogSteps() {
- const { endDate } = this.getChallengeBounds();
- return new Date() <= endDate;
+ return true;
  }
 
     checkChallengeStatus(startDate, endDate) {
@@ -2102,42 +2329,41 @@ class StepathonApp {
         const isActive = now >= startDate && now <= endDate;
  const notStarted = now < startDate;
  const hasEnded = now > endDate;
+ const appName = (this.challengeConfig && this.challengeConfig.name) || 'WOW-CSG Fitness';
+ const personalGoal = this.getPersonalGoalKm();
+ const fitnessMode = (this.challengeConfig.mode || '') === 'fitness';
         
- // Show/hide challenge status message on main page (before login)
+ // Status banner on main page (before login)
         const mainPageMsg = document.getElementById('mainPageChallengeOverMessage');
         if (mainPageMsg) {
- if (isActive) {
+ if (fitnessMode || isActive) {
  mainPageMsg.style.display = 'none';
+ mainPageMsg.innerHTML = '';
  } else if (notStarted) {
  mainPageMsg.style.display = 'block';
  mainPageMsg.innerHTML = `
- <div style="background: linear-gradient(135deg, #6B2D8B 0%, #003366 100%); color: white; padding: 20px; border-radius: 12px; margin: 20px auto; max-width: 900px; box-shadow: 0 4px 15px rgba(107, 45, 139, 0.35); text-align: center;">
- <div style="font-size: 2.5rem; margin-bottom: 10px;"></div>
- <h2 style="margin: 0 0 10px 0; font-size: 1.6rem; font-weight: bold;">Challenge Starts Soon!</h2>
+ <div style="background: linear-gradient(135deg, #0d9488 0%, #003366 100%); color: white; padding: 20px; border-radius: 12px; margin: 20px auto; max-width: 900px; box-shadow: 0 4px 15px rgba(13, 148, 136, 0.3); text-align: center;">
+ <h2 style="margin: 0 0 10px 0; font-size: 1.6rem; font-weight: bold;">${appName} is open</h2>
  <p style="margin: 0 0 10px 0; font-size: 1rem; opacity: 0.95;">
- The <strong>WOW-CSG 7 Days Fitness Challenge</strong> runs from <strong>${this.formatDate(startDate)}</strong> to <strong>${this.formatDate(endDate)}</strong>.
- </p>
- <p style="margin: 0; font-size: 0.95rem; opacity: 0.9;">
- Register now | Day 1 = 1 KM | Build up to 7 KM | Fastest finisher wins each day!
+ Register now to track walks and runs. Suggested daily goal: <strong>${personalGoal} KM</strong>.
  </p>
  </div>`;
  } else {
  mainPageMsg.style.display = 'block';
  mainPageMsg.innerHTML = `
- <div style="background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); color: white; padding: 20px; border-radius: 12px; margin: 20px auto; max-width: 900px; box-shadow: 0 4px 15px rgba(244, 67, 54, 0.3); text-align: center;">
- <div style="font-size: 2.5rem; margin-bottom: 10px;"></div>
- <h2 style="margin: 0 0 10px 0; font-size: 1.6rem; font-weight: bold;">Challenge Has Ended</h2>
+ <div style="background: linear-gradient(135deg, #0d9488 0%, #0b3d66 100%); color: white; padding: 20px; border-radius: 12px; margin: 20px auto; max-width: 900px; box-shadow: 0 4px 15px rgba(13, 148, 136, 0.3); text-align: center;">
+ <h2 style="margin: 0 0 10px 0; font-size: 1.6rem; font-weight: bold;">${appName} — Keep Moving</h2>
  <p style="margin: 0 0 10px 0; font-size: 1rem; opacity: 0.95;">
- The WOW-CSG 7 Days Fitness Challenge ended on <strong>${this.formatDate(endDate)}</strong>.
+ Track walks and runs anytime. Suggested daily goal: <strong>${personalGoal} KM</strong>.
  </p>
  <p style="margin: 0; font-size: 0.95rem; opacity: 0.9;">
- Thank you for participating! You can still login to view your progress and the leaderboard.
+ July challenge day boards remain available as an archive.
  </p>
  </div>`;
  }
         }
         
-        // Show/hide challenge over message in dashboard (after login)
+        // Dashboard banner (after login)
         let challengeOverMsg = document.getElementById('challengeOverMessage');
         if (!challengeOverMsg) {
             challengeOverMsg = document.createElement('div');
@@ -2150,38 +2376,26 @@ class StepathonApp {
             }
         }
         
- if (hasEnded) {
-            const formattedEnd = this.formatDate(endDate);
+ if (hasEnded || notStarted) {
+ if (fitnessMode) {
+ challengeOverMsg.style.display = 'none';
+ challengeOverMsg.innerHTML = '';
+ this.enableAddStepsSection();
+ } else {
             challengeOverMsg.innerHTML = `
-                <div style="background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); color: white; padding: 25px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(244, 67, 54, 0.3); text-align: center;">
- <div style="font-size: 2.5rem; margin-bottom: 15px;"></div>
-                    <h2 style="margin: 0 0 10px 0; font-size: 1.8rem; font-weight: bold;">Challenge Has Ended</h2>
+                <div style="background: linear-gradient(135deg, #0d9488 0%, #0b3d66 100%); color: white; padding: 25px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(13, 148, 136, 0.3); text-align: center;">
+                    <h2 style="margin: 0 0 10px 0; font-size: 1.8rem; font-weight: bold;">${appName}</h2>
                     <p style="margin: 0 0 15px 0; font-size: 1.1rem; opacity: 0.95;">
- The WOW-CSG 7 Days Fitness Challenge ended on <strong>${formattedEnd}</strong>.
+ Use <strong>Start Activity</strong> to track walks and runs. Sessions save to your profile and Team Feed.
                     </p>
                     <p style="margin: 0; font-size: 1rem; opacity: 0.9;">
-                        Thank you for participating! You can still view your progress and the leaderboard below.
+ Suggested daily goal: <strong>${personalGoal} KM</strong>. July day winners stay in the archive boards below.
                     </p>
                 </div>
             `;
             challengeOverMsg.style.display = 'block';
- this.disableAddStepsSection('ended');
- } else if (notStarted) {
- challengeOverMsg.innerHTML = `
- <div style="background: linear-gradient(135deg, #0d9488 0%, #0b3d66 100%); color: white; padding: 25px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(13, 148, 136, 0.3); text-align: center;">
- <div style="font-size: 2.5rem; margin-bottom: 15px;"></div>
- <h2 style="margin: 0 0 10px 0; font-size: 1.8rem; font-weight: bold;">Get Ready!</h2>
- <p style="margin: 0 0 15px 0; font-size: 1.1rem; opacity: 0.95;">
- Official challenge: <strong>${this.formatDate(startDate)}</strong> &ndash; <strong>${this.formatDate(endDate)}</strong>. Progressive goals: 1 KM &rarr; 7 KM.
- </p>
- <p style="margin: 0; font-size: 1rem; opacity: 0.9;">
- You can use the step / KM counter now to practice. Official daily winners start on Day 1.
- </p>
- </div>
- `;
- challengeOverMsg.style.display = 'block';
- // Keep counter usable before the official start
  this.enableAddStepsSection();
+ }
         } else {
             challengeOverMsg.style.display = 'none';
             this.enableAddStepsSection();
@@ -2231,9 +2445,9 @@ class StepathonApp {
  } else {
  overlay.innerHTML = `
  <div style="font-size: 3rem; margin-bottom: 15px;"></div>
-                    <h3 style="margin: 0 0 10px 0; color: #f44336; font-size: 1.5rem;">Challenge Has Ended</h3>
+                    <h3 style="margin: 0 0 10px 0; color: #0d9488; font-size: 1.5rem;">Tracking Temporarily Unavailable</h3>
                     <p style="margin: 0; color: #666; text-align: center; max-width: 400px;">
- New step entries are no longer being accepted. The challenge ended on <strong>${this.formatDate(endDate)}</strong>.
+ Please refresh the page to continue tracking activities.
                     </p>
                 `;
             }
@@ -2932,7 +3146,7 @@ class StepathonApp {
     }
 
  copyEmailContent(email, username) {
- const content = `Account Details for WOW-CSG 7 Days Fitness Challenge
+ const content = `Account Details for WOW-CSG Health
 
 Email: ${email}
 Username: ${username}
@@ -3051,8 +3265,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
                 to_name: 'Test User',
                 username: 'testuser',
  password: '[not used — passwords are never emailed]',
- subject: 'Test Email - WOW-CSG Fitness Challenge',
- message: 'This is a test email from WOW-CSG 7 Days Fitness Challenge. If you receive this, EmailJS is configured correctly!'
+ subject: 'Test Email - WOW-CSG Health',
+ message: 'This is a test email from WOW-CSG Health. If you receive this, EmailJS is configured correctly!'
             };
 
             await emailjs.send(serviceId, templateId, templateParams);
@@ -3362,13 +3576,13 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             if (this.stepCounter.isPaused) this.applyPausedActivityUi();
             else this.applyRunningActivityUi();
             this.updateStepCounterDisplay();
+            this.showFitnessPane('activity');
         } else {
             setTimeout(() => this.tryRestoreActivitySessionAsync({ asPaused: true }), 400);
+            this.showFitnessPane('home');
         }
-        const startBtn = document.getElementById('startCounterBtn');
-        if (startBtn && typeof startBtn.scrollIntoView === 'function' && !this.stepCounter.isRunning && !this.stepCounter.isPaused) {
-            startBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
+        const goalInput = document.getElementById('personalGoalKmInput');
+        if (goalInput) goalInput.value = String(this.getPersonalGoalKm());
     }
 
     setLoggedInShell(isLoggedIn) {
@@ -3376,6 +3590,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         document.querySelectorAll('.guest-only').forEach((el) => {
             el.style.display = isLoggedIn ? 'none' : '';
         });
+        this.setFitnessShell(!!isLoggedIn);
     }
 
     /**
@@ -3696,15 +3911,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         }
         const goalLabel = document.getElementById('dailyGoalLabel');
         if (goalLabel) {
-            const dayPrefix = dayNum >= 1 && dayNum <= 7 ? `Day ${dayNum}: ` : '';
             const kmPart = todayKm > 0.005 ? ` · ${todayKm.toFixed(2)} KM today` : '';
-            goalLabel.textContent = `${dayPrefix}${goalKm} KM goal${kmPart}`;
+            goalLabel.textContent = `${goalKm} KM goal${kmPart}`;
         }
         const progressTitle = document.getElementById('dailyGoalTitle');
         if (progressTitle) {
-            progressTitle.textContent = dayNum >= 1 && dayNum <= 7
-                ? `Day ${dayNum} · ${goalKm} KM`
-                : 'Daily goal';
+            progressTitle.textContent = 'Daily goal';
         }
 
         // Hint when today's walk exists but was rejected for the day board
@@ -3729,6 +3941,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
         if (totalCalEl) {
             totalCalEl.textContent = `${Math.round(totalCalories).toLocaleString()} kcal`;
         }
+
+        this.updateFitnessHomeStats(todayKm, todayCalories, streak);
 
         // Update rank (approved-only leaderboard)
         const rank = this.getUserRank(this.currentUser);
@@ -5346,7 +5560,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
     }
 
     openEmailClient() {
- const subject = encodeURIComponent('WOW-CSG Fitness Challenge Support');
+ const subject = encodeURIComponent('WOW-CSG Health Support');
         const body = encodeURIComponent('Hello,\n\nI need help with:\n\n');
         window.location.href = `mailto:wow-csg@csgi.com?subject=${subject}&body=${body}`;
     }
@@ -8548,12 +8762,12 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  // Ignore native speed×time KM; keep step-derived distance only
  this.stepCounter.treadmillDistanceKm = (this.stepCounter.stepCount || 0) / this.getStepsPerKmForTracking();
  } else {
- // Outdoor: take service KM only if it doesn't wildly exceed local GPS track
+ // Outdoor: GPS track wins; native service may fill gaps but must not inflate past local GPS
  const localGps = (this.stepCounter.distanceKm || 0) + (this.stepCounter.pendingSegmentKm || 0);
  if (localGps < 0.05) {
  this.stepCounter.distanceKm = Math.max(this.stepCounter.distanceKm || 0, serviceKm);
  } else {
- const capped = Math.min(serviceKm, localGps * 1.15 + 0.1);
+ const capped = Math.min(serviceKm, localGps * 1.05 + 0.05);
  this.stepCounter.distanceKm = Math.max(this.stepCounter.distanceKm || 0, Math.min(serviceKm, capped));
  }
  }
@@ -9399,14 +9613,14 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
 
  const gpsKm = (this.stepCounter.distanceKm || 0) + (this.stepCounter.pendingSegmentKm || 0);
  const pathLen = Array.isArray(this.stepCounter.path) ? this.stepCounter.path.length : 0;
- const gpsReady = pathLen >= 6 || gpsKm >= 0.12;
+ const gpsReady = pathLen >= 5 || gpsKm >= 0.08;
  if (gpsReady) {
- // Prefer GPS. Allow steps to fill only a small under-count — never let
- // aggressive step-stride blow past the GPS track (Hari: ~3 KM real → 5 KM shown).
- const cappedStep = Math.min(stepKm, gpsKm * 1.12 + 0.08);
+ // Strava / Apple style: GPS is source of truth once the track is warm.
+ // Steps may only fill a tiny under-count (GPS tunnel), never inflate past GPS.
+ const cappedStep = Math.min(stepKm, gpsKm * 1.04 + 0.04);
  return Number(Math.max(gpsKm, cappedStep).toFixed(3));
  }
- // GPS still cold / locked with no track: use conservative step distance
+ // GPS still cold: conservative step distance only
  return Number(Math.max(gpsKm, stepKm).toFixed(3));
  }
 
@@ -9440,34 +9654,63 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  }
 
  /**
- * Rebuild GPS distance from the full path (avoids losing short segments).
+ * Strava/Apple-style filtered path distance (accuracy, min move, speed, gap credit).
+ */
+ computeFilteredPathDistanceKm(path) {
+ const pts = Array.isArray(path) ? path : [];
+ if (pts.length < 2) return 0;
+ const cfg = this.challengeConfig || {};
+ const minSegKm = (Number(cfg.gpsMinSegmentM) || 5) / 1000;
+ const maxJumpKm = (Number(cfg.gpsMaxJumpM) || 55) / 1000;
+ const maxSpeed = Number(cfg.gpsMaxSpeedKmh) || 14;
+ const gapCredit = Number(cfg.gpsGapCreditKmh) || 7;
+ let total = 0;
+ for (let i = 1; i < pts.length; i++) {
+ const a = pts[i - 1];
+ const b = pts[i];
+ if (!a || !b) continue;
+ // Drop low-accuracy fixes when accuracy was recorded
+ const acc = Number(b.accuracy);
+ if (Number.isFinite(acc) && acc > (Number(cfg.gpsMaxAccuracyBgM) || 75)) continue;
+ const segmentKm = this.haversineKm(a.lat, a.lng, b.lat, b.lng);
+ if (!(segmentKm > 0)) continue;
+ const dtSec = Math.max(0.8, ((b.t || 0) - (a.t || 0)) / 1000);
+ const hours = dtSec / 3600;
+ const speedKmh = hours > 0 ? segmentKm / hours : 0;
+ if (segmentKm < minSegKm && dtSec < 10) continue;
+ if (speedKmh > maxSpeed && segmentKm > 0.02) {
+ // Teleport / bad fix — skip segment (do not credit)
+ continue;
+ }
+ if (segmentKm > maxJumpKm) {
+ if (dtSec >= 15) {
+ total += Math.min(segmentKm, hours * gapCredit);
+ }
+ continue;
+ }
+ total += segmentKm;
+ }
+ return total;
+ }
+
+ /**
+ * Rebuild GPS distance from the full path with Strava-style filters.
+ * Once the track is established, filtered path is the source of truth
+ * (can correct earlier over-counts from noisy fixes).
  */
  recalculateGpsDistanceFromPath() {
  const path = this.stepCounter.path || [];
  if (path.length < 2) {
- // Keep any already-credited distance; only clear pending buffer
  this.stepCounter.pendingSegmentKm = 0;
  return this.stepCounter.distanceKm || 0;
  }
- let total = 0;
- for (let i = 1; i < path.length; i++) {
- const a = path[i - 1];
- const b = path[i];
- const segmentKm = this.haversineKm(a.lat, a.lng, b.lat, b.lng);
- const dtSec = Math.max(1, ((b.t || 0) - (a.t || 0)) / 1000);
- const hours = dtSec / 3600;
- // Allow brisk walk/jog; for long gaps credit capped pace instead of dropping to 0
- const maxKm = Math.min(8.0, Math.max(0.5, hours * 14));
- if (segmentKm <= 0) continue;
- if (segmentKm <= maxKm) {
- total += segmentKm;
- } else if (dtSec >= 20) {
- // Sparse GPS after lock: credit at up to ~9 km/h rather than discard the gap
- total += Math.min(segmentKm, hours * 9);
+ const filtered = this.computeFilteredPathDistanceKm(path);
+ if (path.length >= 8) {
+ this.stepCounter.distanceKm = Number(filtered.toFixed(5));
+ } else {
+ // Early track: never wipe credited meters from a short path rebuild
+ this.stepCounter.distanceKm = Math.max(this.stepCounter.distanceKm || 0, filtered);
  }
- }
- // Never reduce credited KM (path thinning / stricter filters used to drop e.g. 2.00 → 1.98)
- this.stepCounter.distanceKm = Math.max(this.stepCounter.distanceKm || 0, total);
  this.stepCounter.pendingSegmentKm = 0;
  return this.stepCounter.distanceKm;
  }
@@ -9902,7 +10145,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  try {
  navigator.mediaSession.metadata = new MediaMetadata({
  title: 'WOW-CSG Activity Tracking',
- artist: 'Fitness Challenge',
+ artist: 'WOW-CSG Health',
  album: 'Keep tracking while locked'
  });
  navigator.mediaSession.playbackState = 'playing';
@@ -9991,7 +10234,7 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  try {
  navigator.mediaSession.metadata = new MediaMetadata({
  title: 'WOW-CSG Activity Tracking',
- artist: 'Fitness Challenge',
+ artist: 'WOW-CSG Health',
  album: 'Distance tracking in progress'
  });
  navigator.mediaSession.playbackState = 'playing';
@@ -10144,58 +10387,62 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const isIosWeb = !isNative && /iPhone|iPad|iPod/i.test(ua);
  const isAndroidWeb = !isNative && /Android/i.test(ua);
  const isMobileWeb = isIosWeb || isAndroidWeb;
- // Mobile browsers often report 80–150m+ accuracy while still usable for walking.
- // Native Android can be noisier while locked (MIUI) — allow a wider window.
- const maxAccuracy = isNative
- ? (isBackground ? 280 : 160)
- : isMobileWeb
- ? (isBackground || fromResume ? 250 : 150)
- : (isBackground ? 180 : 100);
+ const cfg = this.challengeConfig || {};
+ // Align with Strava/Apple: discard low-quality fixes instead of trusting 150–280m noise
+ const maxAccuracy = isBackground || fromResume
+ ? (Number(cfg.gpsMaxAccuracyBgM) || 75)
+ : (Number(cfg.gpsMaxAccuracyM) || 55);
  if (accuracy && accuracy > maxAccuracy) {
  return;
  }
 
- const point = { lat: latitude, lng: longitude, t: Date.now(), accuracy: accuracy || null };
+ const alpha = Number(cfg.gpsSmoothAlpha);
+ const smooth = Number.isFinite(alpha) && alpha > 0 && alpha < 1 ? alpha : 0.35;
  const last = this.stepCounter.lastPosition;
+ let lat = latitude;
+ let lng = longitude;
+ // Light EMA smoothing (Apple-style) to cut zig-zag inflation while walking
+ if (last && Number.isFinite(last.lat) && Number.isFinite(last.lng)) {
+ lat = last.lat * (1 - smooth) + latitude * smooth;
+ lng = last.lng * (1 - smooth) + longitude * smooth;
+ }
+
+ const point = { lat, lng, t: Date.now(), accuracy: accuracy || null, rawLat: latitude, rawLng: longitude };
  if (last) {
  const segmentKm = this.haversineKm(last.lat, last.lng, point.lat, point.lng);
- const dtSec = Math.max(0.5, (point.t - (last.t || point.t)) / 1000);
+ const dtSec = Math.max(0.8, (point.t - (last.t || point.t)) / 1000);
  const hours = dtSec / 3600;
- // Wider limits on native / after unlock so sparse samples still credit distance
- const maxKm = isBackground || isNative || (isMobileWeb && (fromResume || dtSec >= 20))
- ? Math.min(14.0, Math.max(0.6, hours * 18))
- : Math.min(4.0, Math.max(0.35, hours * 20));
+ const speedKmh = hours > 0 ? segmentKm / hours : 0;
+ const minSegKm = (Number(cfg.gpsMinSegmentM) || 5) / 1000;
+ const maxJumpKm = (Number(cfg.gpsMaxJumpM) || 55) / 1000;
+ const maxSpeed = Number(cfg.gpsMaxSpeedKmh) || 14;
+ const gapCredit = Number(cfg.gpsGapCreditKmh) || 7;
 
- if (segmentKm > maxKm) {
- if (dtSec >= 12) {
- // Long gap (typical when phone was locked): credit capped walking/jogging pace
- const paceKmh = isMobileWeb ? 10.5 : 9.5;
- const creditKm = Math.min(segmentKm, hours * paceKmh);
- if (creditKm >= 0.005) {
- this.stepCounter.distanceKm = (this.stepCounter.distanceKm || 0) + creditKm;
+ // Ignore GPS jitter under min segment unless enough time passed
+ if (segmentKm < minSegKm && dtSec < 10) {
+ return;
  }
+
+ // Teleport / unrealistic speed — re-anchor without adding distance
+ if ((speedKmh > maxSpeed && segmentKm > 0.02) || (segmentKm > maxJumpKm && dtSec < 12)) {
  this.stepCounter.lastPosition = point;
- this.stepCounter.path.push(point);
- this.stepCounter.gpsReady = true;
- if (isBackground || isNative || isIosWeb) {
- this.syncStepsFromDistance(true);
- }
- this.updateActivityMap(point);
- this.updateStepCounterDisplay();
- this.persistActivitySession(false);
- }
  return;
  }
 
- // Ignore GPS jitter under ~2.5 m unless enough time passed
- if (segmentKm < 0.0025 && dtSec < 8) {
- return;
+ let creditKm = 0;
+ if (segmentKm > maxJumpKm && dtSec >= 12) {
+ // Long gap after lock: credit capped walk pace only (not full jump)
+ creditKm = Math.min(segmentKm, hours * gapCredit);
+ } else {
+ creditKm = segmentKm;
  }
 
- this.stepCounter.pendingSegmentKm = (this.stepCounter.pendingSegmentKm || 0) + segmentKm;
+ if (creditKm >= 0.003) {
+ this.stepCounter.pendingSegmentKm = (this.stepCounter.pendingSegmentKm || 0) + creditKm;
  if (this.stepCounter.pendingSegmentKm >= 0.001 || isBackground || isNative || isIosWeb) {
  this.stepCounter.distanceKm += this.stepCounter.pendingSegmentKm;
  this.stepCounter.pendingSegmentKm = 0;
+ }
  }
  }
 
@@ -10206,6 +10453,9 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  if (idx === 0 || idx === arr.length - 1) return true;
  return idx % 3 !== 1;
  });
+ this.recalculateGpsDistanceFromPath();
+ } else if ((this.stepCounter.path.length % 25) === 0) {
+ // Periodic Strava-style rebuild so noisy early segments get corrected
  this.recalculateGpsDistanceFromPath();
  }
 
@@ -10220,8 +10470,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
  const hint = document.getElementById('mapHint');
  if (hint) {
  hint.textContent = isBackground
- ? 'Lock-screen GPS update received. KM + steps still counting.'
- : 'Live GPS tracking ON. Distance uses GPS + step backup.';
+ ? 'Lock-screen GPS update received. Distance uses filtered GPS (Strava-style).'
+ : 'Live GPS ON — filtered like Strava/Apple (accuracy + speed gates).';
  }
  }
 
@@ -10651,8 +10901,8 @@ Use Forgot Password if you need a reset link. Passwords are never emailed by thi
             validatedAt: (autoOk || paceIllegal) ? new Date().toISOString() : null,
             notes: paceNote || (fromStepCounter
                 ? ((trackMeta && trackMeta.trackingMode === 'treadmill')
-                    ? `Treadmill activity (step-based): ${distanceKm.toFixed(2)} KM / ${steps} steps - ${caloriesBurned} kcal`
-                    : `In-app GPS activity: ${distanceKm.toFixed(2)} KM - ${caloriesBurned} kcal`)
+                    ? `${dayNum ? '' : 'Post-challenge · '}Treadmill activity (step-based): ${distanceKm.toFixed(2)} KM / ${steps} steps - ${caloriesBurned} kcal`
+                    : `${dayNum ? '' : 'Post-challenge · '}In-app GPS activity: ${distanceKm.toFixed(2)} KM - ${caloriesBurned} kcal`)
                 : null),
             source: fromStepCounter
                 ? ((trackMeta && trackMeta.trackingMode === 'treadmill') ? 'treadmill-counter' : 'gps-counter')

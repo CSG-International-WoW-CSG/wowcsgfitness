@@ -215,24 +215,19 @@ header::before,
 
 .brand-wow {
   font-family: var(--display);
-  font-size: clamp(1.35rem, 2.8vw, 1.75rem);
+  font-size: clamp(1.45rem, 3vw, 1.95rem);
   font-weight: 800;
   letter-spacing: -0.03em;
   white-space: nowrap;
-  background: linear-gradient(110deg, #0b3d66 0%, #0d9488 40%, #ff6b4a 78%, #ff9f43 100%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  animation: brandShine 5s ease-in-out infinite alternate;
+  line-height: 1.05;
 }
 
 .brand-tag {
   font-size: 0.68rem;
   font-weight: 700;
   color: #0f766e;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   margin-top: 2px;
 }
 
@@ -301,10 +296,162 @@ header::before,
 }
 
 .challenge-eyebrow,
-.challenge-tagline,
-.subtitle,
+.challenge-tagline { display: block !important; }
+
 .challenge-dates-banner,
 .hero-progress-rail { display: none !important; }
+
+.challenge-eyebrow {
+  flex: 1 1 100%;
+  margin: 0 0 2px !important;
+  font-size: 0.72rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.14em !important;
+  text-transform: uppercase !important;
+  color: #c2410c !important;
+  background: linear-gradient(90deg, #ff6b4a, #ff9f43, #f59e0b) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.challenge-tagline {
+  flex: 1 1 100%;
+  margin: 4px 0 0 !important;
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  color: var(--teal) !important;
+  background: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  display: inline-block !important;
+}
+
+.title-highlight-wow {
+  background: linear-gradient(110deg, #ff6b4a 0%, #ff9f43 35%, #0d9488 70%, #0b3d66 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: brandShine 5s ease-in-out infinite alternate;
+}
+
+.challenge-band-eyebrow {
+  margin: 0 0 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #c2410c;
+}
+
+.challenge-band-eyebrow strong {
+  font-weight: 800;
+  background: linear-gradient(110deg, #ff6b4a, #0d9488);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Compact brand strip — visible when logged in (hero hidden) and on iOS */
+.app-brand-strip {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.92), rgba(255, 248, 240, 0.88), rgba(232, 255, 250, 0.9));
+  box-shadow: var(--shadow);
+}
+
+body.is-logged-in .app-brand-strip,
+html.ios-lite .app-brand-strip {
+  display: flex;
+}
+
+.app-brand-mark {
+  flex-shrink: 0;
+  border-radius: 10px;
+}
+
+.app-brand-copy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.celebrate-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  background: linear-gradient(135deg, #ff6b4a, #ff9f43);
+  box-shadow: 0 4px 12px rgba(255, 107, 74, 0.28);
+}
+
+.brand-wow-compact,
+.brand-wow {
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+.brand-wow-compact {
+  font-size: 1.15rem;
+}
+
+.brand-wow-part {
+  background: linear-gradient(110deg, #0b3d66 0%, #0d9488 45%, #ff6b4a 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: brandShine 5s ease-in-out infinite alternate;
+}
+
+.brand-wow-csg {
+  background: linear-gradient(110deg, #ff6b4a 0%, #ff9f43 40%, #0d9488 100%);
+  background-size: 200% 100%;
+}
+
+.brand-wow-sep {
+  color: #94a3b8;
+  -webkit-text-fill-color: #94a3b8;
+  background: none;
+  padding: 0 1px;
+}
+
+.app-brand-tagline {
+  margin-left: auto;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.htag-gold {
+  background: linear-gradient(135deg, #f59e0b, #ff9f43) !important;
+  color: #fff !important;
+}
+
+@media (max-width: 640px) {
+  .app-brand-tagline {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+}
 
 .animated-title,
 header h1 {

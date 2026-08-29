@@ -8,12 +8,12 @@
  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
  <meta name="robots" content="noindex, nofollow">
  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com data:; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://unpkg.com https://cdn.jsdelivr.net https://statics.teams.cdn.office.net; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebase.com https://*.cloudfunctions.net wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://www.google-analytics.com https://unpkg.com https://cdn.jsdelivr.net; worker-src 'self' blob:;">
- <title>Admin Dashboard - WOW-CSG 7 Days Fitness Challenge</title>
+ <title>Admin Dashboard - WOW-CSG Health</title>
  <!-- Favicon -->
  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=35">
  <link rel="apple-touch-icon" href="favicon.svg?v=35">
- <link rel="stylesheet" href="styles.css?v=58">
- <link rel="stylesheet" href="ui-refresh.css?v=58">
+ <link rel="stylesheet" href="styles.css?v=107">
+ <link rel="stylesheet" href="ui-refresh.css?v=107">
  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
@@ -39,23 +39,25 @@
  </div>
  </div>
  <div class="logo-section">
- <div class="brand-lockup" aria-label="WOW-CSG Fitness Challenge">
+ <p class="challenge-eyebrow">Celebrate wellness at CSG</p>
+ <div class="brand-lockup" aria-label="WOW-CSG Health">
  <div class="brand-mark-wrap" aria-hidden="true">
  <span class="brand-mark-orbit"></span>
  <img src="brand-mark.svg?v=35" alt="" class="brand-mark-img" width="60" height="60">
  </div>
  <div class="brand-wordmark">
- <span class="brand-wow">WOW-CSG</span>
- <span class="brand-tag">Admin</span>
+ <span class="brand-wow"><span class="brand-wow-part">WOW</span><span class="brand-wow-sep">-</span><span class="brand-wow-part brand-wow-csg">CSG</span></span>
+ <span class="brand-tag">Admin Portal</span>
  </div>
  <div class="csg-logo">
  <span class="csg-logo-shine" aria-hidden="true"></span>
  <img src="CSG_Logo_K_outline.jpg" alt="CSG" class="csg-logo-img">
  </div>
  </div>
- <h1 class="animated-title">Admin Dashboard</h1>
+ <h1 class="animated-title"><span class="title-highlight-wow">WOW-CSG</span> Admin Dashboard</h1>
+ <p class="challenge-tagline">Track. Move. Thrive.</p>
  </div>
- <p class="subtitle">WOW-CSG 7 Days Fitness Challenge</p>
+ <p class="subtitle">WOW-CSG Health</p>
  </header>
 
  <div class="main-content">
@@ -281,7 +283,7 @@
  </div>
 
  <footer>
- <p>(c) 2026 CSG International | WOW-CSG 7 Days Fitness Challenge | Admin Portal</p>
+ <p>(c) 2026 CSG International | WOW-CSG Health | Admin Portal</p>
  </footer>
  </div>
 
@@ -487,7 +489,7 @@
  }
 
  // Load script and initialize (cache-bust so Pages/SW cannot keep old admin/admin123 builds)
- loadScript('script.js?v=110')
+ loadScript('script.js?v=114')
  .then(() => {
  console.log('Script loaded, initializing admin page...');
  initAdminPage();

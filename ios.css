@@ -29,6 +29,49 @@ body::before, body::after { display: none !important; content: none !important; 
   margin: 0 0 12px;
 }
 .hero-shell, .challenge-band, .info-card, .day-plan-card, .android-app-card, .motivation-card, .email-warning { display: none !important; }
+
+.app-brand-strip {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.app-brand-mark { border-radius: 8px; }
+
+.app-brand-copy { display: flex; align-items: center; gap: 8px; }
+
+.celebrate-pill {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--accent);
+}
+
+.brand-wow-compact, .brand-wow-part {
+  font-weight: 800;
+  font-size: 1.05rem;
+}
+
+.brand-wow-csg { color: var(--accent); }
+
+.brand-wow-sep { color: #94a3b8; }
+
+.app-brand-tagline {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  flex: 1 1 100%;
+}
 h1, h2, h3 { margin: 0 0 8px; line-height: 1.25; }
 .btn, button {
   font: inherit;

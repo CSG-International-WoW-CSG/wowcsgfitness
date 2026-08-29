@@ -1,5 +1,5 @@
 /**
- * CSG security posture for WOW-CSG Fitness (client-side allowlists).
+ * CSG security posture for WOW-CSG Health (client-side allowlists).
  * Server enforcement = Firestore rules + Firebase Auth (see firestore.rules).
  *
  * Bootstrap admin:

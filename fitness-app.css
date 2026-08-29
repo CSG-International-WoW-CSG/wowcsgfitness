@@ -1,0 +1,311 @@
+/* WOW-CSG Fitness — app shell (home / track / workouts / community / history) */
+
+body.fitness-logged-in {
+  padding-bottom: 76px;
+}
+
+body.fitness-logged-in .guest-only {
+  display: none !important;
+}
+
+.fitness-pane[hidden] {
+  display: none !important;
+}
+
+.fitness-pane.is-active {
+  display: block;
+}
+
+.today-hero {
+  display: grid;
+  gap: 16px;
+  margin: 8px 0 18px;
+}
+
+@media (min-width: 720px) {
+  .today-hero {
+    grid-template-columns: 180px 1fr;
+    align-items: center;
+  }
+}
+
+.today-ring-wrap {
+  text-align: center;
+}
+
+.today-ring {
+  --goal-pct: 0;
+  width: 148px;
+  height: 148px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background:
+    conic-gradient(#00a3e0 calc(var(--goal-pct) * 1%), #d9e6f2 0);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 10px 28px rgba(0, 51, 102, 0.18);
+}
+
+.today-ring-inner {
+  width: 118px;
+  height: 118px;
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.today-ring-inner strong {
+  font-size: 1.65rem;
+  color: #003366;
+  line-height: 1;
+}
+
+.today-ring-inner span {
+  font-size: 0.78rem;
+  color: #5a7189;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.today-goal-caption {
+  margin: 10px 0 0;
+  font-size: 0.9rem;
+  color: #3d536b;
+}
+
+.today-week-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.week-stat {
+  background: linear-gradient(160deg, #f4f9fc, #e8f3fa);
+  border: 1px solid #cfe0ee;
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+
+.week-stat span {
+  display: block;
+  font-size: 0.75rem;
+  color: #5a7189;
+  margin-bottom: 4px;
+}
+
+.week-stat strong {
+  font-size: 1.05rem;
+  color: #003366;
+}
+
+.goal-editor-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #d5e4f0;
+}
+
+.goal-editor-row label {
+  font-weight: 600;
+  color: #003366;
+}
+
+.goal-editor-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.goal-editor-controls input {
+  width: 88px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #b7c9da;
+  font-size: 1rem;
+}
+
+.home-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.home-quick-actions .btn {
+  flex: 1 1 140px;
+}
+
+.workout-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.workout-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border-radius: 16px;
+  background: linear-gradient(165deg, #ffffff, #eef6fb);
+  border: 1px solid #c9dceb;
+  text-align: left;
+  color: #003366;
+  box-shadow: 0 6px 16px rgba(0, 51, 102, 0.06);
+}
+
+.workout-card .wo-icon {
+  font-size: 1.35rem;
+}
+
+.workout-card strong {
+  font-size: 0.98rem;
+}
+
+.workout-card span:last-child {
+  font-size: 0.8rem;
+  color: #5a7189;
+}
+
+.workout-card-btn {
+  cursor: pointer;
+  font: inherit;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.workout-card-btn:hover,
+.workout-card-btn:focus-visible {
+  transform: translateY(-2px);
+  border-color: #00a3e0;
+  box-shadow: 0 10px 22px rgba(0, 163, 224, 0.18);
+  outline: none;
+}
+
+.workouts-pane-header h3 {
+  margin: 0 0 4px;
+  color: #003366;
+}
+
+.workouts-pane-header p,
+.workouts-hint {
+  color: #5a7189;
+  font-size: 0.92rem;
+}
+
+.active-workout-chip {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #e6f7fc;
+  color: #005f86;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.archive-details {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f7fafc;
+  border: 1px solid #dce7f0;
+}
+
+.archive-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #003366;
+}
+
+.fitness-bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1200;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 2px;
+  padding: 8px 6px calc(8px + env(safe-area-inset-bottom, 0px));
+  background: rgba(255, 255, 255, 0.96);
+  border-top: 1px solid #d5e3ef;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 -8px 24px rgba(0, 51, 102, 0.08);
+}
+
+.fitness-bottom-nav[hidden] {
+  display: none !important;
+}
+
+.fitness-nav-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #6b8096;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.fitness-nav-btn .fnav-ico {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.fitness-nav-btn.is-active {
+  color: #003366;
+  background: #e8f5fb;
+}
+
+body.fitness-community-focus .fitness-community-block,
+body.fitness-history-focus .fitness-history-block {
+  scroll-margin-top: 16px;
+}
+
+body.fitness-logged-in.fitness-pane-home .fitness-community-block,
+body.fitness-logged-in.fitness-pane-home .fitness-history-block,
+body.fitness-logged-in.fitness-pane-activity .fitness-community-block,
+body.fitness-logged-in.fitness-pane-activity .fitness-history-block,
+body.fitness-logged-in.fitness-pane-workouts .fitness-community-block,
+body.fitness-logged-in.fitness-pane-workouts .fitness-history-block {
+  display: none !important;
+}
+
+body.fitness-logged-in.fitness-pane-community .fitness-history-block {
+  display: none !important;
+}
+
+body.fitness-logged-in.fitness-pane-history .fitness-community-block {
+  display: none !important;
+}
+
+body.fitness-logged-in.fitness-pane-community #dashboardCard .fitness-pane,
+body.fitness-logged-in.fitness-pane-history #dashboardCard .fitness-pane {
+  display: none !important;
+}
+
+html.ios-lite .today-ring {
+  box-shadow: none;
+  background: conic-gradient(#2a8fc4 calc(var(--goal-pct) * 1%), #e2e8ee 0);
+}
+
+html.ios-lite .fitness-bottom-nav {
+  backdrop-filter: none;
+  background: #fff;
+}
